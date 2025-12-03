@@ -14,11 +14,6 @@ Plataforma completa de gestão de eventos com análise de dados e dashboards int
 - **React Big Calendar** - Calendário de eventos
 - **Framer Motion** - Animações
 
-## 📦 Instalação
-
-\`\`\`bash
-# Clone o repositório
-git clone https://github.com/seu-usuario/planeja-plus.git
 
 # Entre no diretório
 cd planeja-plus
