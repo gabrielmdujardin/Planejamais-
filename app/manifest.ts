@@ -1,0 +1,25 @@
+import type { MetadataRoute } from "next"
+
+export default function manifest(): MetadataRoute.Manifest {
+  return {
+    name: "Planeja+ | Organize seus eventos com facilidade",
+    short_name: "Planeja+",
+    description: "Plataforma para organização de eventos colaborativos, festas, casamentos e viagens.",
+    start_url: "/",
+    display: "standalone",
+    background_color: "#ffffff",
+    theme_color: "#10b981",
+    icons: [
+      {
+        src: "/icon-192x192.png",
+        sizes: "192x192",
+        type: "image/png",
+      },
+      {
+        src: "/icon-512x512.png",
+        sizes: "512x512",
+        type: "image/png",
+      },
+    ],
+  }
+}
