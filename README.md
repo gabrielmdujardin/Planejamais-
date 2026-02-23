@@ -1,8 +1,8 @@
-# Planeja+ 🎉
+# Planeja+ 
 
 Plataforma completa de gestão de eventos com análise de dados e dashboards interativos.
 
-## 🚀 Tecnologias
+##  Tecnologias
 
 - **Next.js 14** - Framework React com App Router
 - **TypeScript** - Tipagem estática
@@ -30,7 +30,7 @@ npm run dev
 
 Acesse [http://localhost:3000](http://localhost:3000) no seu navegador.
 
-## 🌐 Deploy no Vercel
+##  Deploy no Vercel
 
 ### Opção 1: Deploy via CLI
 
@@ -54,7 +54,7 @@ vercel --prod
 5. Configure as variáveis de ambiente
 6. Clique em "Deploy"
 
-## 🔑 Variáveis de Ambiente
+##  Variáveis de Ambiente
 
 Configure as seguintes variáveis no Vercel:
 
@@ -63,7 +63,7 @@ Configure as seguintes variáveis no Vercel:
 - `SUPABASE_SERVICE_ROLE_KEY` - Chave privada do Supabase
 - `JOBS_SECRET_TOKEN` - Token para autenticação de cron jobs
 
-## 📊 Funcionalidades
+##  Funcionalidades
 
 ### Dashboard Interativo
 - ✅ Análise de eventos por tipo
@@ -93,7 +93,7 @@ Configure as seguintes variáveis no Vercel:
 - ✅ Métricas de usabilidade
 - ✅ Análise de feedback
 
-## 📁 Estrutura do Projeto
+##  Estrutura do Projeto
 
 \`\`\`
 planeja-plus/
@@ -110,7 +110,7 @@ planeja-plus/
 └── public/                  # Arquivos estáticos
 \`\`\`
 
-## 🎨 Design System
+##  Design System
 
 - **Cores Primárias**: Verde Esmeralda (#10b981)
 - **Tipografia**: System UI, sans-serif
@@ -118,14 +118,14 @@ planeja-plus/
 - **Border Radius**: 8px padrão
 - **Modo Escuro**: Suportado nativamente
 
-## 📈 Métricas de Performance
+##  Métricas de Performance
 
 - **Lighthouse Score**: 95+
 - **First Contentful Paint**: < 1.5s
 - **Time to Interactive**: < 3.0s
 - **Cumulative Layout Shift**: < 0.1
 
-## 🧪 Testes
+##  Testes
 
 \`\`\`bash
 # Executar testes
@@ -138,29 +138,6 @@ npm run test:coverage
 npm run lint
 \`\`\`
 
-## 🤝 Contribuindo
 
-1. Fork o projeto
-2. Crie uma branch (`git checkout -b feature/nova-funcionalidade`)
-3. Commit suas mudanças (`git commit -m 'Adiciona nova funcionalidade'`)
-4. Push para a branch (`git push origin feature/nova-funcionalidade`)
-5. Abra um Pull Request
 
-## 📝 Licença
 
-Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para mais detalhes.
-
-## 👥 Autores
-
-- **Equipe Planeja+** - [GitHub](https://github.com/planeja-plus)
-
-## 🙏 Agradecimentos
-
-- [Vercel](https://vercel.com) - Hospedagem e deployment
-- [Supabase](https://supabase.com) - Backend as a Service
-- [shadcn/ui](https://ui.shadcn.com) - Componentes UI
-- [Recharts](https://recharts.org) - Biblioteca de gráficos
-
----
-
-Feito com ❤️ pela equipe Planeja+
