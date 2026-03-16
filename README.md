@@ -1,143 +1,283 @@
-# Planeja+ 
+# Planeja+
 
-Plataforma completa de gestão de eventos com análise de dados e dashboards interativos.
+## Sistema de Gestão Inteligente de Eventos
 
-##  Tecnologias
+O **Planeja+** é uma plataforma web desenvolvida para apoiar o planejamento, organização e acompanhamento de eventos. A solução centraliza informações sobre eventos, convidados, contatos e métricas de acompanhamento, permitindo uma visão mais estruturada e estratégica do processo de organização.
 
-- **Next.js 14** - Framework React com App Router
-- **TypeScript** - Tipagem estática
-- **Tailwind CSS** - Estilização
-- **shadcn/ui** - Componentes UI
-- **Recharts** - Visualização de dados
-- **Zustand** - Gerenciamento de estado
-- **Supabase** - Backend e autenticação
-- **React Big Calendar** - Calendário de eventos
-- **Framer Motion** - Animações
+Este repositório contém o **código-fonte funcional e comentado da solução em desenvolvimento do Projeto Final de Curso**, apresentando a implementação técnica do sistema, sua organização arquitetural e os componentes responsáveis pelas principais funcionalidades da aplicação.
 
+---
 
-# Entre no diretório
-cd planeja-plus
+# 1. Contexto do Projeto
 
-# Instale as dependências
-npm install
+A organização de eventos envolve diversas atividades operacionais, como controle de convidados, acompanhamento de confirmações, gestão de contatos e análise de dados relacionados ao evento. Muitas vezes essas informações ficam distribuídas em planilhas, mensagens e diferentes ferramentas, o que dificulta o acompanhamento centralizado.
 
-# Configure as variáveis de ambiente
-cp .env.example .env.local
+O **Planeja+** surge como uma solução para centralizar essas informações em uma única plataforma digital, permitindo maior organização, controle e visualização dos dados envolvidos no processo de planejamento de eventos.
 
-# Inicie o servidor de desenvolvimento
-npm run dev
-\`\`\`
+Além da gestão operacional, a plataforma também busca oferecer **visualizações analíticas e dashboards**, auxiliando organizadores na interpretação dos dados e no acompanhamento do andamento dos eventos.
 
-Acesse [http://localhost:3000](http://localhost:3000) no seu navegador.
+---
 
-##  Deploy no Vercel
+# 2. Objetivo Acadêmico
 
-### Opção 1: Deploy via CLI
+Este projeto foi desenvolvido como parte do **Projeto Final de Curso**, tendo como objetivo demonstrar a aplicação prática de conhecimentos relacionados a:
 
-\`\`\`bash
-# Instale a CLI do Vercel
-npm i -g vercel
+* desenvolvimento de aplicações web modernas
+* arquitetura de software
+* organização modular do código
+* componentização de interfaces
+* gerenciamento de estado
+* integração com serviços externos
+* documentação técnica de software
 
-# Faça login
-vercel login
+O repositório apresenta a solução em desenvolvimento, evidenciando a evolução do sistema ao longo das etapas do projeto.
 
-# Deploy em produção
-vercel --prod
-\`\`\`
+---
 
-### Opção 2: Deploy via GitHub
+# 3. Tecnologias Utilizadas
 
-1. Faça push do código para o GitHub
-2. Acesse [vercel.com](https://vercel.com)
-3. Clique em "New Project"
-4. Importe o repositório
-5. Configure as variáveis de ambiente
-6. Clique em "Deploy"
+O sistema foi construído utilizando tecnologias modernas do ecossistema web.
 
-##  Variáveis de Ambiente
+## Frontend
 
-Configure as seguintes variáveis no Vercel:
+* Next.js 14
+* React 18
+* TypeScript
+* Tailwind CSS
 
-- `NEXT_PUBLIC_SUPABASE_URL` - URL do projeto Supabase
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY` - Chave pública do Supabase
-- `SUPABASE_SERVICE_ROLE_KEY` - Chave privada do Supabase
-- `JOBS_SECRET_TOKEN` - Token para autenticação de cron jobs
+## Componentes de Interface
 
-##  Funcionalidades
+* shadcn/ui
+* Radix UI
+* Framer Motion
 
-### Dashboard Interativo
-- ✅ Análise de eventos por tipo
-- ✅ Análise de eventos por categoria
-- ✅ Análise de eventos por status
-- ✅ Distribuição de convidados
-- ✅ Evolução mensal
-- ✅ Taxa de confirmação
+## Visualização de Dados
 
-### Gestão de Eventos
-- ✅ Criar e editar eventos
-- ✅ Gerenciar convidados
-- ✅ Enviar convites
-- ✅ Controlar confirmações
-- ✅ Calendário interativo
+* Recharts
 
-### Qualidade de Dados
-- ✅ Análise de completude
-- ✅ Análise de consistência
-- ✅ Análise de integridade
-- ✅ Análise de validade
-- ✅ Detecção de duplicatas
+## Gerenciamento de Estado
 
-### Testes de Usuário
-- ✅ Simulação de perfis
-- ✅ Cenários de teste
-- ✅ Métricas de usabilidade
-- ✅ Análise de feedback
+* Zustand
 
-##  Estrutura do Projeto
+## Backend / Serviços
 
-\`\`\`
+* Supabase
+
+## Bibliotecas adicionais
+
+* React Big Calendar
+* utilitários internos do projeto
+
+Essas tecnologias foram escolhidas por oferecerem **escalabilidade, organização do código e boa experiência de desenvolvimento**.
+
+---
+
+# 4. Arquitetura da Aplicação
+
+A aplicação segue uma organização modular que separa responsabilidades entre interface, lógica da aplicação e gerenciamento de estado.
+
+De forma simplificada, a arquitetura pode ser representada da seguinte maneira:
+
+```
+Usuário
+   ↓
+Interface (React / Next.js)
+   ↓
+Componentes reutilizáveis
+   ↓
+Gerenciamento de estado (Zustand)
+   ↓
+Serviços e integrações
+   ↓
+Banco de dados / backend (Supabase)
+```
+
+Essa separação permite:
+
+* melhor organização do código
+* maior reutilização de componentes
+* facilidade de manutenção
+* escalabilidade da aplicação
+
+---
+
+# 5. Estrutura do Projeto
+
+A organização das pastas do projeto segue uma estrutura modular.
+
+```
 planeja-plus/
-├── app/                      # Páginas Next.js (App Router)
-│   ├── dashboard/           # Dashboard e análises
-│   ├── calendar/            # Calendário de eventos
-│   ├── contacts/            # Gestão de contatos
-│   └── create-event/        # Criar eventos
-├── components/              # Componentes React
-│   ├── ui/                  # Componentes shadcn/ui
-│   └── [outros]             # Componentes customizados
-├── stores/                  # Estados Zustand
-├── lib/                     # Utilidades e helpers
-└── public/                  # Arquivos estáticos
-\`\`\`
+│
+├── api/             # rotas e integrações auxiliares
+├── app/             # páginas da aplicação (App Router)
+├── components/      # componentes reutilizáveis
+├── context/         # contextos globais da aplicação
+├── hooks/           # hooks personalizados
+├── jobs/            # rotinas e tarefas do sistema
+├── lib/             # funções utilitárias e integrações
+├── public/          # arquivos estáticos
+├── scripts/         # scripts auxiliares
+├── stores/          # gerenciamento de estado
+├── styles/          # estilos globais
+│
+├── middleware.ts
+├── next.config.js
+└── package.json
+```
 
-##  Design System
+Essa estrutura facilita a organização da aplicação e permite que novas funcionalidades sejam adicionadas de forma mais controlada.
 
-- **Cores Primárias**: Verde Esmeralda (#10b981)
-- **Tipografia**: System UI, sans-serif
-- **Espaçamento**: Baseado em múltiplos de 4px
-- **Border Radius**: 8px padrão
-- **Modo Escuro**: Suportado nativamente
+---
 
-##  Métricas de Performance
+# 6. Requisitos Funcionais
 
-- **Lighthouse Score**: 95+
-- **First Contentful Paint**: < 1.5s
-- **Time to Interactive**: < 3.0s
-- **Cumulative Layout Shift**: < 0.1
+Entre os principais requisitos funcionais do sistema estão:
 
-##  Testes
+### Gestão de eventos
 
-\`\`\`bash
-# Executar testes
-npm test
+* criação de eventos
+* edição de informações do evento
+* organização de eventos por categoria ou status
 
-# Executar testes com cobertura
-npm run test:coverage
+### Gestão de convidados
 
-# Executar linter
+* cadastro de convidados
+* acompanhamento de confirmações
+* controle de listas de convidados
+
+### Gestão de contatos
+
+* registro de contatos relacionados ao evento
+* organização de informações de participantes
+
+### Visualização em calendário
+
+* visualização dos eventos em calendário
+* acompanhamento de datas importantes
+
+### Dashboard de dados
+
+* visualização gráfica de informações
+* indicadores relacionados aos eventos
+* apoio à análise de dados do sistema
+
+---
+
+# 7. Diferenciais da Solução
+
+Entre os principais diferenciais do Planeja+ estão:
+
+* centralização das informações de eventos
+* interface moderna e intuitiva
+* visualizações analíticas para apoio à decisão
+* arquitetura modular que facilita evolução do sistema
+* organização do código com foco em manutenção e escalabilidade
+
+Além disso, o projeto busca aplicar boas práticas de desenvolvimento, mantendo o código comentado e estruturado para facilitar entendimento técnico.
+
+---
+
+# 8. Execução do Projeto
+
+Para executar o projeto localmente, siga os passos abaixo.
+
+### Clonar o repositório
+
+```
+git clone https://github.com/gabrielmdujardin/Planejamais-.git
+```
+
+### Acessar a pasta
+
+```
+cd Planejamais-
+```
+
+### Instalar dependências
+
+```
+npm install
+```
+
+### Configurar variáveis de ambiente
+
+Criar um arquivo:
+
+```
+.env.local
+```
+
+Exemplo de variáveis utilizadas:
+
+```
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+JOBS_SECRET_TOKEN=
+```
+
+### Executar aplicação
+
+```
+npm run dev
+```
+
+A aplicação ficará disponível em:
+
+```
+http://localhost:3000
+```
+
+---
+
+# 9. Scripts Disponíveis
+
+```
+npm run dev
+```
+
+Inicia o servidor em ambiente de desenvolvimento.
+
+```
+npm run build
+```
+
+Gera a build de produção.
+
+```
+npm run start
+```
+
+Executa a aplicação em modo de produção.
+
+```
 npm run lint
-\`\`\`
+```
 
+Executa a análise de código.
 
+---
 
+# 10. Autores
 
+Projeto desenvolvido no contexto do **Projeto Integrador / Projeto Final de Curso**.
+
+Equipe de desenvolvimento:
+
+* Gabriel Mendes Dujardin
+* Camilla Regina Andrade
+* João Paulo Arantes
+
+---
+
+# 11. Considerações Finais
+
+O **Planeja+** representa uma solução em desenvolvimento voltada à gestão e organização de eventos, aplicando conceitos de arquitetura de software, desenvolvimento web moderno e organização modular de código.
+
+O projeto permanece em evolução, podendo receber melhorias, novas funcionalidades e refinamentos ao longo das próximas etapas do desenvolvimento.
+
+---
+
+# Repositório
+
+Código-fonte funcional e comentado da solução em desenvolvimento do Projeto Final de Curso **Planeja+**.
