@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { CalendarSyncJob } from "../../../jobs/calendar-sync"
+import { CalendarSyncJob } from "@/jobs/calendar-sync"
 
 export async function POST(request: NextRequest) {
   // Verify authorization
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }
