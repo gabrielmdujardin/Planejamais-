@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { DailyAggregateJob } from "../../../jobs/daily-aggregate"
+import { CleanupJob } from "@/jobs/cleanup"
 
 export async function POST(request: NextRequest) {
   // Verify authorization
@@ -11,22 +11,22 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const job = new DailyAggregateJob()
+    const job = new CleanupJob()
     await job.run()
 
     return NextResponse.json({
       success: true,
-      message: "Daily aggregate job completed successfully",
+      message: "Cleanup job completed successfully",
     })
   } catch (error) {
-    console.error("Daily aggregate job failed:", error)
+    console.error("Cleanup job failed:", error)
 
     return NextResponse.json(
       {
         success: false,
         error: error instanceof Error ? error.message : "Unknown error",
       },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }

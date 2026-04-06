@@ -45,7 +45,7 @@ export async function GET(request: NextRequest, { params }: { params: { userId: 
       {
         error: "Failed to generate calendar",
       },
-      { status: 500 },
+      { status: 500 }
     )
   }
 }

@@ -103,29 +103,66 @@ Essa separação permite:
 
 # 5. Estrutura do Projeto
 
-A organização das pastas do projeto segue uma estrutura modular.
+A organizacao das pastas do projeto segue uma estrutura modular e profissional.
 
 ```
 planeja-plus/
 │
-├── api/             # rotas e integrações auxiliares
-├── app/             # páginas da aplicação (App Router)
-├── components/      # componentes reutilizáveis
-├── context/         # contextos globais da aplicação
-├── hooks/           # hooks personalizados
-├── jobs/            # rotinas e tarefas do sistema
-├── lib/             # funções utilitárias e integrações
-├── public/          # arquivos estáticos
-├── scripts/         # scripts auxiliares
-├── stores/          # gerenciamento de estado
-├── styles/          # estilos globais
+├── app/                      # Paginas e rotas (Next.js App Router)
+│   ├── api/                  # Endpoints da API
+│   │   ├── ics/             # Exportacao de calendario ICS
+│   │   └── jobs/            # Endpoints de jobs/cron
+│   ├── dashboard/           # Dashboard principal
+│   ├── calendar/            # Visualizacao de calendario
+│   ├── contacts/            # Gestao de contatos
+│   ├── create-event/        # Criacao de eventos
+│   ├── event/[id]/          # Detalhes do evento
+│   ├── confirm-invitation/  # Confirmacao de convites (publico)
+│   ├── login/               # Autenticacao
+│   ├── register/            # Registro
+│   ├── profile/             # Perfil do usuario
+│   ├── about/               # Sobre
+│   └── pricing/             # Precos
 │
+├── src/                      # Codigo fonte organizado
+│   ├── types/               # Tipos TypeScript centralizados
+│   ├── services/            # Camada de servicos (logica de negocio)
+│   └── constants/           # Constantes da aplicacao
+│
+├── components/               # Componentes React reutilizaveis
+│   ├── ui/                  # Componentes base (shadcn/ui)
+│   └── charts/              # Componentes de graficos
+│
+├── lib/                      # Utilitarios e configuracoes
+│   └── supabase/            # Cliente Supabase
+│
+├── hooks/                    # Custom React Hooks
+├── stores/                   # Estado global (Zustand)
+├── context/                  # React Context
+├── jobs/                     # Background Jobs
+│
+├── scripts/                  # Scripts de banco de dados
+│   └── migrations/          # Migracoes SQL
+│
+├── docs/                     # Documentacao
+│   ├── technical/           # Documentacao tecnica
+│   ├── DEPLOYMENT.md        # Guia de deploy
+│   ├── ARCHITECTURE.md      # Arquitetura
+│   ├── CONTRIBUTING.md      # Guia de contribuicao
+│   └── SYSTEM.md            # Documentacao do sistema
+│
+├── config/                   # Configuracoes de ambiente
+│   └── .env.example         # Exemplo de variaveis
+│
+├── public/                   # Assets estaticos
 ├── middleware.ts
 ├── next.config.js
+├── tailwind.config.ts
+├── tsconfig.json
 └── package.json
 ```
 
-Essa estrutura facilita a organização da aplicação e permite que novas funcionalidades sejam adicionadas de forma mais controlada.
+Essa estrutura facilita a organizacao da aplicacao e permite que novas funcionalidades sejam adicionadas de forma mais controlada.
 
 ---
 
