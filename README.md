@@ -103,7 +103,7 @@ Essa separação permite:
 
 # 5. Estrutura do Projeto
 
-A organizacao das pastas do projeto segue uma estrutura modular e profissional.
+
 
 ```
 planeja-plus/
