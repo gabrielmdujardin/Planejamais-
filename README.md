@@ -162,7 +162,7 @@ planeja-plus/
 └── package.json
 ```
 
-Essa estrutura facilita a organizacao da aplicacao e permite que novas funcionalidades sejam adicionadas de forma mais controlada.
+
 
 ---
 
