@@ -11,6 +11,7 @@ import GuestList from "@/components/guest-list"
 import ItemsList from "@/components/items-list"
 import EventGallery from "@/components/event-gallery"
 import EventHero from "@/components/event-hero"
+import PendingRequestsList from "@/components/pending-requests-list"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
 import { useRouter } from "next/navigation"
@@ -21,6 +22,7 @@ import Link from "next/link"
 import EmailPreview from "@/components/email-preview"
 import SmsPreview from "@/components/sms-preview"
 import { getEventTheme } from "@/lib/event-theme"
+import { Share2 } from "lucide-react"
 
 export default function EventPage({ params }: { params: { id: string } }) {
   const [isLoading, setIsLoading] = useState(true)
@@ -196,6 +198,9 @@ export default function EventPage({ params }: { params: { id: string } }) {
             <TabsTrigger value="guests" className="data-[state=active]:bg-white">
               Convidados ({event.guests?.length || 0})
             </TabsTrigger>
+            <TabsTrigger value="requests" className="data-[state=active]:bg-white relative">
+              Solicitações
+            </TabsTrigger>
             <TabsTrigger value="photos" className="data-[state=active]:bg-white">
               Fotos ({event.photos?.length || 0})
             </TabsTrigger>
@@ -281,6 +286,34 @@ export default function EventPage({ params }: { params: { id: string } }) {
 
           <TabsContent value="photos">
             <EventGallery eventId={event.id} photos={event.photos || []} canUpload={true} currentUser="Usuário Atual" />
+          </TabsContent>
+
+          <TabsContent value="requests">
+            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
+              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+                <CardTitle className="text-xl">Solicitações de Participação</CardTitle>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-2"
+                  onClick={() => {
+                    const publicUrl = `${window.location.origin}/evento/${event.id}/solicitar`
+                    navigator.clipboard.writeText(publicUrl).then(() => {
+                      toast({
+                        title: "Link copiado!",
+                        description: "Compartilhe este link para que pessoas possam solicitar participação.",
+                      })
+                    })
+                  }}
+                >
+                  <Share2 className="h-4 w-4" />
+                  Compartilhar link público
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <PendingRequestsList eventId={event.id} />
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
 
