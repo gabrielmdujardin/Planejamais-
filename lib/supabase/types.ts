@@ -1,3 +1,11 @@
+export type GuestStatus = 
+  | "awaiting_approval" 
+  | "pending" 
+  | "confirmed" 
+  | "declined" 
+  | "expired" 
+  | "cancelled"
+
 export type Database = {
   public: {
     Tables: {
@@ -58,9 +66,23 @@ export type Database = {
           name: string
           email: string
           phone: string
-          status: "confirmed" | "pending" | "declined"
+          status: GuestStatus
           contact_id: string | null
           created_at: string
+          // New fields for approval flow
+          confirmation_token: string | null
+          token_expires_at: string | null
+          approved_companions: string[] | null
+          rejected_companions: string[] | null
+          approval_message: string | null
+          source: "manual" | "public_request" | null
+          requested_at: string | null
+          approved_at: string | null
+          approved_by: string | null
+          rejected_at: string | null
+          rejection_reason: string | null
+          confirmed_at: string | null
+          declined_at: string | null
         }
         Insert: {
           id?: string
@@ -68,9 +90,22 @@ export type Database = {
           name: string
           email: string
           phone: string
-          status?: "confirmed" | "pending" | "declined"
+          status?: GuestStatus
           contact_id?: string | null
           created_at?: string
+          confirmation_token?: string | null
+          token_expires_at?: string | null
+          approved_companions?: string[] | null
+          rejected_companions?: string[] | null
+          approval_message?: string | null
+          source?: "manual" | "public_request" | null
+          requested_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          confirmed_at?: string | null
+          declined_at?: string | null
         }
         Update: {
           id?: string
@@ -78,9 +113,63 @@ export type Database = {
           name?: string
           email?: string
           phone?: string
-          status?: "confirmed" | "pending" | "declined"
+          status?: GuestStatus
           contact_id?: string | null
           created_at?: string
+          confirmation_token?: string | null
+          token_expires_at?: string | null
+          approved_companions?: string[] | null
+          rejected_companions?: string[] | null
+          approval_message?: string | null
+          source?: "manual" | "public_request" | null
+          requested_at?: string | null
+          approved_at?: string | null
+          approved_by?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+          confirmed_at?: string | null
+          declined_at?: string | null
+        }
+      }
+      guest_companions: {
+        Row: {
+          id: string
+          guest_id: string
+          name: string
+          email: string | null
+          phone: string | null
+          status: GuestStatus
+          created_at: string
+          approved_at: string | null
+          approved_by: string | null
+          rejected_at: string | null
+          rejection_reason: string | null
+        }
+        Insert: {
+          id?: string
+          guest_id: string
+          name: string
+          email?: string | null
+          phone?: string | null
+          status?: GuestStatus
+          created_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
+        }
+        Update: {
+          id?: string
+          guest_id?: string
+          name?: string
+          email?: string | null
+          phone?: string | null
+          status?: GuestStatus
+          created_at?: string
+          approved_at?: string | null
+          approved_by?: string | null
+          rejected_at?: string | null
+          rejection_reason?: string | null
         }
       }
       items: {
