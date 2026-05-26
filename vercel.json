@@ -1,0 +1,24 @@
+{
+  "buildCommand": "npm run build",
+  "devCommand": "npm run dev",
+  "installCommand": "npm install",
+  "framework": "nextjs",
+  "crons": [
+    {
+      "path": "/api/jobs/daily-aggregate",
+      "schedule": "0 0 * * *"
+    },
+    {
+      "path": "/api/jobs/pending-invites",
+      "schedule": "0 */6 * * *"
+    },
+    {
+      "path": "/api/jobs/calendar-sync",
+      "schedule": "*/15 * * * *"
+    },
+    {
+      "path": "/api/jobs/cleanup",
+      "schedule": "0 2 * * *"
+    }
+  ]
+}

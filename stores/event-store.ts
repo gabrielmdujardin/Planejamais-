@@ -50,14 +50,12 @@ interface Event {
   items: Item[]
   guests: Guest[]
   photos: EventPhoto[]
-  bannerImage?: string
   createdAt: string
   updatedAt: string
 }
 
 interface EventStore {
   events: Event[]
-  setEvents: (events: Event[]) => void
   addEvent: (event: Event) => void
   updateEvent: (id: string, event: Partial<Event>) => void
   removeEvent: (id: string) => void
@@ -80,158 +78,168 @@ interface EventStore {
   updatePhoto: (eventId: string, photoId: string, updates: Partial<EventPhoto>) => void
 }
 
-const SAMPLE_EVENTS: Event[] = [
-  {
-    id: "1",
-    title: "Casamento Maria & João",
-    type: "Casamento",
-    category: "Social",
-    date: "2025-03-15",
-    time: "18:00",
-    location: "Espaço Jardim das Flores",
-    description: "Cerimônia e recepção",
-    confirmedGuests: 120,
-    totalGuests: 150,
-    items: [
-      { id: "i1", name: "Buffet", price: 15000, assignedTo: null },
-      { id: "i2", name: "Decoração", price: 8000, assignedTo: null },
-      { id: "i3", name: "Fotografia", price: 5000, assignedTo: null },
-    ],
-    guests: Array.from({ length: 150 }, (_, i) => ({
-      id: `g1-${i}`,
-      name: `Convidado ${i + 1}`,
-      email: `convidado${i + 1}@email.com`,
-      phone: `(11) 9${String(i).padStart(4, "0")}-0000`,
-      status: i < 120 ? "confirmed" : i < 140 ? "pending" : ("declined" as const),
-    })),
-    photos: [],
-    bannerImage: "https://example.com/banner1.jpg",
-    createdAt: "2025-01-10T10:00:00Z",
-    updatedAt: "2025-01-10T10:00:00Z",
-  },
-  {
-    id: "2",
-    title: "Aniversário 15 Anos Ana",
-    type: "Aniversário",
-    category: "Celebração",
-    date: "2025-04-20",
-    time: "20:00",
-    location: "Salão de Festas Premium",
-    description: "Festa de 15 anos",
-    confirmedGuests: 80,
-    totalGuests: 100,
-    items: [
-      { id: "i4", name: "Buffet", price: 8000, assignedTo: null },
-      { id: "i5", name: "DJ", price: 2000, assignedTo: null },
-      { id: "i6", name: "Decoração", price: 4000, assignedTo: null },
-    ],
-    guests: Array.from({ length: 100 }, (_, i) => ({
-      id: `g2-${i}`,
-      name: `Convidado ${i + 1}`,
-      email: `convidado${i + 1}@email.com`,
-      phone: `(11) 9${String(i).padStart(4, "0")}-0000`,
-      status: i < 80 ? "confirmed" : i < 90 ? "pending" : ("declined" as const),
-    })),
-    photos: [],
-    bannerImage: "https://example.com/banner2.jpg",
-    createdAt: "2025-01-15T14:00:00Z",
-    updatedAt: "2025-01-15T14:00:00Z",
-  },
-  {
-    id: "3",
-    title: "Evento Corporativo Tech Summit",
-    type: "Corporativo",
-    category: "Profissional",
-    date: "2025-05-10",
-    time: "09:00",
-    location: "Centro de Convenções",
-    description: "Conferência de tecnologia",
-    confirmedGuests: 200,
-    totalGuests: 250,
-    items: [
-      { id: "i7", name: "Coffee Break", price: 5000, assignedTo: null },
-      { id: "i8", name: "Equipamentos AV", price: 3000, assignedTo: null },
-      { id: "i9", name: "Material Gráfico", price: 2000, assignedTo: null },
-    ],
-    guests: Array.from({ length: 250 }, (_, i) => ({
-      id: `g3-${i}`,
-      name: `Participante ${i + 1}`,
-      email: `participante${i + 1}@empresa.com`,
-      phone: `(11) 9${String(i).padStart(4, "0")}-0000`,
-      status: i < 200 ? "confirmed" : i < 230 ? "pending" : ("declined" as const),
-    })),
-    photos: [],
-    bannerImage: "https://example.com/banner3.jpg",
-    createdAt: "2025-02-01T09:00:00Z",
-    updatedAt: "2025-02-01T09:00:00Z",
-  },
-  {
-    id: "4",
-    title: "Formatura Turma 2025",
-    type: "Formatura",
-    category: "Acadêmico",
-    date: "2025-06-25",
-    time: "19:00",
-    location: "Teatro Municipal",
-    description: "Cerimônia de formatura",
-    confirmedGuests: 180,
-    totalGuests: 200,
-    items: [
-      { id: "i10", name: "Buffet", price: 12000, assignedTo: null },
-      { id: "i11", name: "Fotografia", price: 4000, assignedTo: null },
-      { id: "i12", name: "Decoração", price: 6000, assignedTo: null },
-    ],
-    guests: Array.from({ length: 200 }, (_, i) => ({
-      id: `g4-${i}`,
-      name: `Formando ${i + 1}`,
-      email: `formando${i + 1}@universidade.edu`,
-      phone: `(11) 9${String(i).padStart(4, "0")}-0000`,
-      status: i < 180 ? "confirmed" : i < 195 ? "pending" : ("declined" as const),
-    })),
-    photos: [],
-    bannerImage: "https://example.com/banner4.jpg",
-    createdAt: "2025-02-10T11:00:00Z",
-    updatedAt: "2025-02-10T11:00:00Z",
-  },
-  {
-    id: "5",
-    title: "Chá de Bebê Beatriz",
-    type: "Chá de Bebê",
-    category: "Celebração",
-    date: "2025-03-30",
-    time: "15:00",
-    location: "Casa de Festas Infantil",
-    description: "Chá revelação",
-    confirmedGuests: 50,
-    totalGuests: 60,
-    items: [
-      { id: "i13", name: "Decoração", price: 3000, assignedTo: null },
-      { id: "i14", name: "Buffet", price: 4000, assignedTo: null },
-      { id: "i15", name: "Lembrancinhas", price: 1000, assignedTo: null },
-    ],
-    guests: Array.from({ length: 60 }, (_, i) => ({
-      id: `g5-${i}`,
-      name: `Convidado ${i + 1}`,
-      email: `convidado${i + 1}@email.com`,
-      phone: `(11) 9${String(i).padStart(4, "0")}-0000`,
-      status: i < 50 ? "confirmed" : i < 55 ? "pending" : ("declined" as const),
-    })),
-    photos: [],
-    bannerImage: "https://example.com/banner5.jpg",
-    createdAt: "2025-01-20T16:00:00Z",
-    updatedAt: "2025-01-20T16:00:00Z",
-  },
-]
-
 export const useEventStore = create<EventStore>()(
   persist(
     (set, get) => ({
-      events: SAMPLE_EVENTS,
-
-      setEvents: (events) =>
-        set(() => ({
-          events,
-        })),
+      events: [
+        {
+          id: "1",
+          title: "Churrasco na Casa do João",
+          type: "Colaborativo",
+          category: "Aniversário",
+          date: "Sábado, 15 de Junho",
+          time: "16:00",
+          fullDate: "15/06/2024",
+          location: "Rua das Flores, 123 - São Paulo, SP",
+          description: "Traga sua bebida favorita! Vamos comemorar o aniversário do João com um churrasco incrível.",
+          confirmedGuests: 12,
+          totalGuests: 15,
+          items: [
+            {
+              id: "1",
+              name: "Carne (5kg)",
+              price: 150,
+              assignedTo: [{ id: "p1", name: "João" }],
+              image: null,
+            },
+            {
+              id: "2",
+              name: "Carvão",
+              price: 25,
+              assignedTo: [{ id: "p2", name: "Maria" }],
+              image: null,
+            },
+            {
+              id: "3",
+              name: "Bebidas",
+              price: 120,
+              assignedTo: null,
+              image: null,
+            },
+            {
+              id: "4",
+              name: "Pão de alho",
+              price: 30,
+              assignedTo: [{ id: "p3", name: "Pedro" }],
+              image: null,
+            },
+            {
+              id: "5",
+              name: "Descartáveis",
+              price: 45,
+              assignedTo: null,
+              image: null,
+            },
+          ],
+          guests: [
+            {
+              id: "1",
+              name: "João Silva",
+              status: "confirmed",
+              email: "joao@example.com",
+              phone: "(11) 98765-4321",
+              contactId: "contact_1",
+            },
+            {
+              id: "2",
+              name: "Maria Oliveira",
+              status: "confirmed",
+              email: "maria@example.com",
+              phone: "(11) 91234-5678",
+              contactId: "contact_2",
+            },
+            {
+              id: "3",
+              name: "Pedro Santos",
+              status: "confirmed",
+              email: "pedro@example.com",
+              phone: "(11) 99876-5432",
+              contactId: "contact_3",
+            },
+            {
+              id: "4",
+              name: "Ana Costa",
+              status: "pending",
+              email: "ana@example.com",
+              phone: "(11) 95555-4444",
+              contactId: "contact_4",
+            },
+            {
+              id: "5",
+              name: "Lucas Ferreira",
+              status: "declined",
+              email: "lucas@example.com",
+              phone: "(11) 93333-2222",
+              contactId: "contact_5",
+            },
+          ],
+          photos: [
+            {
+              id: "photo_1",
+              url: "/placeholder.svg?height=300&width=400&text=Churrasco+1",
+              filename: "churrasco_1.jpg",
+              uploadedBy: "João Silva",
+              uploadedAt: "2024-06-15T18:30:00Z",
+              description: "Início do churrasco",
+              tags: ["churrasco", "amigos"],
+            },
+            {
+              id: "photo_2",
+              url: "/placeholder.svg?height=300&width=400&text=Churrasco+2",
+              filename: "churrasco_2.jpg",
+              uploadedBy: "Maria Oliveira",
+              uploadedAt: "2024-06-15T19:15:00Z",
+              description: "Galera reunida",
+              tags: ["grupo", "diversão"],
+            },
+          ],
+          createdAt: "2024-06-10T10:00:00Z",
+          updatedAt: "2024-06-15T20:00:00Z",
+        },
+        {
+          id: "2",
+          title: "Aniversário da Maria",
+          type: "Festa",
+          category: "Festa de Aniversário",
+          date: "Domingo, 23 de Junho",
+          time: "14:00",
+          fullDate: "23/06/2024",
+          location: "Salão de Festas Primavera - Av. Principal, 500",
+          description: "Venha celebrar o aniversário da Maria com muita diversão e alegria!",
+          confirmedGuests: 8,
+          totalGuests: 20,
+          items: [],
+          guests: [
+            {
+              id: "1",
+              name: "João Silva",
+              status: "confirmed",
+              email: "joao@example.com",
+              phone: "(11) 98765-4321",
+              contactId: "contact_1",
+            },
+            {
+              id: "2",
+              name: "Pedro Santos",
+              status: "confirmed",
+              email: "pedro@example.com",
+              phone: "(11) 99876-5432",
+              contactId: "contact_3",
+            },
+            {
+              id: "3",
+              name: "Ana Costa",
+              status: "pending",
+              email: "ana@example.com",
+              phone: "(11) 95555-4444",
+              contactId: "contact_4",
+            },
+          ],
+          photos: [],
+          createdAt: "2024-06-18T14:00:00Z",
+          updatedAt: "2024-06-18T14:00:00Z",
+        },
+      ],
 
       addEvent: (event) =>
         set((state) => ({
@@ -254,6 +262,7 @@ export const useEventStore = create<EventStore>()(
         return get().events.find((event) => event.id === id)
       },
 
+      // Itens
       addItem: (eventId, item) =>
         set((state) => ({
           events: state.events.map((event) =>
@@ -293,6 +302,7 @@ export const useEventStore = create<EventStore>()(
           ),
         })),
 
+      // Convidados
       addGuests: (eventId, newGuests) =>
         set((state) => {
           const event = state.events.find((e) => e.id === eventId)
@@ -375,6 +385,7 @@ export const useEventStore = create<EventStore>()(
           }
         }),
 
+      // Fotos
       addPhoto: (eventId, photoData) =>
         set((state) => {
           const newPhoto: EventPhoto = {

@@ -41,7 +41,7 @@ export class PendingInvitesJob extends BaseJob {
         await this.sendReminder(guest)
         await this.log("info", `Reminder sent to ${guest.email}`)
       } catch (error) {
-        await this.log("error", `Failed to send reminder to ${guest.email}`, { error: (error as Error).message })
+        await this.log("error", `Failed to send reminder to ${guest.email}`, { error: error.message })
       }
     }
 
