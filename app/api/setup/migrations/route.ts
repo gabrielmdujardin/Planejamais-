@@ -1,19 +1,10 @@
-import { createClient } from "@supabase/supabase-js"
+import { createAdminClient } from "@/lib/supabase/admin"
 import { NextResponse } from "next/server"
-
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!,
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-)
 
 export async function POST() {
   try {
+    const supabaseAdmin = createAdminClient()
+    
     // Executar as migrações usando o service role
 
     // 1. Adicionar novas colunas na tabela guests
