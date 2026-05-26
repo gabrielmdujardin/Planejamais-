@@ -15,7 +15,7 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Planeja+ | Organize seus eventos com facilidade",
   description: "Plataforma para organização de eventos colaborativos, festas, casamentos e viagens.",
-    generator: 'v0.app'
+  generator: "v0.app",
 }
 
 export default function RootLayout({
