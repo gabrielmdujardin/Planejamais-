@@ -71,6 +71,7 @@ interface EventStore {
   updateGuest: (eventId: string, guestId: string, guest: Guest) => void
   removeGuest: (eventId: string, guestId: string) => void
   updateGuestStatus: (eventId: string, guestId: string, status: "confirmed" | "pending" | "declined") => void
+  getGuestById: (eventId: string, guestId: string) => Guest | undefined
 
   // Fotos
   addPhoto: (eventId: string, photo: Omit<EventPhoto, "id" | "uploadedAt">) => void
@@ -360,6 +361,11 @@ export const useEventStore = create<EventStore>()(
         if (guest) {
           updateGuest(eventId, guestId, { ...guest, status })
         }
+      },
+
+      getGuestById: (eventId, guestId) => {
+        const event = get().events.find((e) => e.id === eventId)
+        return event?.guests.find((g) => g.id === guestId)
       },
 
       removeGuest: (eventId, guestId) =>
