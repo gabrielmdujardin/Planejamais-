@@ -6,22 +6,18 @@ const publicPaths = ["/", "/login", "/register", "/about", "/pricing", "/help", 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Permitir acesso a assets estáticos do Next.js
-  if (pathname.startsWith("/_next")) {
-    return NextResponse.next()
-  }
-
-  // Permitir acesso a arquivos estáticos e API
+  // Permitir acesso a assets estáticos
   if (
+    pathname.startsWith("/_next") ||
     pathname.startsWith("/api") ||
     pathname.startsWith("/static") ||
-    pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|css|js)$/)
+    pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|css)$/)
   ) {
     return NextResponse.next()
   }
 
   // Rotas públicas
-  if (publicPaths.some((path) => pathname === path || pathname.startsWith("/confirm-invitation") || pathname.startsWith("/evento"))) {
+  if (publicPaths.some((path) => pathname === path || pathname.startsWith("/confirm-invitation"))) {
     return NextResponse.next()
   }
 
@@ -30,5 +26,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 }

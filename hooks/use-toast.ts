@@ -1,4 +1,3 @@
-// Adapted from: https://github.com/shadcn-ui/ui/blob/main/apps/www/registry/default/hooks/use-toast.ts
 "use client"
 
 import * as React from "react"

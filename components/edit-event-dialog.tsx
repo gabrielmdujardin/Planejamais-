@@ -14,7 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { CalendarIcon, MapPin, Clock, ImageIcon } from "lucide-react"
+import { CalendarIcon, MapPin, Clock } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
@@ -22,7 +22,6 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
-import ImageUpload from "@/components/image-upload"
 
 interface EditEventDialogProps {
   open: boolean
@@ -42,14 +41,15 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
   const [date, setDate] = useState<Date | undefined>(undefined)
   const [eventTime, setEventTime] = useState("")
   const [eventLocation, setEventLocation] = useState("")
-  const [bannerImage, setBannerImage] = useState<string>("")
 
+  // Carregar dados do evento quando o diálogo for aberto
   useEffect(() => {
     if (event && open) {
       setEventType(event.type === "Festa" ? "festa" : "colaborativo")
       setEventName(event.title)
       setEventDescription(event.description)
 
+      // Converter a data do formato string para Date
       if (event.fullDate) {
         const [day, month, year] = event.fullDate.split("/").map(Number)
         setDate(new Date(year, month - 1, day))
@@ -57,7 +57,6 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
 
       setEventTime(event.time)
       setEventLocation(event.location)
-      setBannerImage(event.bannerImage || "")
     }
   }, [event, open])
 
@@ -76,6 +75,7 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
     setIsSubmitting(true)
 
     try {
+      // Atualizar evento
       const updatedEvent = {
         ...event,
         title: eventName,
@@ -85,7 +85,6 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
         fullDate: date ? format(date, "dd/MM/yyyy") : event.fullDate,
         location: eventLocation,
         description: eventDescription,
-        bannerImage: bannerImage || undefined,
       }
 
       updateEvent(event.id, updatedEvent)
@@ -110,22 +109,13 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-3xl">
         <DialogHeader>
           <DialogTitle>Editar evento</DialogTitle>
           <DialogDescription>Atualize as informações do seu evento.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 py-4">
           <div className="grid grid-cols-1 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="banner-image" className="flex items-center gap-2">
-                <ImageIcon className="h-4 w-4" />
-                Imagem de capa (opcional)
-              </Label>
-              <p className="text-sm text-gray-500 mb-2">Adicione uma imagem personalizada para o banner do evento</p>
-              <ImageUpload onImageSelect={setBannerImage} currentImage={bannerImage} className="w-full h-48" />
-            </div>
-
             <div>
               <Label htmlFor="event-type">Tipo de evento</Label>
               <RadioGroup value={eventType} onValueChange={setEventType} className="grid grid-cols-2 gap-4 mt-2">

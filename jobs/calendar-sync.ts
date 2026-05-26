@@ -23,7 +23,7 @@ export class CalendarSyncJob extends BaseJob {
         await this.generateUserICS(user.id, user.email)
         await this.log("info", `ICS generated for user ${user.email}`)
       } catch (error) {
-        await this.log("error", `Failed to generate ICS for user ${user.email}`, { error: (error as Error).message })
+        await this.log("error", `Failed to generate ICS for user ${user.email}`, { error: error.message })
       }
     }
 

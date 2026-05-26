@@ -11,9 +11,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Check, Copy, MoreHorizontal, Send, Trash2, X } from "lucide-react"
+import { Check, Clock, Copy, Mail, MoreHorizontal, Send, Trash2, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
+import { Input } from "@/components/ui/input"
 
 interface Guest {
   id: string
@@ -30,14 +31,32 @@ interface GuestListProps {
 
 export default function GuestList({ guests, eventId }: GuestListProps) {
   const [isLoading, setIsLoading] = useState(false)
+  const [sendingInviteId, setSendingInviteId] = useState<string | null>(null)
+  const [filter, setFilter] = useState<"all" | "confirmed" | "pending" | "declined">("all")
+  const [searchTerm, setSearchTerm] = useState("")
   const { toast } = useToast()
   const { updateGuestStatus, removeGuest } = useEventStore()
 
-  // Ordenar convidados: confirmados primeiro, depois pendentes, depois recusados
-  const sortedGuests = [...guests].sort((a, b) => {
-    const statusOrder = { confirmed: 0, pending: 1, declined: 2 }
-    return statusOrder[a.status] - statusOrder[b.status]
-  })
+  // Filtrar e ordenar convidados
+  const filteredGuests = [...guests]
+    .filter((guest) => {
+      // Filtro por status
+      if (filter !== "all" && guest.status !== filter) return false
+      // Filtro por busca
+      if (searchTerm) {
+        const term = searchTerm.toLowerCase()
+        return (
+          guest.name.toLowerCase().includes(term) ||
+          guest.email.toLowerCase().includes(term) ||
+          guest.phone.includes(term)
+        )
+      }
+      return true
+    })
+    .sort((a, b) => {
+      const statusOrder = { confirmed: 0, pending: 1, declined: 2 }
+      return statusOrder[a.status] - statusOrder[b.status]
+    })
 
   const handleUpdateStatus = async (guestId: string, status: "confirmed" | "pending" | "declined") => {
     setIsLoading(true)
@@ -85,11 +104,70 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     }
   }
 
-  const handleResendInvite = (guest: Guest) => {
-    toast({
-      title: "Convite reenviado",
-      description: `O convite foi reenviado para ${guest.name}.`,
-    })
+  const handleResendInvite = async (guest: Guest) => {
+    setSendingInviteId(guest.id)
+    try {
+      // Chamar API para enviar convite
+      const response = await fetch(`/api/guests/${guest.id}/send-invite`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Convite enviado!",
+          description: `O convite foi enviado para ${guest.name} (${guest.email}).`,
+        })
+      } else {
+        throw new Error("Erro ao enviar")
+      }
+    } catch (error) {
+      toast({
+        title: "Erro ao enviar convite",
+        description: "Não foi possível enviar o convite. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setSendingInviteId(null)
+    }
+  }
+
+  const handleSendToAllPending = async () => {
+    const pendingGuests = guests.filter((g) => g.status === "pending")
+    if (pendingGuests.length === 0) {
+      toast({
+        title: "Nenhum convidado pendente",
+        description: "Todos os convidados já foram notificados.",
+      })
+      return
+    }
+
+    setIsLoading(true)
+    try {
+      const response = await fetch(`/api/events/${eventId}/send-invites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guestIds: pendingGuests.map((g) => g.id) }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Convites enviados!",
+          description: `${pendingGuests.length} convite(s) enviado(s) com sucesso.`,
+        })
+      } else {
+        throw new Error("Erro ao enviar")
+      }
+    } catch (error) {
+      toast({
+        title: "Erro ao enviar convites",
+        description: "Não foi possível enviar os convites. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleCopyInviteLink = (guest: Guest) => {
@@ -165,8 +243,73 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     )
   }
 
+  const pendingCount = guests.filter((g) => g.status === "pending").length
+  const confirmedCount = guests.filter((g) => g.status === "confirmed").length
+  const declinedCount = guests.filter((g) => g.status === "declined").length
+
   return (
     <div className="space-y-4">
+      {/* Barra de filtros e ações */}
+      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={filter === "all" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("all")}
+          >
+            Todos ({guests.length})
+          </Button>
+          <Button
+            variant={filter === "confirmed" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("confirmed")}
+            className={filter === "confirmed" ? "" : "text-emerald-600 border-emerald-200 hover:bg-emerald-50"}
+          >
+            <Check className="h-3 w-3 mr-1" />
+            Confirmados ({confirmedCount})
+          </Button>
+          <Button
+            variant={filter === "pending" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("pending")}
+            className={filter === "pending" ? "" : "text-amber-600 border-amber-200 hover:bg-amber-50"}
+          >
+            <Clock className="h-3 w-3 mr-1" />
+            Pendentes ({pendingCount})
+          </Button>
+          <Button
+            variant={filter === "declined" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setFilter("declined")}
+            className={filter === "declined" ? "" : "text-red-600 border-red-200 hover:bg-red-50"}
+          >
+            <X className="h-3 w-3 mr-1" />
+            Recusados ({declinedCount})
+          </Button>
+        </div>
+        
+        {pendingCount > 0 && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={handleSendToAllPending}
+            disabled={isLoading}
+            className="gap-1"
+          >
+            <Mail className="h-4 w-4" />
+            Enviar convites ({pendingCount})
+          </Button>
+        )}
+      </div>
+
+      {/* Campo de busca */}
+      <Input
+        placeholder="Buscar por nome, email ou telefone..."
+        value={searchTerm}
+        onChange={(e) => setSearchTerm(e.target.value)}
+        className="max-w-sm"
+      />
+
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
@@ -178,7 +321,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
             </tr>
           </thead>
           <tbody>
-            {sortedGuests.map((guest) => (
+            {filteredGuests.map((guest) => (
               <tr key={guest.id} className="border-b last:border-0">
                 <td className="py-3">
                   <div className="flex items-center gap-3">
@@ -215,8 +358,9 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
                         <X className="mr-2 h-4 w-4 text-red-600" /> Marcar como recusado
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleResendInvite(guest)}>
-                        <Send className="mr-2 h-4 w-4" /> Reenviar convite
+                      <DropdownMenuItem onClick={() => handleResendInvite(guest)} disabled={sendingInviteId === guest.id}>
+                        <Send className="mr-2 h-4 w-4" /> 
+                        {sendingInviteId === guest.id ? "Enviando..." : "Enviar convite por email"}
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => handleCopyInviteLink(guest)}>
                         <Copy className="mr-2 h-4 w-4" /> Copiar link do convite

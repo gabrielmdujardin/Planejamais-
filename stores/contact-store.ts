@@ -10,7 +10,6 @@ export interface Contact {
   phone: string
   isFavorite: boolean
   lists: string[]
-  listIds?: string[] // alias for backward compatibility
   avatar?: string
   createdAt: string
 }
@@ -19,7 +18,6 @@ export interface ContactList {
   id: string
   name: string
   contacts: string[]
-  contactIds?: string[] // alias for backward compatibility
   createdAt: string
 }
 
@@ -29,18 +27,16 @@ interface ContactStore {
   isLoading: boolean
 
   // Contacts
-  addContact: (contact: Omit<Contact, "id" | "createdAt" | "isFavorite" | "lists"> & { listIds?: string[] }) => void
-  updateContact: (id: string, contact: Partial<Contact> & { listIds?: string[] }) => void
+  addContact: (contact: Omit<Contact, "id" | "createdAt">) => void
+  updateContact: (id: string, contact: Partial<Contact>) => void
   removeContact: (id: string) => void
-  deleteContact: (id: string) => void // alias for removeContact
   getContactById: (id: string) => Contact | undefined
   toggleFavorite: (id: string) => void
 
   // Lists
-  addContactList: (list: Omit<ContactList, "id" | "createdAt" | "contacts"> & { contactIds?: string[] }) => void
-  updateContactList: (id: string, list: Partial<ContactList> & { contactIds?: string[] }) => void
+  addContactList: (list: Omit<ContactList, "id" | "createdAt">) => void
+  updateContactList: (id: string, list: Partial<ContactList>) => void
   removeContactList: (id: string) => void
-  deleteContactList: (id: string) => void // alias for removeContactList
   getContactListById: (id: string) => ContactList | undefined
   addContactToList: (contactId: string, listId: string) => void
   removeContactFromList: (contactId: string, listId: string) => void
@@ -114,18 +110,6 @@ const sampleContactLists: ContactList[] = [
   },
 ]
 
-const normalizeContact = (contact: Contact): Contact => ({
-  ...contact,
-  lists: contact.lists || contact.listIds || [],
-  listIds: contact.lists || contact.listIds || [],
-})
-
-const normalizeList = (list: ContactList): ContactList => ({
-  ...list,
-  contacts: list.contacts || list.contactIds || [],
-  contactIds: list.contacts || list.contactIds || [],
-})
-
 export const useContactStore = create<ContactStore>()(
   persist(
     (set, get) => ({
@@ -136,28 +120,13 @@ export const useContactStore = create<ContactStore>()(
       initializeData: () => {
         const { contacts, contactLists } = get()
         if (contacts.length === 0) {
-          set({
-            contacts: sampleContacts.map(normalizeContact),
-            contactLists: sampleContactLists.map(normalizeList),
-          })
-        } else {
-          set({
-            contacts: contacts.map(normalizeContact),
-            contactLists: contactLists.map(normalizeList),
-          })
+          set({ contacts: sampleContacts, contactLists: sampleContactLists })
         }
       },
 
       addContact: (contactData) => {
-        const lists = contactData.listIds || []
         const newContact: Contact = {
-          name: contactData.name,
-          email: contactData.email,
-          phone: contactData.phone,
-          avatar: contactData.avatar,
-          isFavorite: false,
-          lists: lists,
-          listIds: lists, // Set both aliases
+          ...contactData,
           id: `contact_${Date.now()}`,
           createdAt: new Date().toISOString(),
         }
@@ -168,18 +137,7 @@ export const useContactStore = create<ContactStore>()(
 
       updateContact: (id, updates) => {
         set((state) => ({
-          contacts: state.contacts.map((contact) => {
-            if (contact.id === id) {
-              const lists = updates.listIds || updates.lists || contact.lists
-              return {
-                ...contact,
-                ...updates,
-                lists: lists,
-                listIds: lists, // Keep both aliases in sync
-              }
-            }
-            return contact
-          }),
+          contacts: state.contacts.map((contact) => (contact.id === id ? { ...contact, ...updates } : contact)),
         }))
       },
 
@@ -188,14 +146,9 @@ export const useContactStore = create<ContactStore>()(
           contacts: state.contacts.filter((contact) => contact.id !== id),
           contactLists: state.contactLists.map((list) => ({
             ...list,
-            contacts: (list.contacts || []).filter((contactId) => contactId !== id),
-            contactIds: (list.contacts || []).filter((contactId) => contactId !== id),
+            contacts: list.contacts.filter((contactId) => contactId !== id),
           })),
         }))
-      },
-
-      deleteContact: (id) => {
-        get().removeContact(id)
       },
 
       getContactById: (id) => {
@@ -212,11 +165,8 @@ export const useContactStore = create<ContactStore>()(
       },
 
       addContactList: (listData) => {
-        const contacts = listData.contactIds || []
         const newList: ContactList = {
-          name: listData.name,
-          contacts: contacts,
-          contactIds: contacts, // Set both aliases
+          ...listData,
           id: `list_${Date.now()}`,
           createdAt: new Date().toISOString(),
         }
@@ -227,18 +177,7 @@ export const useContactStore = create<ContactStore>()(
 
       updateContactList: (id, updates) => {
         set((state) => ({
-          contactLists: state.contactLists.map((list) => {
-            if (list.id === id) {
-              const contacts = updates.contactIds || updates.contacts || list.contacts
-              return {
-                ...list,
-                ...updates,
-                contacts: contacts,
-                contactIds: contacts, // Keep both aliases in sync
-              }
-            }
-            return list
-          }),
+          contactLists: state.contactLists.map((list) => (list.id === id ? { ...list, ...updates } : list)),
         }))
       },
 
@@ -247,14 +186,9 @@ export const useContactStore = create<ContactStore>()(
           contactLists: state.contactLists.filter((list) => list.id !== id),
           contacts: state.contacts.map((contact) => ({
             ...contact,
-            lists: (contact.lists || []).filter((listId) => listId !== id),
-            listIds: (contact.lists || []).filter((listId) => listId !== id),
+            lists: contact.lists.filter((listId) => listId !== id),
           })),
         }))
-      },
-
-      deleteContactList: (id) => {
-        get().removeContactList(id)
       },
 
       getContactListById: (id) => {
@@ -264,41 +198,27 @@ export const useContactStore = create<ContactStore>()(
 
       addContactToList: (contactId, listId) => {
         set((state) => ({
-          contactLists: state.contactLists.map((list) => {
-            const listContacts = list.contacts || []
-            if (list.id === listId && !listContacts.includes(contactId)) {
-              const newContacts = [...listContacts, contactId]
-              return { ...list, contacts: newContacts, contactIds: newContacts }
-            }
-            return list
-          }),
-          contacts: state.contacts.map((contact) => {
-            const contactLists = contact.lists || []
-            if (contact.id === contactId && !contactLists.includes(listId)) {
-              const newLists = [...contactLists, listId]
-              return { ...contact, lists: newLists, listIds: newLists }
-            }
-            return contact
-          }),
+          contactLists: state.contactLists.map((list) =>
+            list.id === listId && !list.contacts.includes(contactId)
+              ? { ...list, contacts: [...list.contacts, contactId] }
+              : list,
+          ),
+          contacts: state.contacts.map((contact) =>
+            contact.id === contactId && !contact.lists.includes(listId)
+              ? { ...contact, lists: [...contact.lists, listId] }
+              : contact,
+          ),
         }))
       },
 
       removeContactFromList: (contactId, listId) => {
         set((state) => ({
-          contactLists: state.contactLists.map((list) => {
-            if (list.id === listId) {
-              const newContacts = (list.contacts || []).filter((id) => id !== contactId)
-              return { ...list, contacts: newContacts, contactIds: newContacts }
-            }
-            return list
-          }),
-          contacts: state.contacts.map((contact) => {
-            if (contact.id === contactId) {
-              const newLists = (contact.lists || []).filter((id) => id !== listId)
-              return { ...contact, lists: newLists, listIds: newLists }
-            }
-            return contact
-          }),
+          contactLists: state.contactLists.map((list) =>
+            list.id === listId ? { ...list, contacts: list.contacts.filter((id) => id !== contactId) } : list,
+          ),
+          contacts: state.contacts.map((contact) =>
+            contact.id === contactId ? { ...contact, lists: contact.lists.filter((id) => id !== listId) } : contact,
+          ),
         }))
       },
 
@@ -319,8 +239,7 @@ export const useContactStore = create<ContactStore>()(
         const list = contactLists.find((l) => l.id === listId)
         if (!list) return []
 
-        const listContacts = list.contacts || list.contactIds || []
-        return contacts.filter((contact) => listContacts.includes(contact.id))
+        return contacts.filter((contact) => list.contacts.includes(contact.id))
       },
     }),
     {
