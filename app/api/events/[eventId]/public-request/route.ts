@@ -10,7 +10,7 @@ export async function POST(
     const { eventId } = await params
     const body = await request.json()
 
-    const { name, email, phone, notes, dietaryRestrictions, accessibilityNeeds, companions } = body
+    const { name, email, phone, notes, dietaryRestrictions, accessibilityNeeds, companions, attendanceStatus = "confirmed" } = body
 
     // Validar campos obrigatórios
     if (!name || !email || !phone) {
@@ -47,6 +47,8 @@ export async function POST(
     }
 
     // Criar o convidado principal
+    const willAttend = attendanceStatus !== "declined"
+    const now = new Date().toISOString()
     const { data: guest, error: guestError } = await supabaseAdmin
       .from("guests")
       .insert({
@@ -54,12 +56,14 @@ export async function POST(
         name,
         email,
         phone,
-        status: "awaiting_approval",
+        status: willAttend ? "awaiting_approval" : "declined",
         source: "public_request",
         notes,
         dietary_restrictions: dietaryRestrictions,
         accessibility_needs: accessibilityNeeds,
-        requested_companions_count: companions?.length || 0,
+        requested_companions_count: willAttend ? companions?.length || 0 : 0,
+        responded_at: now,
+        declined_at: willAttend ? null : now,
       })
       .select()
       .single()
@@ -73,7 +77,7 @@ export async function POST(
     }
 
     // Criar acompanhantes se houver
-    if (companions && companions.length > 0) {
+    if (willAttend && companions && companions.length > 0) {
       const companionsToInsert = companions.map((c: { name: string; email?: string; phone?: string; notes?: string }) => ({
         guest_id: guest.id,
         name: c.name,
@@ -95,7 +99,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: "Solicitação enviada com sucesso! Aguarde a aprovação do organizador.",
+      status: guest.status,
+      message: willAttend
+        ? "Solicitação enviada com sucesso! Aguarde a aprovação do organizador."
+        : "Resposta registrada. Obrigado por avisar.",
       guestId: guest.id,
     })
   } catch (error) {

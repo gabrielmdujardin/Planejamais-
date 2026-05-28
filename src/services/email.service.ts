@@ -4,7 +4,12 @@
 
 import { Resend } from "resend"
 
-const resend = new Resend(process.env.RESEND_API_KEY)
+const fromEmail = process.env.RESEND_FROM_EMAIL || "Planeja+ <onboarding@resend.dev>"
+
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY
+  return apiKey ? new Resend(apiKey) : null
+}
 
 interface SendApprovalEmailInput {
   to: string
@@ -38,7 +43,7 @@ export const EmailService = {
   /**
    * Envia email de aprovação com link de confirmação
    */
-  async sendApprovalEmail(input: SendApprovalEmailInput): Promise<{ success: boolean; error?: string }> {
+  async sendApprovalEmail(input: SendApprovalEmailInput): Promise<{ success: boolean; error?: string; id?: string }> {
     const {
       to,
       guestName,
@@ -54,6 +59,15 @@ export const EmailService = {
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const confirmUrl = `${baseUrl}/confirm/${confirmationToken}`
+
+    if (!process.env.RESEND_API_KEY) {
+      return { success: false, error: "RESEND_API_KEY não configurada no servidor" }
+    }
+
+    const resend = getResendClient()
+    if (!resend) {
+      return { success: false, error: "RESEND_API_KEY não configurada no servidor" }
+    }
 
     const companionsSection =
       approvedCompanions.length > 0 || rejectedCompanions.length > 0
@@ -138,8 +152,8 @@ export const EmailService = {
     `
 
     try {
-      const { error } = await resend.emails.send({
-        from: "Planeja+ <noreply@resend.dev>",
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
         to: [to],
         subject: `Convite Aprovado - ${eventTitle}`,
         html,
@@ -150,7 +164,7 @@ export const EmailService = {
         return { success: false, error: error.message }
       }
 
-      return { success: true }
+      return { success: true, id: data?.id }
     } catch (error) {
       console.error("Erro ao enviar email:", error)
       return { success: false, error: error instanceof Error ? error.message : "Erro desconhecido" }
@@ -160,8 +174,17 @@ export const EmailService = {
   /**
    * Envia email de rejeição
    */
-  async sendRejectionEmail(input: SendRejectionEmailInput): Promise<{ success: boolean; error?: string }> {
+  async sendRejectionEmail(input: SendRejectionEmailInput): Promise<{ success: boolean; error?: string; id?: string }> {
     const { to, guestName, eventTitle, reason } = input
+
+    if (!process.env.RESEND_API_KEY) {
+      return { success: false, error: "RESEND_API_KEY não configurada no servidor" }
+    }
+
+    const resend = getResendClient()
+    if (!resend) {
+      return { success: false, error: "RESEND_API_KEY não configurada no servidor" }
+    }
 
     const html = `
       <!DOCTYPE html>
@@ -204,8 +227,8 @@ export const EmailService = {
     `
 
     try {
-      const { error } = await resend.emails.send({
-        from: "Planeja+ <noreply@resend.dev>",
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
         to: [to],
         subject: `Atualização sobre sua solicitação - ${eventTitle}`,
         html,
@@ -216,7 +239,7 @@ export const EmailService = {
         return { success: false, error: error.message }
       }
 
-      return { success: true }
+      return { success: true, id: data?.id }
     } catch (error) {
       console.error("Erro ao enviar email:", error)
       return { success: false, error: error instanceof Error ? error.message : "Erro desconhecido" }
@@ -228,11 +251,20 @@ export const EmailService = {
    */
   async sendConfirmationReminder(
     input: SendConfirmationReminderInput
-  ): Promise<{ success: boolean; error?: string }> {
+  ): Promise<{ success: boolean; error?: string; id?: string }> {
     const { to, guestName, eventTitle, confirmationToken, confirmationDeadline } = input
 
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
     const confirmUrl = `${baseUrl}/confirm/${confirmationToken}`
+
+    if (!process.env.RESEND_API_KEY) {
+      return { success: false, error: "RESEND_API_KEY não configurada no servidor" }
+    }
+
+    const resend = getResendClient()
+    if (!resend) {
+      return { success: false, error: "RESEND_API_KEY não configurada no servidor" }
+    }
 
     const html = `
       <!DOCTYPE html>
@@ -269,8 +301,8 @@ export const EmailService = {
     `
 
     try {
-      const { error } = await resend.emails.send({
-        from: "Planeja+ <noreply@resend.dev>",
+      const { data, error } = await resend.emails.send({
+        from: fromEmail,
         to: [to],
         subject: `Lembrete: Confirme sua presença - ${eventTitle}`,
         html,
@@ -281,7 +313,7 @@ export const EmailService = {
         return { success: false, error: error.message }
       }
 
-      return { success: true }
+      return { success: true, id: data?.id }
     } catch (error) {
       console.error("Erro ao enviar email:", error)
       return { success: false, error: error instanceof Error ? error.message : "Erro desconhecido" }
