@@ -13,7 +13,7 @@ export async function POST(
     const { data: guest, error: guestError } = await supabaseAdmin
       .from("guests")
       .select("id, status, responded_at, confirmation_deadline")
-      .eq("token", token)
+      .or(`token.eq.${token},confirmation_token.eq.${token}`)
       .single()
 
     if (guestError || !guest) {
@@ -50,6 +50,7 @@ export async function POST(
       .update({
         status: "confirmed",
         responded_at: new Date().toISOString(),
+        confirmed_at: new Date().toISOString(),
       })
       .eq("id", guest.id)
 

@@ -141,6 +141,42 @@ export default function ConfirmationPage() {
     })
   }
 
+  const getGoogleCalendarUrl = () => {
+    if (!data?.event) return "#"
+
+    const start = new Date(`${data.event.date}T${data.event.time || "00:00"}:00`)
+    const safeStart = Number.isNaN(start.getTime()) ? new Date(data.event.date) : start
+    const safeEnd = new Date(safeStart.getTime() + 2 * 60 * 60 * 1000)
+    const formatGoogleDate = (date: Date) => date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"
+
+    const params = new URLSearchParams({
+      action: "TEMPLATE",
+      text: data.event.title,
+      dates: `${formatGoogleDate(safeStart)}/${formatGoogleDate(safeEnd)}`,
+      details: data.event.description || "",
+      location: data.event.location || "",
+    })
+
+    return `https://calendar.google.com/calendar/render?${params.toString()}`
+  }
+
+  const CalendarActions = () => (
+    <div className="grid gap-3 pt-2">
+      <Button asChild variant="outline" className="w-full">
+        <a href={getGoogleCalendarUrl()} target="_blank" rel="noreferrer">
+          <Calendar className="h-4 w-4 mr-2" />
+          Adicionar ao Google Calendar
+        </a>
+      </Button>
+      <Button asChild variant="outline" className="w-full">
+        <a href={`/api/confirm/${token}/calendar.ics`}>
+          <Calendar className="h-4 w-4 mr-2" />
+          Adicionar ao calendário
+        </a>
+      </Button>
+    </div>
+  )
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-background to-muted/30">
@@ -191,6 +227,11 @@ export default function ConfirmationPage() {
               Você já respondeu a este convite para <strong>{data.event.title}</strong>.
             </CardDescription>
           </CardHeader>
+          {isConfirmed && (
+            <CardContent>
+              <CalendarActions />
+            </CardContent>
+          )}
         </Card>
       </div>
     )
@@ -252,6 +293,11 @@ export default function ConfirmationPage() {
               )}
             </CardDescription>
           </CardHeader>
+          {response === "confirmed" && (
+            <CardContent>
+              <CalendarActions />
+            </CardContent>
+          )}
         </Card>
       </div>
     )

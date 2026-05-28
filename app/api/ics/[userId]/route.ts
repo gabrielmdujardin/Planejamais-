@@ -1,10 +1,10 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createAdminClient } from "@/lib/supabase/admin"
 
-export async function GET(request: NextRequest, { params }: { params: { userId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ userId: string }> }) {
   try {
     const supabase = createAdminClient()
-    const { userId } = params
+    const { userId } = await params
 
     // Verify user exists
     const { data: user } = await supabase.from("users").select("email").eq("id", userId).single()

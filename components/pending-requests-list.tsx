@@ -212,6 +212,36 @@ export default function PendingRequestsList({ eventId }: PendingRequestsListProp
     }
   }
 
+  const handleCompanionAction = async (companionId: string, action: "approve" | "reject") => {
+    setProcessingId(companionId)
+
+    try {
+      const response = await fetch(`/api/companions/${companionId}/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const data = await response.json()
+
+      if (!response.ok) throw new Error(data.error || "Erro ao atualizar acompanhante")
+
+      toast({
+        title: action === "approve" ? "Acompanhante aprovado" : "Acompanhante recusado",
+        description: "A solicitação do acompanhante foi atualizada.",
+      })
+
+      fetchPendingRequests()
+    } catch (error) {
+      toast({
+        title: "Erro ao atualizar acompanhante",
+        description: error instanceof Error ? error.message : "Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setProcessingId(null)
+    }
+  }
+
   const openRejectDialog = (guest: PendingGuest) => {
     setRejectingGuest(guest)
     setRejectDialogOpen(true)
@@ -388,6 +418,34 @@ export default function PendingRequestsList({ eventId }: PendingRequestsListProp
                                 <p className="text-xs text-muted-foreground mt-1">{companion.notes}</p>
                               )}
                             </div>
+                            {companion.status === "awaiting_approval" && (
+                              <div className="flex gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    handleCompanionAction(companion.id, "approve")
+                                  }}
+                                  disabled={processingId === companion.id}
+                                >
+                                  <Check className="h-4 w-4 text-emerald-600" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={(event) => {
+                                    event.preventDefault()
+                                    handleCompanionAction(companion.id, "reject")
+                                  }}
+                                  disabled={processingId === companion.id}
+                                >
+                                  <X className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            )}
                           </label>
                         ))}
                       </div>

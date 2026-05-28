@@ -1,5 +1,4 @@
 import { createClient } from "@supabase/supabase-js"
-import type { Database } from "@/lib/supabase/types"
 
 // Função para criar cliente admin sob demanda (evita erros no build)
 export function createAdminClient() {
@@ -10,7 +9,7 @@ export function createAdminClient() {
     throw new Error("Missing Supabase environment variables")
   }
 
-  return createClient<Database>(supabaseUrl, supabaseServiceKey, {
+  return createClient(supabaseUrl, supabaseServiceKey, {
     auth: {
       autoRefreshToken: false,
       persistSession: false,

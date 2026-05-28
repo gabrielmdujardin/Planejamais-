@@ -25,7 +25,7 @@ export async function GET(
         )
       `
       )
-      .eq("token", token)
+      .or(`token.eq.${token},confirmation_token.eq.${token}`)
       .single()
 
     if (guestError || !guest) {

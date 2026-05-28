@@ -6,6 +6,9 @@ export type GuestStatus =
   | "expired" 
   | "cancelled"
 
+export type CompanionStatus = "awaiting_approval" | "approved" | "rejected" | "cancelled"
+export type GuestSource = "manual" | "public_request" | "public_invite"
+
 export type Database = {
   public: {
     Tables: {
@@ -22,6 +25,12 @@ export type Database = {
           description: string
           confirmed_guests: number
           total_guests: number
+          public_invite_token: string | null
+          public_invite_enabled: boolean
+          auto_approve_public_guests: boolean
+          rsvp_deadline: string | null
+          allow_companions: boolean
+          max_companions: number
           created_at: string
           updated_at: string
           user_id: string
@@ -38,6 +47,12 @@ export type Database = {
           description: string
           confirmed_guests?: number
           total_guests?: number
+          public_invite_token?: string | null
+          public_invite_enabled?: boolean
+          auto_approve_public_guests?: boolean
+          rsvp_deadline?: string | null
+          allow_companions?: boolean
+          max_companions?: number
           created_at?: string
           updated_at?: string
           user_id: string
@@ -54,6 +69,12 @@ export type Database = {
           description?: string
           confirmed_guests?: number
           total_guests?: number
+          public_invite_token?: string | null
+          public_invite_enabled?: boolean
+          auto_approve_public_guests?: boolean
+          rsvp_deadline?: string | null
+          allow_companions?: boolean
+          max_companions?: number
           created_at?: string
           updated_at?: string
           user_id?: string
@@ -68,14 +89,24 @@ export type Database = {
           phone: string
           status: GuestStatus
           contact_id: string | null
+          token: string | null
           created_at: string
+          updated_at: string
           // New fields for approval flow
           confirmation_token: string | null
+          confirmation_deadline: string | null
           token_expires_at: string | null
+          invite_sent_at: string | null
+          sent_at: string | null
+          responded_at: string | null
+          notes: string | null
+          dietary_restrictions: string | null
+          accessibility_needs: string | null
+          requested_companions_count: number
           approved_companions: string[] | null
           rejected_companions: string[] | null
           approval_message: string | null
-          source: "manual" | "public_request" | null
+          source: GuestSource
           requested_at: string | null
           approved_at: string | null
           approved_by: string | null
@@ -92,13 +123,23 @@ export type Database = {
           phone: string
           status?: GuestStatus
           contact_id?: string | null
+          token?: string | null
           created_at?: string
+          updated_at?: string
           confirmation_token?: string | null
+          confirmation_deadline?: string | null
           token_expires_at?: string | null
+          invite_sent_at?: string | null
+          sent_at?: string | null
+          responded_at?: string | null
+          notes?: string | null
+          dietary_restrictions?: string | null
+          accessibility_needs?: string | null
+          requested_companions_count?: number
           approved_companions?: string[] | null
           rejected_companions?: string[] | null
           approval_message?: string | null
-          source?: "manual" | "public_request" | null
+          source?: GuestSource
           requested_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
@@ -115,13 +156,23 @@ export type Database = {
           phone?: string
           status?: GuestStatus
           contact_id?: string | null
+          token?: string | null
           created_at?: string
+          updated_at?: string
           confirmation_token?: string | null
+          confirmation_deadline?: string | null
           token_expires_at?: string | null
+          invite_sent_at?: string | null
+          sent_at?: string | null
+          responded_at?: string | null
+          notes?: string | null
+          dietary_restrictions?: string | null
+          accessibility_needs?: string | null
+          requested_companions_count?: number
           approved_companions?: string[] | null
           rejected_companions?: string[] | null
           approval_message?: string | null
-          source?: "manual" | "public_request" | null
+          source?: GuestSource
           requested_at?: string | null
           approved_at?: string | null
           approved_by?: string | null
@@ -138,8 +189,10 @@ export type Database = {
           name: string
           email: string | null
           phone: string | null
-          status: GuestStatus
+          notes: string | null
+          status: CompanionStatus
           created_at: string
+          updated_at: string
           approved_at: string | null
           approved_by: string | null
           rejected_at: string | null
@@ -151,8 +204,10 @@ export type Database = {
           name: string
           email?: string | null
           phone?: string | null
-          status?: GuestStatus
+          notes?: string | null
+          status?: CompanionStatus
           created_at?: string
+          updated_at?: string
           approved_at?: string | null
           approved_by?: string | null
           rejected_at?: string | null
@@ -164,8 +219,10 @@ export type Database = {
           name?: string
           email?: string | null
           phone?: string | null
-          status?: GuestStatus
+          notes?: string | null
+          status?: CompanionStatus
           created_at?: string
+          updated_at?: string
           approved_at?: string | null
           approved_by?: string | null
           rejected_at?: string | null

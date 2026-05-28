@@ -1,15 +1,16 @@
+import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ eventId: string }> }
-) {
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+}
+
+export async function GET(request: NextRequest, { params }: { params: Promise<{ eventId: string }> }) {
   try {
     const { eventId } = await params
     const supabase = await createClient()
 
-    // Verificar autenticação
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -18,23 +19,20 @@ export async function GET(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
-    // Verificar se o evento pertence ao usuário
-    const { data: event, error: eventError } = await supabase
-      .from("events")
-      .select("id")
-      .eq("id", eventId)
-      .eq("user_id", user.id)
-      .single()
+    const admin = createAdminClient()
+    const eventQuery = admin.from("events").select("id").eq("user_id", user.id)
+    const { data: event, error: eventError } = isUuid(eventId)
+      ? await eventQuery.eq("id", eventId).maybeSingle()
+      : await eventQuery.eq("metadata->>local_event_id", eventId).maybeSingle()
 
     if (eventError || !event) {
-      return NextResponse.json({ error: "Evento não encontrado" }, { status: 404 })
+      return NextResponse.json({ guests: [] })
     }
 
-    // Buscar solicitações pendentes
-    const { data: guests, error: guestsError } = await supabase
+    const { data: guests, error: guestsError } = await admin
       .from("guests")
       .select("*")
-      .eq("event_id", eventId)
+      .eq("event_id", event.id)
       .eq("status", "awaiting_approval")
       .order("created_at", { ascending: false })
 
@@ -44,21 +42,17 @@ export async function GET(
       return NextResponse.json({ guests: [] })
     }
 
-    // Buscar acompanhantes
-    const guestIds = guests.map((g) => g.id)
-    const { data: companions, error: companionsError } = await supabase
+    const guestIds = guests.map((guest) => guest.id)
+    const { data: companions, error: companionsError } = await admin
       .from("guest_companions")
       .select("*")
       .in("guest_id", guestIds)
 
     if (companionsError) throw companionsError
 
-    // Agrupar acompanhantes por guest_id
     const companionsByGuestId = (companions || []).reduce(
       (acc, companion) => {
-        if (!acc[companion.guest_id]) {
-          acc[companion.guest_id] = []
-        }
+        if (!acc[companion.guest_id]) acc[companion.guest_id] = []
         acc[companion.guest_id].push({
           id: companion.id,
           guestId: companion.guest_id,
@@ -72,10 +66,9 @@ export async function GET(
         })
         return acc
       },
-      {} as Record<string, typeof companions>
+      {} as Record<string, Array<Record<string, unknown>>>
     )
 
-    // Formatar resposta
     const formattedGuests = guests.map((guest) => ({
       id: guest.id,
       eventId: guest.event_id,
@@ -96,9 +89,6 @@ export async function GET(
     return NextResponse.json({ guests: formattedGuests })
   } catch (error) {
     console.error("Erro ao buscar solicitações:", error)
-    return NextResponse.json(
-      { error: "Erro interno do servidor" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
   }
 }

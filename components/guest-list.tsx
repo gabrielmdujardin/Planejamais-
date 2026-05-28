@@ -114,13 +114,15 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
         body: JSON.stringify({ eventId }),
       })
 
+      const data = await response.json().catch(() => null)
+
       if (response.ok) {
         toast({
           title: "Convite enviado!",
           description: `O convite foi enviado para ${guest.name} (${guest.email}).`,
         })
       } else {
-        throw new Error("Erro ao enviar")
+        throw new Error(data?.error || "Erro ao enviar")
       }
     } catch (error) {
       toast({
@@ -150,14 +152,20 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ guestIds: pendingGuests.map((g) => g.id) }),
       })
+      const data = await response.json().catch(() => null)
 
       if (response.ok) {
+        const failed = data?.results?.failed || 0
         toast({
-          title: "Convites enviados!",
-          description: `${pendingGuests.length} convite(s) enviado(s) com sucesso.`,
+          title: failed > 0 ? "Convites processados com falhas" : "Convites enviados!",
+          description:
+            failed > 0
+              ? data.results.errors.join("; ")
+              : `${pendingGuests.length} convite(s) enviado(s) com sucesso.`,
+          variant: failed > 0 ? "destructive" : "default",
         })
       } else {
-        throw new Error("Erro ao enviar")
+        throw new Error(data?.error || "Erro ao enviar")
       }
     } catch (error) {
       toast({
@@ -170,12 +178,25 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     }
   }
 
-  const handleCopyInviteLink = (guest: Guest) => {
-    // Em um app real, você geraria um link único
-    const inviteLink = `${window.location.origin}/confirm-invitation/${eventId}/${guest.id}`
+  const handleCopyInviteLink = async (guest: Guest) => {
+    const response = await fetch(`/api/guests/${guest.id}/confirmation-link`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ eventId }),
+    })
+    const data = await response.json()
+
+    if (!response.ok || !data.url) {
+      toast({
+        title: "Erro ao copiar",
+        description: data.error || "Não foi possível gerar o link. Tente novamente.",
+        variant: "destructive",
+      })
+      return
+    }
 
     // Copiar para a área de transferência
-    navigator.clipboard.writeText(inviteLink).then(
+    navigator.clipboard.writeText(data.url).then(
       () => {
         toast({
           title: "Link copiado",

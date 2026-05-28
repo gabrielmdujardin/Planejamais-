@@ -16,7 +16,7 @@ export type CompanionStatus =
   | "rejected"
   | "cancelled"
 
-export type GuestSource = "manual" | "public_request"
+export type GuestSource = "manual" | "public_request" | "public_invite"
 
 export interface Companion {
   id: string

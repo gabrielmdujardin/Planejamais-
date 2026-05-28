@@ -12,9 +12,10 @@ import ItemsList from "@/components/items-list"
 import EventGallery from "@/components/event-gallery"
 import EventHero from "@/components/event-hero"
 import PendingRequestsList from "@/components/pending-requests-list"
+import PublicInviteShare from "@/components/public-invite-share"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
-import { useRouter } from "next/navigation"
+import { useParams, useRouter } from "next/navigation"
 import AddItemDialog from "@/components/add-item-dialog"
 import AddGuestDialog from "@/components/add-guest-dialog"
 import EditEventDialog from "@/components/edit-event-dialog"
@@ -22,18 +23,18 @@ import Link from "next/link"
 import EmailPreview from "@/components/email-preview"
 import SmsPreview from "@/components/sms-preview"
 import { getEventTheme } from "@/lib/event-theme"
-import { Share2 } from "lucide-react"
 
-export default function EventPage({ params }: { params: { id: string } }) {
+export default function EventPage() {
+  const { getEventById } = useEventStore()
+  const params = useParams()
+  const id = params.id as string
+  const event = getEventById(id)
   const [isLoading, setIsLoading] = useState(true)
   const [isAddItemOpen, setIsAddItemOpen] = useState(false)
   const [isAddGuestOpen, setIsAddGuestOpen] = useState(false)
   const [isEditEventOpen, setIsEditEventOpen] = useState(false)
   const { toast } = useToast()
   const router = useRouter()
-
-  const { getEventById } = useEventStore()
-  const event = getEventById(params.id)
 
   useEffect(() => {
     const loadEvent = async () => {
@@ -104,7 +105,7 @@ export default function EventPage({ params }: { params: { id: string } }) {
           </Link>
         </div>
 
-        <EventHero event={event} onEdit={handleEditEvent} />
+        <EventHero event={{ ...event, category: event.category || "" }} onEdit={handleEditEvent} />
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -290,27 +291,23 @@ export default function EventPage({ params }: { params: { id: string } }) {
 
           <TabsContent value="requests">
             <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <CardHeader className="pb-3">
                 <CardTitle className="text-xl">Solicitações de Participação</CardTitle>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="gap-2"
-                  onClick={() => {
-                    const publicUrl = `${window.location.origin}/evento/${event.id}/solicitar`
-                    navigator.clipboard.writeText(publicUrl).then(() => {
-                      toast({
-                        title: "Link copiado!",
-                        description: "Compartilhe este link para que pessoas possam solicitar participação.",
-                      })
-                    })
-                  }}
-                >
-                  <Share2 className="h-4 w-4" />
-                  Compartilhar link público
-                </Button>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-6">
+                <PublicInviteShare
+                  eventId={event.id}
+                  eventTitle={event.title}
+                  eventType={event.type}
+                  eventCategory={event.category}
+                  eventDate={event.date}
+                  eventTime={event.time}
+                  eventFullDate={event.fullDate}
+                  eventLocation={event.location}
+                  eventDescription={event.description}
+                  confirmedGuests={event.confirmedGuests}
+                  totalGuests={event.totalGuests}
+                />
                 <PendingRequestsList eventId={event.id} />
               </CardContent>
             </Card>

@@ -38,7 +38,7 @@ export default function SmsPreview({ eventId, guestId, eventTitle, guestName }: 
       <DialogContent className="max-w-md">
         <DialogHeader>
           <DialogTitle>Prévia do SMS de Convite</DialogTitle>
-          <DialogDescription>Assim será o SMS enviado aos convidados</DialogDescription>
+          <DialogDescription>Prévia do texto. O envio real por SMS ainda não possui provedor configurado.</DialogDescription>
         </DialogHeader>
 
         <div className="border rounded-md p-4 bg-gray-50">

@@ -1,27 +1,26 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { CalendarDays, Check, Clock, Loader2, MapPin, X } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
 
-export default function ConfirmInvitationPage({
-  params,
-}: {
-  params: { eventId: string; guestId: string }
-}) {
+export default function ConfirmInvitationPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const params = useParams()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { getEventById, getGuestById, updateGuestStatus } = useEventStore()
+  const eventId = params.eventId as string
+  const guestId = params.guestId as string
 
-  const event = getEventById(params.eventId)
-  const guest = event ? getGuestById(params.eventId, params.guestId) : null
+  const event = getEventById(eventId)
+  const guest = event ? getGuestById(eventId, guestId) : null
   const autoResponse = searchParams.get("response")
 
   useEffect(() => {
@@ -67,7 +66,7 @@ export default function ConfirmInvitationPage({
       await new Promise((resolve) => setTimeout(resolve, 1000))
 
       // Atualizar status do convidado
-      updateGuestStatus(params.eventId, params.guestId, status)
+      updateGuestStatus(eventId, guestId, status)
 
       // Redirecionar para página de agradecimento
       router.push(`/confirm-invitation/thank-you?status=${status}`)

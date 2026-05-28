@@ -1,16 +1,18 @@
 const nextConfig = {
   reactStrictMode: true,
-  swcMinify: true,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   typescript: {
     ignoreBuildErrors: true,
   },
   images: {
-    domains: ["placeholder.svg"],
+    remotePatterns: [
+      {
+        hostname: '*',
+      },
+    ],
     unoptimized: true,
   },
-}
+  turbopack: {},
 
-module.exports = nextConfig
+};
+
+module.exports = nextConfig;

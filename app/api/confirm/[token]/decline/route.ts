@@ -9,45 +9,40 @@ export async function POST(
     const supabaseAdmin = createAdminClient()
     const { token } = await params
 
-    // Buscar o convidado pelo token
     const { data: guest, error: guestError } = await supabaseAdmin
       .from("guests")
-      .select("id, status, responded_at")
-      .eq("token", token)
+      .select("id, status, responded_at, confirmation_deadline")
+      .or(`token.eq.${token},confirmation_token.eq.${token}`)
       .single()
 
     if (guestError || !guest) {
-      return NextResponse.json(
-        { error: "Convite não encontrado ou inválido" },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: "Convite não encontrado ou inválido" }, { status: 404 })
     }
 
-    // Verificar se já respondeu
     if (guest.responded_at) {
-      return NextResponse.json(
-        { error: "Você já respondeu a este convite" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Você já respondeu a este convite" }, { status: 400 })
     }
 
-    // Recusar presença
+    if (guest.confirmation_deadline && new Date(guest.confirmation_deadline) < new Date()) {
+      await supabaseAdmin.from("guests").update({ status: "expired" }).eq("id", guest.id)
+      return NextResponse.json({ error: "O prazo para confirmação expirou" }, { status: 400 })
+    }
+
+    const now = new Date().toISOString()
     const { error: updateError } = await supabaseAdmin
       .from("guests")
       .update({
         status: "declined",
-        responded_at: new Date().toISOString(),
+        responded_at: now,
+        declined_at: now,
       })
       .eq("id", guest.id)
 
     if (updateError) throw updateError
 
-    // Cancelar todos os acompanhantes aprovados
     await supabaseAdmin
       .from("guest_companions")
-      .update({
-        status: "cancelled",
-      })
+      .update({ status: "cancelled" })
       .eq("guest_id", guest.id)
       .eq("status", "approved")
 
@@ -57,9 +52,6 @@ export async function POST(
     })
   } catch (error) {
     console.error("Erro ao recusar presença:", error)
-    return NextResponse.json(
-      { error: "Erro interno do servidor" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
   }
 }

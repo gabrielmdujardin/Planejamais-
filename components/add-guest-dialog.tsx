@@ -20,7 +20,7 @@ import { useContactStore } from "@/stores/contact-store"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { isValidEmail, isValidPhone, formatPhone } from "@/lib/validation"
-import { Loader2, Mail, MessageSquare, Search, UserPlus, Check } from "lucide-react"
+import { Loader2, Mail, Search, UserPlus, Check } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -135,19 +135,17 @@ export default function AddGuestDialog({ open, onOpenChange, eventId }: AddGuest
         status: "pending" as const,
       }
 
-      addGuests(eventId, [newGuest])
+      const createdGuests = await createGuestsAndSendEmail([newGuest])
+      addGuests(eventId, createdGuests)
 
       // Limpar formulário
       setGuestName("")
       setGuestEmail("")
       setGuestPhone("")
 
-      // Simular envio de convites
-      await sendInvites([newGuest])
-
       toast({
         title: "Convidado adicionado",
-        description: `${newGuest.name} foi adicionado ao evento e o convite foi enviado.`,
+        description: `${newGuest.name} foi adicionado e o convite por e-mail foi processado.`,
       })
 
       onOpenChange(false)
@@ -187,17 +185,15 @@ export default function AddGuestDialog({ open, onOpenChange, eventId }: AddGuest
         status: "pending" as const,
       }))
 
-      addGuests(eventId, newGuests)
-
-      // Simular envio de convites
-      await sendInvites(newGuests)
+      const createdGuests = await createGuestsAndSendEmail(newGuests)
+      addGuests(eventId, createdGuests)
 
       // Limpar formulário
       setBulkGuests("")
 
       toast({
         title: "Convidados adicionados",
-        description: `${newGuests.length} convidados foram adicionados ao evento e os convites foram enviados.`,
+        description: `${newGuests.length} convidados foram adicionados e os convites por e-mail foram processados.`,
       })
 
       onOpenChange(false)
@@ -247,17 +243,15 @@ export default function AddGuestDialog({ open, onOpenChange, eventId }: AddGuest
         return
       }
 
-      addGuests(eventId, contactsToAdd)
-
-      // Simular envio de convites
-      await sendInvites(contactsToAdd)
+      const createdGuests = await createGuestsAndSendEmail(contactsToAdd)
+      addGuests(eventId, createdGuests)
 
       // Limpar seleção
       setSelectedContacts([])
 
       toast({
         title: "Contatos adicionados",
-        description: `${contactsToAdd.length} contatos foram adicionados como convidados e os convites foram enviados.`,
+        description: `${contactsToAdd.length} contatos foram adicionados como convidados e os convites por e-mail foram processados.`,
       })
 
       onOpenChange(false)
@@ -272,21 +266,48 @@ export default function AddGuestDialog({ open, onOpenChange, eventId }: AddGuest
     }
   }
 
-  const sendInvites = async (guests: any[]) => {
-    if (!event) return
-
+  const createGuestsAndSendEmail = async (guests: any[]) => {
     setIsSendingInvites(true)
 
     try {
-      // Simulando envio de convites
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-
-      toast({
-        title: "Convites enviados",
-        description: `${guests.length} convite(s) enviado(s) por email e SMS.`,
+      const response = await fetch(`/api/events/${eventId}/guests`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          guests: guests.map((guest) => ({
+            name: guest.name,
+            email: guest.email,
+            phone: guest.phone,
+            contactId: guest.contactId,
+          })),
+          sendEmail: true,
+        }),
       })
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || "Não foi possível cadastrar no Supabase")
+      }
+
+      if (data.email?.failed > 0) {
+        throw new Error(data.email.errors?.join("; ") || "Falha ao enviar e-mail")
+      }
+
+      return (data.guests || []).map((guest: any) => ({
+        id: guest.id,
+        name: guest.name,
+        email: guest.email,
+        phone: guest.phone,
+        status: guest.status,
+        contactId: guest.contact_id || undefined,
+      }))
     } catch (error) {
-      console.error("Erro ao enviar convites:", error)
+      toast({
+        title: "Erro ao enviar convite por e-mail",
+        description: error instanceof Error ? error.message : "Verifique a configuração do Resend.",
+        variant: "destructive",
+      })
+      throw error
     } finally {
       setIsSendingInvites(false)
     }
@@ -428,18 +449,18 @@ export default function AddGuestDialog({ open, onOpenChange, eventId }: AddGuest
                 value={guestEmail}
                 onChange={(e) => setGuestEmail(e.target.value)}
               />
-              <p className="text-xs text-gray-500">Será enviado um convite para este email</p>
+              <p className="text-xs text-gray-500">Será enviado um convite para este e-mail</p>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="guest-phone">Telefone*</Label>
               <Input id="guest-phone" placeholder="(00) 00000-0000" value={guestPhone} onChange={handlePhoneChange} />
-              <p className="text-xs text-gray-500">Formato: (DDD) XXXXX-XXXX - Será enviado um SMS para este número</p>
+              <p className="text-xs text-gray-500">Formato: (DDD) XXXXX-XXXX</p>
             </div>
 
             <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 p-2 rounded-md">
-              <MessageSquare className="h-4 w-4" />
-              <p>Um convite será enviado por email e SMS após adicionar o convidado.</p>
+              <Mail className="h-4 w-4" />
+              <p>Um convite será enviado por e-mail após adicionar o convidado.</p>
             </div>
           </TabsContent>
 
@@ -460,7 +481,7 @@ Maria Oliveira, maria@exemplo.com, (11) 91234-5678"
 
             <div className="flex items-center gap-2 text-sm text-amber-600 bg-amber-50 p-2 rounded-md">
               <Mail className="h-4 w-4" />
-              <p>Convites serão enviados por email e SMS após adicionar os convidados.</p>
+              <p>Convites serão enviados por e-mail após adicionar os convidados.</p>
             </div>
           </TabsContent>
         </Tabs>

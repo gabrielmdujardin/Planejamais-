@@ -1,6 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
-import { EmailService } from "@/src/services/email.service"
 
 export async function POST(
   request: NextRequest,
@@ -9,11 +8,9 @@ export async function POST(
   try {
     const { guestId } = await params
     const body = await request.json()
-    const { approvedCompanionIds = [], rejectedCompanionIds = [], confirmationDeadlineDays = 7 } = body
+    const { approvedCompanionIds = [], rejectedCompanionIds = [] } = body
 
     const supabase = await createClient()
-
-    // Verificar autenticação
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -22,7 +19,6 @@ export async function POST(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
-    // Buscar o convidado e verificar se o evento pertence ao usuário
     const { data: guest, error: guestError } = await supabase
       .from("guests")
       .select(
@@ -30,10 +26,6 @@ export async function POST(
         *,
         events (
           id,
-          title,
-          date,
-          time,
-          location,
           user_id
         )
       `
@@ -49,97 +41,52 @@ export async function POST(
       return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
     }
 
-    // Gerar token e calcular deadline
-    const token = crypto.randomUUID()
-    const deadline = new Date()
-    deadline.setDate(deadline.getDate() + confirmationDeadlineDays)
+    const now = new Date().toISOString()
+    const token = guest.token || guest.confirmation_token || crypto.randomUUID()
 
-    // Atualizar o convidado principal
     const { error: updateError } = await supabase
       .from("guests")
       .update({
-        status: "pending",
+        status: "confirmed",
         token,
-        confirmation_deadline: deadline.toISOString(),
-        sent_at: new Date().toISOString(),
+        confirmation_token: token,
+        responded_at: guest.responded_at || now,
+        confirmed_at: guest.confirmed_at || now,
+        approved_at: now,
+        approved_by: user.id,
       })
       .eq("id", guestId)
 
     if (updateError) throw updateError
 
-    // Aprovar acompanhantes selecionados
     if (approvedCompanionIds.length > 0) {
       await supabase
         .from("guest_companions")
         .update({
           status: "approved",
           approved_by: user.id,
-          approved_at: new Date().toISOString(),
+          approved_at: now,
         })
         .in("id", approvedCompanionIds)
     }
 
-    // Rejeitar acompanhantes não selecionados
     if (rejectedCompanionIds.length > 0) {
       await supabase
         .from("guest_companions")
         .update({
           status: "rejected",
-          rejected_at: new Date().toISOString(),
+          rejected_at: now,
         })
         .in("id", rejectedCompanionIds)
     }
 
-    // Buscar nomes dos acompanhantes para o email
-    let approvedNames: string[] = []
-    let rejectedNames: string[] = []
-
-    if (approvedCompanionIds.length > 0) {
-      const { data: approved } = await supabase
-        .from("guest_companions")
-        .select("name")
-        .in("id", approvedCompanionIds)
-      approvedNames = (approved || []).map((c) => c.name)
-    }
-
-    if (rejectedCompanionIds.length > 0) {
-      const { data: rejected } = await supabase
-        .from("guest_companions")
-        .select("name")
-        .in("id", rejectedCompanionIds)
-      rejectedNames = (rejected || []).map((c) => c.name)
-    }
-
-    // Enviar email de aprovação
-    const emailResult = await EmailService.sendApprovalEmail({
-      to: guest.email,
-      guestName: guest.name,
-      eventTitle: guest.events?.title || "Evento",
-      eventDate: guest.events?.date || "",
-      eventTime: guest.events?.time || "",
-      eventLocation: guest.events?.location || "",
-      confirmationToken: token,
-      confirmationDeadline: deadline.toLocaleDateString("pt-BR", {
-        day: "2-digit",
-        month: "long",
-        year: "numeric",
-      }),
-      approvedCompanions: approvedNames,
-      rejectedCompanions: rejectedNames,
-    })
-
     return NextResponse.json({
       success: true,
-      message: "Convidado aprovado com sucesso",
+      message: "Convidado aprovado e confirmado com sucesso",
       token,
-      emailSent: emailResult.success,
-      emailError: emailResult.error,
     })
   } catch (error) {
     console.error("Erro ao aprovar convidado:", error)
-    return NextResponse.json(
-      { error: "Erro interno do servidor" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
   }
 }
