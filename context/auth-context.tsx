@@ -1,8 +1,9 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useEffect, useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
+import { createClient } from "@/lib/supabase/client"
 
 interface User {
   id: string
@@ -14,56 +15,151 @@ interface AuthContextType {
   user: User | null
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name: string) => Promise<void>
-  logout: () => void
+  logout: () => Promise<void>
   isAuthenticated: boolean
   isLoading: boolean
+  isDemoMode: boolean
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+function isSupabaseConfigured() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  return Boolean(
+    url &&
+      key &&
+      !url.includes("example.supabase.co") &&
+      !url.includes("your-project.supabase.co") &&
+      !key.includes("dummy") &&
+      !key.includes("your-supabase"),
+  )
+}
+
+function supabaseConfigError() {
+  return new Error(
+    "Supabase nao esta configurado. Use demo@planeja.app / demo123 para entrar no modo demo local ou configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY reais no .env.local.",
+  )
+}
+
+function normalizeAuthError(error: unknown) {
+  if (error instanceof TypeError && error.message === "Failed to fetch") {
+    return new Error(
+      "Nao foi possivel conectar ao Supabase. Verifique NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY e reinicie o servidor.",
+    )
+  }
+
+  return error
+}
+
+function toUser(authUser: any): User {
+  return {
+    id: authUser.id,
+    email: authUser.email || "",
+    name: authUser.user_metadata?.name || authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "Usuario",
+  }
+}
+
+function demoUser(email = "demo@planeja.app"): User {
+  return {
+    id: "demo",
+    email,
+    name: email.split("@")[0] || "demo",
+  }
+}
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
+  const supabase = useMemo(() => createClient(), [])
+  const isDemoMode = user?.id === "demo"
 
   useEffect(() => {
-    // Check if user is stored in localStorage
-    const storedUser = localStorage.getItem("user")
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
+    const loadSession = async () => {
+      if (!isSupabaseConfigured()) {
+        const storedUser = localStorage.getItem("user")
+        setUser(storedUser ? JSON.parse(storedUser) : null)
+        setIsLoading(false)
+        return
+      }
+
+      try {
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+
+        setUser(user ? toUser(user) : null)
+      } catch {
+        setUser(null)
+      } finally {
+        setIsLoading(false)
+      }
     }
-    setIsLoading(false)
-  }, [])
+
+    loadSession()
+
+    if (!isSupabaseConfigured()) return
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      const authUser = session?.user
+      setUser(authUser ? toUser(authUser) : null)
+      setIsLoading(false)
+    })
+
+    return () => subscription.unsubscribe()
+  }, [supabase])
 
   const login = async (email: string, password: string) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500))
+    if (!isSupabaseConfigured()) {
+      if (email.trim().toLowerCase() === "demo@planeja.app" && password === "demo123") {
+        const user = demoUser(email.trim().toLowerCase())
+        setUser(user)
+        localStorage.setItem("user", JSON.stringify(user))
+        return
+      }
 
-    const mockUser = {
-      id: "1",
-      email,
-      name: email.split("@")[0],
+      throw supabaseConfigError()
     }
 
-    setUser(mockUser)
-    localStorage.setItem("user", JSON.stringify(mockUser))
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) throw error
+    } catch (error) {
+      throw normalizeAuthError(error)
+    }
   }
 
   const register = async (email: string, password: string, name: string) => {
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 500))
-
-    const mockUser = {
-      id: "1",
-      email,
-      name,
+    if (!isSupabaseConfigured()) {
+      const user = { ...demoUser(email.trim().toLowerCase()), name: name.trim() || email.split("@")[0] || "demo" }
+      setUser(user)
+      localStorage.setItem("user", JSON.stringify(user))
+      return
     }
 
-    setUser(mockUser)
-    localStorage.setItem("user", JSON.stringify(mockUser))
+    try {
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name },
+        },
+      })
+      if (error) throw error
+    } catch (error) {
+      throw normalizeAuthError(error)
+    }
   }
 
-  const logout = () => {
+  const logout = async () => {
+    if (isSupabaseConfigured()) {
+      await supabase.auth.signOut()
+    }
+
     setUser(null)
     localStorage.removeItem("user")
     router.push("/")
@@ -78,6 +174,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         isAuthenticated: !!user,
         isLoading,
+        isDemoMode,
       }}
     >
       {children}

@@ -19,6 +19,12 @@ function parseEventDate(date: string, time?: string | null) {
   return new Date()
 }
 
+function parseStructuredEventDate(date?: string | null, time?: string | null) {
+  if (!date) return null
+  const parsed = new Date(`${date}T${time || "00:00"}:00`)
+  return Number.isNaN(parsed.getTime()) ? null : parsed
+}
+
 function formatICSDate(date: Date) {
   return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"
 }
@@ -42,6 +48,10 @@ export async function GET(
           title,
           date,
           time,
+          start_date,
+          start_time,
+          end_date,
+          end_time,
           location,
           description
         )
@@ -58,8 +68,10 @@ export async function GET(
     if (!event) {
       return NextResponse.json({ error: "Calendário indisponível" }, { status: 404 })
     }
-    const start = parseEventDate(event.date, event.time)
-    const end = new Date(start.getTime() + 2 * 60 * 60 * 1000)
+    const start = parseStructuredEventDate(event.start_date, event.start_time) || parseEventDate(event.date, event.time)
+    const end =
+      parseStructuredEventDate(event.end_date || event.start_date, event.end_time) ||
+      new Date(start.getTime() + 2 * 60 * 60 * 1000)
 
     const ics = [
       "BEGIN:VCALENDAR",

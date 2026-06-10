@@ -14,6 +14,14 @@ interface Item {
   price: number
   assignedTo: Person[] | null
   image?: string | null
+  category?: string
+  description?: string
+  quantity?: number
+  unitPrice?: number
+  estimatedCost?: number
+  actualCost?: number
+  paymentStatus?: string
+  notes?: string
 }
 
 interface Guest {
@@ -21,8 +29,13 @@ interface Guest {
   name: string
   email: string
   phone: string
-  status: "confirmed" | "pending" | "declined"
+  status: "confirmed" | "pending" | "declined" | "awaiting_approval" | "pending_approval" | "rejected"
   contactId?: string
+  companions?: Array<{
+    id: string
+    name: string
+    status: "pending" | "approved" | "rejected"
+  }>
 }
 
 interface EventPhoto {
@@ -40,11 +53,38 @@ interface Event {
   title: string
   type: string
   category?: string
+  status?: "draft" | "active" | "completed" | "canceled" | string
+  visibility?: "private" | "public" | string
   date: string
   time: string
   fullDate?: string
+  startDate?: string | null
+  startTime?: string | null
+  endDate?: string | null
+  endTime?: string | null
   location: string
+  address?: string | null
+  mapsUrl?: string | null
+  eventMode?: "presencial" | "online" | "hibrido" | string
+  meetingUrl?: string | null
   description: string
+  capacity?: number | null
+  allowGuests?: boolean
+  allowCompanions?: boolean
+  maxCompanionsPerGuest?: number
+  companionsRequireApproval?: boolean
+  publicInviteEnabled?: boolean
+  publicInviteToken?: string | null
+  autoApprovePublicGuests?: boolean
+  rsvpEnabled?: boolean
+  rsvpDeadline?: string | null
+  allowDecline?: boolean
+  allowResponseEdit?: boolean
+  invitationMessage?: string | null
+  budgetEstimated?: number | null
+  initialEstimatedCost?: number | null
+  currency?: string
+  financialNotes?: string | null
   confirmedGuests: number
   totalGuests: number
   items: Item[]
@@ -56,6 +96,7 @@ interface Event {
 
 interface EventStore {
   events: Event[]
+  setEvents: (events: Event[]) => void
   addEvent: (event: Event) => void
   updateEvent: (id: string, event: Partial<Event>) => void
   removeEvent: (id: string) => void
@@ -68,9 +109,9 @@ interface EventStore {
 
   // Convidados
   addGuests: (eventId: string, guests: Guest[]) => void
-  updateGuest: (eventId: string, guestId: string, guest: Guest) => void
+  updateGuest: (eventId: string, guestId: string, guest: Partial<Guest>) => void
   removeGuest: (eventId: string, guestId: string) => void
-  updateGuestStatus: (eventId: string, guestId: string, status: "confirmed" | "pending" | "declined") => void
+  updateGuestStatus: (eventId: string, guestId: string, status: Guest["status"]) => void
   getGuestById: (eventId: string, guestId: string) => Guest | undefined
 
   // Fotos
@@ -88,11 +129,30 @@ export const useEventStore = create<EventStore>()(
           title: "Churrasco na Casa do João",
           type: "Colaborativo",
           category: "Aniversário",
+          status: "active",
           date: "Sábado, 15 de Junho",
           time: "16:00",
           fullDate: "15/06/2024",
+          startDate: "2024-06-15",
+          startTime: "16:00",
+          endDate: "2024-06-15",
+          endTime: "22:00",
           location: "Rua das Flores, 123 - São Paulo, SP",
+          address: "Rua das Flores, 123 - São Paulo, SP",
+          eventMode: "presencial",
           description: "Traga sua bebida favorita! Vamos comemorar o aniversário do João com um churrasco incrível.",
+          capacity: 25,
+          allowGuests: true,
+          allowCompanions: true,
+          maxCompanionsPerGuest: 1,
+          companionsRequireApproval: true,
+          publicInviteEnabled: true,
+          publicInviteToken: "demo-churrasco",
+          autoApprovePublicGuests: false,
+          rsvpEnabled: true,
+          budgetEstimated: 700,
+          initialEstimatedCost: 370,
+          currency: "BRL",
           confirmedGuests: 12,
           totalGuests: 15,
           items: [
@@ -100,6 +160,10 @@ export const useEventStore = create<EventStore>()(
               id: "1",
               name: "Carne (5kg)",
               price: 150,
+              category: "Alimentos",
+              quantity: 5,
+              unitPrice: 30,
+              estimatedCost: 150,
               assignedTo: [{ id: "p1", name: "João" }],
               image: null,
             },
@@ -107,6 +171,10 @@ export const useEventStore = create<EventStore>()(
               id: "2",
               name: "Carvão",
               price: 25,
+              category: "Estrutura",
+              quantity: 1,
+              unitPrice: 25,
+              estimatedCost: 25,
               assignedTo: [{ id: "p2", name: "Maria" }],
               image: null,
             },
@@ -202,11 +270,28 @@ export const useEventStore = create<EventStore>()(
           title: "Aniversário da Maria",
           type: "Festa",
           category: "Festa de Aniversário",
+          status: "active",
           date: "Domingo, 23 de Junho",
           time: "14:00",
           fullDate: "23/06/2024",
+          startDate: "2024-06-23",
+          startTime: "14:00",
+          endDate: "2024-06-23",
+          endTime: "18:00",
           location: "Salão de Festas Primavera - Av. Principal, 500",
+          address: "Salão de Festas Primavera - Av. Principal, 500",
+          eventMode: "presencial",
           description: "Venha celebrar o aniversário da Maria com muita diversão e alegria!",
+          capacity: 40,
+          allowGuests: true,
+          allowCompanions: false,
+          maxCompanionsPerGuest: 0,
+          companionsRequireApproval: true,
+          publicInviteEnabled: false,
+          autoApprovePublicGuests: false,
+          rsvpEnabled: true,
+          budgetEstimated: 1200,
+          currency: "BRL",
           confirmedGuests: 8,
           totalGuests: 20,
           items: [],
@@ -241,6 +326,11 @@ export const useEventStore = create<EventStore>()(
           updatedAt: "2024-06-18T14:00:00Z",
         },
       ],
+
+      setEvents: (events) =>
+        set(() => ({
+          events,
+        })),
 
       addEvent: (event) =>
         set((state) => ({
@@ -331,10 +421,12 @@ export const useEventStore = create<EventStore>()(
           const oldGuest = event.guests.find((g) => g.id === guestId)
           let confirmedDelta = 0
 
-          if (oldGuest && oldGuest.status !== updatedGuest.status) {
-            if (oldGuest.status === "confirmed" && updatedGuest.status !== "confirmed") {
+          const nextGuest = oldGuest ? { ...oldGuest, ...updatedGuest } : null
+
+          if (oldGuest && nextGuest && oldGuest.status !== nextGuest.status) {
+            if (oldGuest.status === "confirmed" && nextGuest.status !== "confirmed") {
               confirmedDelta = -1
-            } else if (oldGuest.status !== "confirmed" && updatedGuest.status === "confirmed") {
+            } else if (oldGuest.status !== "confirmed" && nextGuest.status === "confirmed") {
               confirmedDelta = 1
             }
           }
@@ -344,7 +436,7 @@ export const useEventStore = create<EventStore>()(
               event.id === eventId
                 ? {
                     ...event,
-                    guests: event.guests.map((guest) => (guest.id === guestId ? updatedGuest : guest)),
+                    guests: event.guests.map((guest) => (guest.id === guestId ? { ...guest, ...updatedGuest } : guest)),
                     confirmedGuests: event.confirmedGuests + confirmedDelta,
                     updatedAt: new Date().toISOString(),
                   }

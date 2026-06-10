@@ -16,7 +16,7 @@ export async function GET(
     const { data: event, error } = await supabase
       .from("events")
       .select(
-        "id, title, date, time, location, description, public_invite_enabled, rsvp_deadline, allow_companions, max_companions, auto_approve_public_guests"
+        "id, title, date, time, start_date, start_time, end_date, end_time, location, address, maps_url, event_mode, meeting_url, description, public_invite_enabled, rsvp_deadline, allow_companions, max_companions, auto_approve_public_guests, rsvp_enabled, invitation_message"
       )
       .eq("public_invite_token", token)
       .single()
@@ -33,9 +33,19 @@ export async function GET(
         title: event.title,
         date: event.date,
         time: event.time,
+        startDate: event.start_date,
+        startTime: event.start_time,
+        endDate: event.end_date,
+        endTime: event.end_time,
         location: event.location,
+        address: event.address,
+        mapsUrl: event.maps_url,
+        eventMode: event.event_mode,
+        meetingUrl: event.meeting_url,
         description: event.description,
         rsvpDeadline: event.rsvp_deadline,
+        rsvpEnabled: event.rsvp_enabled,
+        invitationMessage: event.invitation_message,
         allowCompanions: event.allow_companions,
         maxCompanions: event.max_companions,
         autoApprovePublicGuests: event.auto_approve_public_guests,

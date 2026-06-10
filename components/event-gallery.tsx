@@ -164,8 +164,8 @@ export default function EventGallery({
   const handleDownload = (photo: EventPhoto) => {
     // Em produção, implementar download real
     toast({
-      title: "Download iniciado",
-      description: `Baixando ${photo.filename}...`,
+      title: "Download nao configurado",
+      description: `A foto ${photo.filename} esta em modo demo/local. O download real depende do Supabase Storage.`,
     })
   }
 
@@ -191,6 +191,7 @@ export default function EventGallery({
             <p className="text-sm text-gray-600 mt-1">
               {photos.length} foto{photos.length !== 1 ? "s" : ""} compartilhada{photos.length !== 1 ? "s" : ""}
             </p>
+            <p className="text-xs text-amber-700 mt-1">Galeria em modo demo/local ate o Supabase Storage ser configurado.</p>
           </div>
 
           {canUpload && (
@@ -198,12 +199,12 @@ export default function EventGallery({
               <DialogTrigger asChild>
                 <Button className="bg-emerald-600 hover:bg-emerald-700">
                   <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Fotos
+                  Adicionar fotos demo
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Adicionar Fotos</DialogTitle>
+                  <DialogTitle>Adicionar fotos demo</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>

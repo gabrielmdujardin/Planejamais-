@@ -23,6 +23,13 @@ interface Item {
   price: number
   assignedTo: Person[] | null
   image?: string | null
+  category?: string
+  description?: string
+  quantity?: number
+  unitPrice?: number
+  estimatedCost?: number
+  paymentStatus?: string
+  notes?: string
 }
 
 interface ItemsListProps {
@@ -66,7 +73,7 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
   if (items.length === 0) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-500 mb-4">Nenhum item adicionado</p>
+        <p className="text-gray-500 mb-4">Nenhum gasto cadastrado</p>
         <p className="text-sm text-gray-400 mb-4">Adicione itens para seu evento usando o botão acima.</p>
       </div>
     )
@@ -77,8 +84,11 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Item</TableHead>
-            <TableHead>Valor</TableHead>
+            <TableHead>Gasto</TableHead>
+            <TableHead>Categoria</TableHead>
+            <TableHead>Qtd.</TableHead>
+            <TableHead>Valor unit.</TableHead>
+            <TableHead>Total</TableHead>
             <TableHead>Responsável(is)</TableHead>
             <TableHead>Foto</TableHead>
             <TableHead className="text-right">Ações</TableHead>
@@ -87,8 +97,14 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
         <TableBody>
           {items.map((item) => (
             <TableRow key={item.id}>
-              <TableCell className="font-medium">{item.name}</TableCell>
-              <TableCell>R$ {item.price.toFixed(2)}</TableCell>
+              <TableCell>
+                <div className="font-medium">{item.name}</div>
+                {item.description ? <div className="text-xs text-gray-500">{item.description}</div> : null}
+              </TableCell>
+              <TableCell>{item.category || "Geral"}</TableCell>
+              <TableCell>{item.quantity || 1}</TableCell>
+              <TableCell>R$ {Number(item.unitPrice ?? item.price).toFixed(2)}</TableCell>
+              <TableCell className="font-medium">R$ {Number(item.price || item.estimatedCost || 0).toFixed(2)}</TableCell>
               <TableCell>
                 {item.assignedTo && item.assignedTo.length > 0 ? (
                   <div className="flex flex-wrap gap-1">

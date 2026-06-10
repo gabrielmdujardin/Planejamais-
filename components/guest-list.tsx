@@ -1,27 +1,25 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
+import { Check, Clock, Copy, Edit, Mail, MoreHorizontal, Send, Trash2, X } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Check, Clock, Copy, Mail, MoreHorizontal, Send, Trash2, X } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
-import { Input } from "@/components/ui/input"
+
+type GuestStatus = "pending" | "confirmed" | "declined" | "awaiting_approval" | "pending_approval" | "rejected"
 
 interface Guest {
   id: string
   name: string
   email: string
   phone: string
-  status: "pending" | "confirmed" | "declined"
+  status: GuestStatus
 }
 
 interface GuestListProps {
@@ -29,105 +27,110 @@ interface GuestListProps {
   eventId: string
 }
 
+const statusOrder: Record<GuestStatus, number> = {
+  confirmed: 0,
+  pending: 1,
+  awaiting_approval: 2,
+  pending_approval: 2,
+  declined: 3,
+  rejected: 4,
+}
+
 export default function GuestList({ guests, eventId }: GuestListProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [sendingInviteId, setSendingInviteId] = useState<string | null>(null)
-  const [filter, setFilter] = useState<"all" | "confirmed" | "pending" | "declined">("all")
+  const [filter, setFilter] = useState<"all" | "confirmed" | "pending" | "declined" | "approval">("all")
   const [searchTerm, setSearchTerm] = useState("")
+  const [editingGuest, setEditingGuest] = useState<Guest | null>(null)
   const { toast } = useToast()
-  const { updateGuestStatus, removeGuest } = useEventStore()
+  const { updateGuest, updateGuestStatus, removeGuest } = useEventStore()
 
-  // Filtrar e ordenar convidados
   const filteredGuests = [...guests]
     .filter((guest) => {
-      // Filtro por status
-      if (filter !== "all" && guest.status !== filter) return false
-      // Filtro por busca
-      if (searchTerm) {
-        const term = searchTerm.toLowerCase()
-        return (
-          guest.name.toLowerCase().includes(term) ||
-          guest.email.toLowerCase().includes(term) ||
-          guest.phone.includes(term)
-        )
-      }
-      return true
+      if (filter === "confirmed" && guest.status !== "confirmed") return false
+      if (filter === "pending" && guest.status !== "pending") return false
+      if (filter === "declined" && !["declined", "rejected"].includes(guest.status)) return false
+      if (filter === "approval" && !["awaiting_approval", "pending_approval"].includes(guest.status)) return false
+      if (!searchTerm.trim()) return true
+      const term = searchTerm.toLowerCase()
+      return guest.name.toLowerCase().includes(term) || guest.email.toLowerCase().includes(term) || guest.phone.includes(term)
     })
-    .sort((a, b) => {
-      const statusOrder = { confirmed: 0, pending: 1, declined: 2 }
-      return statusOrder[a.status] - statusOrder[b.status]
-    })
+    .sort((a, b) => statusOrder[a.status] - statusOrder[b.status])
 
-  const handleUpdateStatus = async (guestId: string, status: "confirmed" | "pending" | "declined") => {
+  const counts = {
+    confirmed: guests.filter((guest) => guest.status === "confirmed").length,
+    pending: guests.filter((guest) => guest.status === "pending").length,
+    declined: guests.filter((guest) => ["declined", "rejected"].includes(guest.status)).length,
+    approval: guests.filter((guest) => ["awaiting_approval", "pending_approval"].includes(guest.status)).length,
+  }
+
+  const statusText = (status: GuestStatus) => {
+    if (status === "confirmed") return "confirmado"
+    if (status === "pending") return "pendente"
+    if (status === "declined" || status === "rejected") return "recusado"
+    return "aguardando aprovacao"
+  }
+
+  const handleUpdateStatus = async (guestId: string, status: GuestStatus) => {
     setIsLoading(true)
     try {
-      // Simular uma chamada de API
-      await new Promise((resolve) => setTimeout(resolve, 500))
+      await new Promise((resolve) => setTimeout(resolve, 250))
       updateGuestStatus(eventId, guestId, status)
-
-      toast({
-        title: "Status atualizado",
-        description: `O status do convidado foi atualizado para ${
-          status === "confirmed" ? "confirmado" : status === "pending" ? "pendente" : "recusado"
-        }.`,
-      })
+      toast({ title: "Status atualizado", description: `Convidado marcado como ${statusText(status)}.` })
     } catch (error) {
-      toast({
-        title: "Erro ao atualizar status",
-        description: "Ocorreu um erro ao atualizar o status do convidado.",
-        variant: "destructive",
-      })
+      toast({ title: "Erro ao atualizar status", description: "Tente novamente em instantes.", variant: "destructive" })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleRemoveGuest = async (guestId: string, guestName: string) => {
+  const handleRemoveGuest = async (guest: Guest) => {
     setIsLoading(true)
     try {
-      // Simular uma chamada de API
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      removeGuest(eventId, guestId)
-
-      toast({
-        title: "Convidado removido",
-        description: `${guestName} foi removido da lista de convidados.`,
-      })
+      await new Promise((resolve) => setTimeout(resolve, 250))
+      removeGuest(eventId, guest.id)
+      toast({ title: "Convidado removido", description: `${guest.name} saiu da lista deste evento.` })
     } catch (error) {
-      toast({
-        title: "Erro ao remover convidado",
-        description: "Ocorreu um erro ao remover o convidado.",
-        variant: "destructive",
-      })
+      toast({ title: "Erro ao remover convidado", description: "Tente novamente em instantes.", variant: "destructive" })
     } finally {
       setIsLoading(false)
     }
   }
 
-  const handleResendInvite = async (guest: Guest) => {
+  const copyInviteLink = async (guest: Guest) => {
+    let url = `${window.location.origin}/confirm-invitation/${eventId}/${guest.id}`
+
+    try {
+      const response = await fetch(`/api/guests/${guest.id}/confirmation-link`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ eventId }),
+      })
+      const data = await response.json().catch(() => null)
+      if (response.ok && data?.url) url = data.url
+    } catch (error) {
+      // Demo/local keeps the deterministic local URL.
+    }
+
+    await navigator.clipboard.writeText(url)
+    toast({ title: "Link copiado", description: "O link individual do convite foi copiado." })
+  }
+
+  const sendInvite = async (guest: Guest) => {
     setSendingInviteId(guest.id)
     try {
-      // Chamar API para enviar convite
       const response = await fetch(`/api/guests/${guest.id}/send-invite`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ eventId }),
       })
-
       const data = await response.json().catch(() => null)
-
-      if (response.ok) {
-        toast({
-          title: "Convite enviado!",
-          description: `O convite foi enviado para ${guest.name} (${guest.email}).`,
-        })
-      } else {
-        throw new Error(data?.error || "Erro ao enviar")
-      }
+      if (!response.ok) throw new Error(data?.error || "Envio indisponivel")
+      toast({ title: "Convite enviado", description: `Convite enviado para ${guest.email}.` })
     } catch (error) {
       toast({
-        title: "Erro ao enviar convite",
-        description: "Não foi possível enviar o convite. Tente novamente.",
+        title: "Envio real indisponivel",
+        description: "Configure Supabase/Resend para enviar por email. O link individual pode ser copiado agora.",
         variant: "destructive",
       })
     } finally {
@@ -135,13 +138,10 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     }
   }
 
-  const handleSendToAllPending = async () => {
-    const pendingGuests = guests.filter((g) => g.status === "pending")
+  const sendAllPending = async () => {
+    const pendingGuests = guests.filter((guest) => guest.status === "pending")
     if (pendingGuests.length === 0) {
-      toast({
-        title: "Nenhum convidado pendente",
-        description: "Todos os convidados já foram notificados.",
-      })
+      toast({ title: "Nenhum convidado pendente", description: "Todos os convidados ja foram tratados." })
       return
     }
 
@@ -150,27 +150,15 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
       const response = await fetch(`/api/events/${eventId}/send-invites`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ guestIds: pendingGuests.map((g) => g.id) }),
+        body: JSON.stringify({ guestIds: pendingGuests.map((guest) => guest.id) }),
       })
       const data = await response.json().catch(() => null)
-
-      if (response.ok) {
-        const failed = data?.results?.failed || 0
-        toast({
-          title: failed > 0 ? "Convites processados com falhas" : "Convites enviados!",
-          description:
-            failed > 0
-              ? data.results.errors.join("; ")
-              : `${pendingGuests.length} convite(s) enviado(s) com sucesso.`,
-          variant: failed > 0 ? "destructive" : "default",
-        })
-      } else {
-        throw new Error(data?.error || "Erro ao enviar")
-      }
+      if (!response.ok) throw new Error(data?.error || "Envio indisponivel")
+      toast({ title: "Convites processados", description: `${pendingGuests.length} convite(s) processado(s).` })
     } catch (error) {
       toast({
-        title: "Erro ao enviar convites",
-        description: "Não foi possível enviar os convites. Tente novamente.",
+        title: "Envio real indisponivel",
+        description: "Configure Supabase/Resend para envio em lote. Os links individuais continuam disponiveis.",
         variant: "destructive",
       })
     } finally {
@@ -178,50 +166,24 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     }
   }
 
-  const handleCopyInviteLink = async (guest: Guest) => {
-    const response = await fetch(`/api/guests/${guest.id}/confirmation-link`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ eventId }),
-    })
-    const data = await response.json()
-
-    if (!response.ok || !data.url) {
-      toast({
-        title: "Erro ao copiar",
-        description: data.error || "Não foi possível gerar o link. Tente novamente.",
-        variant: "destructive",
-      })
+  const saveGuest = () => {
+    if (!editingGuest) return
+    if (!editingGuest.name.trim() || !editingGuest.email.trim()) {
+      toast({ title: "Dados incompletos", description: "Nome e email sao obrigatorios.", variant: "destructive" })
       return
     }
-
-    // Copiar para a área de transferência
-    navigator.clipboard.writeText(data.url).then(
-      () => {
-        toast({
-          title: "Link copiado",
-          description: "O link do convite foi copiado para a área de transferência.",
-        })
-      },
-      () => {
-        toast({
-          title: "Erro ao copiar",
-          description: "Não foi possível copiar o link. Tente novamente.",
-          variant: "destructive",
-        })
-      },
-    )
+    updateGuest(eventId, editingGuest.id, editingGuest)
+    setEditingGuest(null)
+    toast({ title: "Convidado atualizado", description: "Os dados do convidado foram salvos." })
   }
 
-  // Renderizar avatar
-  const renderAvatar = (name: string) => {
+  const avatar = (name: string) => {
     const initials = name
       .split(" ")
-      .map((word) => word[0])
+      .map((part) => part[0])
       .join("")
       .toUpperCase()
-      .substring(0, 2)
-
+      .slice(0, 2)
     return (
       <Avatar>
         <AvatarFallback className="bg-emerald-100 text-emerald-800">{initials}</AvatarFallback>
@@ -229,135 +191,69 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     )
   }
 
-  // Renderizar badge de status
-  const renderStatusBadge = (status: string) => {
-    switch (status) {
-      case "confirmed":
-        return (
-          <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200">
-            <Check className="h-3 w-3 mr-1" /> Confirmado
-          </Badge>
-        )
-      case "pending":
-        return (
-          <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200">
-            <span className="h-1.5 w-1.5 rounded-full bg-amber-500 mr-1.5" /> Pendente
-          </Badge>
-        )
-      case "declined":
-        return (
-          <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200">
-            <X className="h-3 w-3 mr-1" /> Recusado
-          </Badge>
-        )
-      default:
-        return null
+  const statusBadge = (status: GuestStatus) => {
+    if (status === "confirmed") {
+      return <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200"><Check className="mr-1 h-3 w-3" /> Confirmado</Badge>
     }
+    if (status === "pending") {
+      return <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200"><Clock className="mr-1 h-3 w-3" /> Pendente</Badge>
+    }
+    if (status === "declined" || status === "rejected") {
+      return <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200"><X className="mr-1 h-3 w-3" /> Recusado</Badge>
+    }
+    return <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200"><Clock className="mr-1 h-3 w-3" /> Aguardando aprovacao</Badge>
   }
 
   if (guests.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-gray-500 mb-2">Nenhum convidado adicionado</p>
-        <p className="text-sm text-gray-400 mb-4">Adicione convidados para o seu evento</p>
+      <div className="py-8 text-center">
+        <p className="mb-2 text-gray-500">Nenhum convidado adicionado</p>
+        <p className="text-sm text-gray-400">Adicione convidados para comecar o controle de RSVP.</p>
       </div>
     )
   }
 
-  const pendingCount = guests.filter((g) => g.status === "pending").length
-  const confirmedCount = guests.filter((g) => g.status === "confirmed").length
-  const declinedCount = guests.filter((g) => g.status === "declined").length
-
   return (
     <div className="space-y-4">
-      {/* Barra de filtros e ações */}
-      <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap gap-2">
-          <Button
-            variant={filter === "all" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("all")}
-          >
-            Todos ({guests.length})
-          </Button>
-          <Button
-            variant={filter === "confirmed" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("confirmed")}
-            className={filter === "confirmed" ? "" : "text-emerald-600 border-emerald-200 hover:bg-emerald-50"}
-          >
-            <Check className="h-3 w-3 mr-1" />
-            Confirmados ({confirmedCount})
-          </Button>
-          <Button
-            variant={filter === "pending" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("pending")}
-            className={filter === "pending" ? "" : "text-amber-600 border-amber-200 hover:bg-amber-50"}
-          >
-            <Clock className="h-3 w-3 mr-1" />
-            Pendentes ({pendingCount})
-          </Button>
-          <Button
-            variant={filter === "declined" ? "default" : "outline"}
-            size="sm"
-            onClick={() => setFilter("declined")}
-            className={filter === "declined" ? "" : "text-red-600 border-red-200 hover:bg-red-50"}
-          >
-            <X className="h-3 w-3 mr-1" />
-            Recusados ({declinedCount})
-          </Button>
+          <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => setFilter("all")}>Todos ({guests.length})</Button>
+          <Button variant={filter === "confirmed" ? "default" : "outline"} size="sm" onClick={() => setFilter("confirmed")}>Confirmados ({counts.confirmed})</Button>
+          <Button variant={filter === "pending" ? "default" : "outline"} size="sm" onClick={() => setFilter("pending")}>Pendentes ({counts.pending})</Button>
+          <Button variant={filter === "approval" ? "default" : "outline"} size="sm" onClick={() => setFilter("approval")}>Aprovar ({counts.approval})</Button>
+          <Button variant={filter === "declined" ? "default" : "outline"} size="sm" onClick={() => setFilter("declined")}>Recusados ({counts.declined})</Button>
         </div>
-        
-        {pendingCount > 0 && (
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={handleSendToAllPending}
-            disabled={isLoading}
-            className="gap-1"
-          >
-            <Mail className="h-4 w-4" />
-            Enviar convites ({pendingCount})
+        {counts.pending > 0 ? (
+          <Button size="sm" variant="outline" onClick={sendAllPending} disabled={isLoading}>
+            <Mail className="mr-2 h-4 w-4" /> Enviar convites ({counts.pending})
           </Button>
-        )}
+        ) : null}
       </div>
 
-      {/* Campo de busca */}
-      <Input
-        placeholder="Buscar por nome, email ou telefone..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
-        className="max-w-sm"
-      />
+      <Input placeholder="Buscar por nome, email ou telefone..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="max-w-sm" />
 
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse">
+      <div className="overflow-x-auto rounded-md border">
+        <table className="w-full border-collapse bg-white">
           <thead>
-            <tr className="border-b text-left">
-              <th className="pb-2 font-medium">Convidado</th>
-              <th className="pb-2 font-medium">Contato</th>
-              <th className="pb-2 font-medium">Status</th>
-              <th className="pb-2 font-medium text-right">Ações</th>
+            <tr className="border-b bg-slate-50 text-left">
+              <th className="p-3 font-medium">Convidado</th>
+              <th className="p-3 font-medium">Contato</th>
+              <th className="p-3 font-medium">Status</th>
+              <th className="p-3 text-right font-medium">Acoes</th>
             </tr>
           </thead>
           <tbody>
             {filteredGuests.map((guest) => (
               <tr key={guest.id} className="border-b last:border-0">
-                <td className="py-3">
-                  <div className="flex items-center gap-3">
-                    {renderAvatar(guest.name)}
-                    <span className="font-medium">{guest.name}</span>
-                  </div>
+                <td className="p-3">
+                  <div className="flex items-center gap-3">{avatar(guest.name)}<span className="font-medium">{guest.name}</span></div>
                 </td>
-                <td className="py-3">
-                  <div className="flex flex-col">
-                    <span className="text-sm text-gray-600">{guest.email}</span>
-                    <span className="text-sm text-gray-600">{guest.phone}</span>
-                  </div>
+                <td className="p-3 text-sm text-slate-600">
+                  <div>{guest.email}</div>
+                  <div>{guest.phone}</div>
                 </td>
-                <td className="py-3">{renderStatusBadge(guest.status)}</td>
-                <td className="py-3 text-right">
+                <td className="p-3">{statusBadge(guest.status)}</td>
+                <td className="p-3 text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" disabled={isLoading}>
@@ -366,33 +262,15 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => handleUpdateStatus(guest.id, "confirmed")}>
-                        <Check className="mr-2 h-4 w-4 text-emerald-600" /> Marcar como confirmado
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleUpdateStatus(guest.id, "pending")}>
-                        <span className="mr-2 h-4 w-4 flex items-center justify-center">
-                          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                        </span>
-                        Marcar como pendente
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleUpdateStatus(guest.id, "declined")}>
-                        <X className="mr-2 h-4 w-4 text-red-600" /> Marcar como recusado
-                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateStatus(guest.id, "confirmed")}><Check className="mr-2 h-4 w-4 text-emerald-600" /> Marcar confirmado</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateStatus(guest.id, "pending")}><Clock className="mr-2 h-4 w-4 text-amber-600" /> Marcar pendente</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => handleUpdateStatus(guest.id, "declined")}><X className="mr-2 h-4 w-4 text-red-600" /> Marcar recusado</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => setEditingGuest(guest)}><Edit className="mr-2 h-4 w-4" /> Editar convidado</DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => handleResendInvite(guest)} disabled={sendingInviteId === guest.id}>
-                        <Send className="mr-2 h-4 w-4" /> 
-                        {sendingInviteId === guest.id ? "Enviando..." : "Enviar convite por email"}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => handleCopyInviteLink(guest)}>
-                        <Copy className="mr-2 h-4 w-4" /> Copiar link do convite
-                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => sendInvite(guest)} disabled={sendingInviteId === guest.id}><Send className="mr-2 h-4 w-4" /> {sendingInviteId === guest.id ? "Enviando..." : "Enviar por email"}</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => copyInviteLink(guest)}><Copy className="mr-2 h-4 w-4" /> Copiar link</DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem
-                        className="text-red-600"
-                        onClick={() => handleRemoveGuest(guest.id, guest.name)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" /> Remover convidado
-                      </DropdownMenuItem>
+                      <DropdownMenuItem className="text-red-600" onClick={() => handleRemoveGuest(guest)}><Trash2 className="mr-2 h-4 w-4" /> Remover</DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </td>
@@ -401,6 +279,23 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
           </tbody>
         </table>
       </div>
+
+      <Dialog open={!!editingGuest} onOpenChange={(open) => !open && setEditingGuest(null)}>
+        <DialogContent>
+          <DialogHeader><DialogTitle>Editar convidado</DialogTitle></DialogHeader>
+          {editingGuest ? (
+            <div className="space-y-4 py-2">
+              <div className="space-y-2"><Label>Nome</Label><Input value={editingGuest.name} onChange={(event) => setEditingGuest({ ...editingGuest, name: event.target.value })} /></div>
+              <div className="space-y-2"><Label>Email</Label><Input value={editingGuest.email} onChange={(event) => setEditingGuest({ ...editingGuest, email: event.target.value })} /></div>
+              <div className="space-y-2"><Label>Telefone</Label><Input value={editingGuest.phone} onChange={(event) => setEditingGuest({ ...editingGuest, phone: event.target.value })} /></div>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingGuest(null)}>Cancelar</Button>
+            <Button onClick={saveGuest} className="bg-emerald-600 hover:bg-emerald-700">Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

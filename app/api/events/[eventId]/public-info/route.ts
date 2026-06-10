@@ -12,7 +12,7 @@ export async function GET(
     // Buscar informações públicas do evento
     const { data: event, error } = await supabaseAdmin
       .from("events")
-      .select("id, title, date, time, location, description")
+      .select("id, title, date, time, start_date, start_time, end_date, end_time, location, address, maps_url, event_mode, meeting_url, description")
       .eq("id", eventId)
       .single()
 
@@ -29,7 +29,15 @@ export async function GET(
         title: event.title,
         date: event.date,
         time: event.time,
+        startDate: event.start_date,
+        startTime: event.start_time,
+        endDate: event.end_date,
+        endTime: event.end_time,
         location: event.location,
+        address: event.address,
+        mapsUrl: event.maps_url,
+        eventMode: event.event_mode,
+        meetingUrl: event.meeting_url,
         description: event.description,
       },
     })

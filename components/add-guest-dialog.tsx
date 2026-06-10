@@ -303,11 +303,10 @@ export default function AddGuestDialog({ open, onOpenChange, eventId }: AddGuest
       }))
     } catch (error) {
       toast({
-        title: "Erro ao enviar convite por e-mail",
+        title: "Modo demo/local",
         description: error instanceof Error ? error.message : "Verifique a configuração do Resend.",
-        variant: "destructive",
       })
-      throw error
+      return guests
     } finally {
       setIsSendingInvites(false)
     }

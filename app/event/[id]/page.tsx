@@ -1,80 +1,231 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import type React from "react"
+import { useEffect, useMemo, useState } from "react"
+import Link from "next/link"
+import { useParams, useRouter } from "next/navigation"
+import {
+  ArrowLeft,
+  BarChart3,
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Copy,
+  DollarSign,
+  Edit3,
+  ImageIcon,
+  LinkIcon,
+  Mail,
+  MapPin,
+  Plus,
+  Send,
+  Users,
+  XCircle,
+} from "lucide-react"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { Plus, ArrowLeft } from "lucide-react"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import AddGuestDialog from "@/components/add-guest-dialog"
+import AddItemDialog from "@/components/add-item-dialog"
+import EditEventDialog from "@/components/edit-event-dialog"
+import EventGallery from "@/components/event-gallery"
 import GuestList from "@/components/guest-list"
 import ItemsList from "@/components/items-list"
-import EventGallery from "@/components/event-gallery"
-import EventHero from "@/components/event-hero"
 import PendingRequestsList from "@/components/pending-requests-list"
 import PublicInviteShare from "@/components/public-invite-share"
+import { getEventById as fetchEventById } from "@/app/actions/events"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
-import { useParams, useRouter } from "next/navigation"
-import AddItemDialog from "@/components/add-item-dialog"
-import AddGuestDialog from "@/components/add-guest-dialog"
-import EditEventDialog from "@/components/edit-event-dialog"
-import Link from "next/link"
-import EmailPreview from "@/components/email-preview"
-import SmsPreview from "@/components/sms-preview"
-import { getEventTheme } from "@/lib/event-theme"
+
+const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
+
+const statusLabel: Record<string, string> = {
+  draft: "Rascunho",
+  active: "Ativo",
+  completed: "Concluido",
+  canceled: "Cancelado",
+}
+
+const modeLabel: Record<string, string> = {
+  presential: "Presencial",
+  presencial: "Presencial",
+  online: "Online",
+  hybrid: "Hibrido",
+  hibrido: "Hibrido",
+}
+
+const requestStatuses = new Set(["awaiting_approval", "pending_approval"])
 
 export default function EventPage() {
-  const { getEventById } = useEventStore()
+  const { addEvent, getEventById, updateEvent } = useEventStore()
   const params = useParams()
+  const router = useRouter()
   const id = params.id as string
-  const event = getEventById(id)
+  const storedEvent = getEventById(id)
+  const [remoteEvent, setRemoteEvent] = useState<any | null>(null)
+  const event = storedEvent || remoteEvent
   const [isLoading, setIsLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState("overview")
   const [isAddItemOpen, setIsAddItemOpen] = useState(false)
   const [isAddGuestOpen, setIsAddGuestOpen] = useState(false)
   const [isEditEventOpen, setIsEditEventOpen] = useState(false)
+  const [isSendingInvites, setIsSendingInvites] = useState(false)
   const { toast } = useToast()
-  const router = useRouter()
 
   useEffect(() => {
-    const loadEvent = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      setIsLoading(false)
+    let cancelled = false
 
-      if (!event && !isLoading) {
-        toast({
-          title: "Evento não encontrado",
-          description: "O evento que você está procurando não existe.",
-          variant: "destructive",
-        })
-        router.push("/dashboard")
+    async function loadEvent() {
+      if (storedEvent) {
+        setIsLoading(false)
+        return
       }
+
+      const result = await fetchEventById(id)
+      if (cancelled) return
+
+      if (result.data) {
+        setRemoteEvent(result.data)
+        if (getEventById(result.data.id)) updateEvent(result.data.id, result.data)
+        else addEvent(result.data)
+      }
+      setIsLoading(false)
     }
 
     loadEvent()
+    return () => {
+      cancelled = true
+    }
+  }, [addEvent, getEventById, id, storedEvent, updateEvent])
+
+  useEffect(() => {
+    if (!isLoading && !event) {
+      toast({
+        title: "Evento nao encontrado",
+        description: "Voltei para a visao geral porque este evento nao esta disponivel neste modo.",
+        variant: "destructive",
+      })
+      router.push("/dashboard")
+    }
   }, [event, isLoading, router, toast])
 
-  const handleResendInvites = () => {
-    toast({
-      title: "Convites reenviados",
-      description: "Os convites foram reenviados para os convidados pendentes.",
-    })
+  const stats = useMemo(() => {
+    const guests = event?.guests || []
+    const items = event?.items || []
+    const photos = event?.photos || []
+    const confirmed = guests.filter((guest: any) => guest.status === "confirmed").length
+    const declined = guests.filter((guest: any) => guest.status === "declined" || guest.status === "rejected").length
+    const requests = guests.filter((guest: any) => requestStatuses.has(guest.status)).length
+    const pending = guests.filter((guest: any) => guest.status === "pending").length
+    const pendingCompanions = guests.reduce((total: number, guest: any) => {
+      return total + (guest.companions || []).filter((companion: any) => companion.status === "pending").length
+    }, 0)
+    const totalCost = items.reduce((sum: number, item: any) => sum + Number(item.price || item.estimatedCost || item.estimated_cost || 0), 0)
+    const initialCost = Number(event?.initialEstimatedCost || 0)
+    const effectiveCost = totalCost + initialCost
+
+    return {
+      totalGuests: guests.length || event?.totalGuests || 0,
+      confirmed,
+      pending,
+      declined,
+      requests,
+      pendingCompanions,
+      itemCount: items.length,
+      photoCount: photos.length,
+      totalCost: effectiveCost,
+      confirmationRate: guests.length > 0 ? Math.round((confirmed / guests.length) * 100) : 0,
+      costPerConfirmed: confirmed > 0 ? effectiveCost / confirmed : 0,
+    }
+  }, [event])
+
+  const recommendations = useMemo(() => {
+    if (!event) return []
+    const notes: string[] = []
+    if (stats.totalGuests === 0) notes.push("Este evento ainda nao possui convidados.")
+    if (stats.pending > 0) notes.push(`${stats.pending} convidado(s) ainda aguardam resposta.`)
+    if (stats.requests > 0) notes.push("Ha solicitacoes de entrada aguardando aprovacao.")
+    if (stats.pendingCompanions > 0) notes.push("Ha acompanhantes aguardando aprovacao.")
+    if (stats.itemCount === 0) notes.push("Este evento ainda nao possui gastos cadastrados.")
+    if (!event.location && event.eventMode !== "online") notes.push("O evento esta sem local definido.")
+    if (!event.budgetEstimated) notes.push("O orcamento previsto ainda nao foi definido.")
+    if (event.rsvpDeadline) {
+      const days = Math.ceil((new Date(`${event.rsvpDeadline}T00:00:00`).getTime() - Date.now()) / 86400000)
+      if (days >= 0 && days <= 7) notes.push("A data limite de confirmacao esta proxima.")
+    }
+    return notes
+  }, [event, stats])
+
+  const publicUrl =
+    typeof window !== "undefined" && event?.publicInviteEnabled && event?.publicInviteToken
+      ? `${window.location.origin}/convite/${event.publicInviteToken}`
+      : ""
+
+  const copyText = async (text: string, title: string, description: string) => {
+    await navigator.clipboard.writeText(text)
+    toast({ title, description })
   }
 
-  const handleEditEvent = () => {
-    setIsEditEventOpen(true)
+  const handleShare = async () => {
+    if (publicUrl) {
+      await copyText(publicUrl, "Link publico copiado", "O link publico seguro do evento foi copiado.")
+      return
+    }
+
+    toast({
+      title: "Link publico nao ativado",
+      description: "Ative o link publico na edicao do evento ou use a aba Solicitacoes para gerar um link.",
+      variant: "destructive",
+    })
+    setActiveTab("requests")
+  }
+
+  const handleResendInvites = async () => {
+    const pendingGuests = (event?.guests || []).filter((guest: any) => guest.status === "pending")
+    if (pendingGuests.length === 0) {
+      toast({ title: "Nenhum convite pendente", description: "Nao ha convidados pendentes para reenviar." })
+      return
+    }
+
+    setIsSendingInvites(true)
+    try {
+      const response = await fetch(`/api/events/${event.id}/send-invites`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ guestIds: pendingGuests.map((guest: any) => guest.id) }),
+      })
+      const data = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(data?.error || "Envio indisponivel")
+
+      toast({
+        title: "Convites processados",
+        description: `${pendingGuests.length} convite(s) foram enviados ou processados pela API.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Envio real indisponivel",
+        description: "Configure Supabase/Resend para envio por email. Os links individuais podem ser copiados na aba Convidados.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsSendingInvites(false)
+    }
   }
 
   if (isLoading || !event) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
-        <div className="container mx-auto max-w-7xl py-8 px-4">
+      <div className="min-h-screen bg-slate-50">
+        <div className="container mx-auto max-w-7xl px-4 py-8">
           <div className="animate-pulse space-y-6">
-            <div className="h-10 bg-gray-200 rounded w-1/3"></div>
-            <div className="h-[500px] bg-gray-200 rounded-2xl"></div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-2 h-64 bg-gray-200 rounded-xl"></div>
-              <div className="h-64 bg-gray-200 rounded-xl"></div>
+            <div className="h-9 w-56 rounded bg-slate-200" />
+            <div className="h-64 rounded-lg bg-slate-200" />
+            <div className="grid gap-4 md:grid-cols-4">
+              <div className="h-28 rounded-lg bg-slate-200" />
+              <div className="h-28 rounded-lg bg-slate-200" />
+              <div className="h-28 rounded-lg bg-slate-200" />
+              <div className="h-28 rounded-lg bg-slate-200" />
             </div>
           </div>
         </div>
@@ -82,218 +233,164 @@ export default function EventPage() {
     )
   }
 
-  const theme = getEventTheme(event.type)
-
-  const totalCost = event.items ? event.items.reduce((sum, item) => sum + item.price, 0) : 0
-  const costPerPerson = event.confirmedGuests > 0 ? (totalCost / event.confirmedGuests).toFixed(2) : "0.00"
-  const pendingGuests =
-    event.totalGuests -
-    event.confirmedGuests -
-    (event.guests ? event.guests.filter((g) => g.status === "declined").length : 0)
-  const declinedGuests = event.guests ? event.guests.filter((g) => g.status === "declined").length : 0
+  const eventDateLine = [event.date, event.startTime || event.time, event.endTime ? `ate ${event.endTime}` : ""].filter(Boolean).join(" ")
+  const capacityLine = event.capacity ? `${stats.totalGuests}/${event.capacity} convidados` : `${stats.totalGuests} convidados`
 
   return (
-    <div className={`min-h-screen ${theme.gradient}`}>
-      <div className="container mx-auto max-w-7xl py-8 px-4">
-        {/* Back Button */}
-        <div className="mb-6">
+    <div className="min-h-screen bg-slate-50">
+      <div className="container mx-auto max-w-7xl px-4 py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Link href="/dashboard">
-            <Button variant="outline" size="sm" className="bg-white/80 backdrop-blur-sm hover:bg-white">
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Voltar ao Dashboard
+            <Button variant="outline" size="sm">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Visao geral dos eventos
+            </Button>
+          </Link>
+          <Link href="/dashboard/analytics">
+            <Button variant="outline" size="sm">
+              <BarChart3 className="mr-2 h-4 w-4" />
+              Analises globais
             </Button>
           </Link>
         </div>
 
-        <EventHero event={{ ...event, category: event.category || "" }} onEdit={handleEditEvent} />
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Confirmações</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <span className="text-sm font-medium">Progresso</span>
-                    <span className="text-sm text-gray-600">
-                      {event.confirmedGuests}/{event.totalGuests}
-                    </span>
-                  </div>
-                  <Progress
-                    value={event.totalGuests > 0 ? (event.confirmedGuests / event.totalGuests) * 100 : 0}
-                    className="h-2"
-                  />
-                </div>
-
-                <div className="grid grid-cols-3 gap-2 text-center pt-2">
-                  <div className="bg-emerald-50 p-3 rounded-lg">
-                    <p className="text-2xl font-bold text-emerald-600">{event.confirmedGuests}</p>
-                    <p className="text-xs text-gray-600">Confirmados</p>
-                  </div>
-                  <div className="bg-amber-50 p-3 rounded-lg">
-                    <p className="text-2xl font-bold text-amber-600">{pendingGuests}</p>
-                    <p className="text-xs text-gray-600">Pendentes</p>
-                  </div>
-                  <div className="bg-red-50 p-3 rounded-lg">
-                    <p className="text-2xl font-bold text-red-600">{declinedGuests}</p>
-                    <p className="text-xs text-gray-600">Recusados</p>
-                  </div>
-                </div>
+        <section className="mb-6 rounded-lg border bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div className="space-y-4">
+              <div className="flex flex-wrap gap-2">
+                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">{event.type || "Evento"}</Badge>
+                <Badge variant="outline">{statusLabel[event.status || "active"] || event.status}</Badge>
+                <Badge variant="outline">{modeLabel[event.eventMode || "presential"] || event.eventMode || "Presencial"}</Badge>
+                {event.publicInviteEnabled ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Link publico ativo</Badge> : null}
               </div>
-            </CardContent>
-          </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Itens</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Total de itens</span>
-                  <span className="text-2xl font-bold">{event.items?.length || 0}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Custo total</span>
-                  <span className="text-2xl font-bold text-emerald-600">R$ {totalCost.toFixed(2)}</span>
-                </div>
-                {event.type === "Colaborativo" && event.confirmedGuests > 0 && (
-                  <div className="pt-2 border-t">
-                    <div className="flex justify-between items-center">
-                      <span className="text-sm text-gray-600">Por pessoa</span>
-                      <span className="text-lg font-semibold text-emerald-600">R$ {costPerPerson}</span>
-                    </div>
-                  </div>
-                )}
+              <div>
+                <h1 className="text-3xl font-bold tracking-normal text-slate-950">{event.title}</h1>
+                {event.description ? <p className="mt-2 max-w-3xl text-sm text-slate-600">{event.description}</p> : null}
               </div>
-            </CardContent>
-          </Card>
 
-          <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-lg">Galeria</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">Total de fotos</span>
-                  <span className="text-2xl font-bold">{event.photos?.length || 0}</span>
-                </div>
-                <Button variant="outline" className="w-full bg-transparent" onClick={handleResendInvites}>
-                  Reenviar Convites
+              <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="flex gap-2"><Calendar className="h-4 w-4 text-emerald-600" /> {eventDateLine || "Data nao definida"}</div>
+                <div className="flex gap-2"><MapPin className="h-4 w-4 text-emerald-600" /> {event.location || event.address || "Local nao definido"}</div>
+                <div className="flex gap-2"><Users className="h-4 w-4 text-emerald-600" /> {capacityLine}</div>
+                {event.address ? <div className="sm:col-span-2">Endereco: {event.address}</div> : null}
+                {event.meetingUrl ? <div className="sm:col-span-2">Reuniao: {event.meetingUrl}</div> : null}
+                {event.rsvpDeadline ? <div>Limite RSVP: {new Date(`${event.rsvpDeadline}T00:00:00`).toLocaleDateString("pt-BR")}</div> : null}
+                {event.budgetEstimated ? <div>Orcamento: {currency.format(Number(event.budgetEstimated))}</div> : null}
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <Button variant="outline" onClick={() => setIsEditEventOpen(true)}>
+                <Edit3 className="mr-2 h-4 w-4" />
+                Editar evento
+              </Button>
+              <Button variant="outline" onClick={handleShare}>
+                <LinkIcon className="mr-2 h-4 w-4" />
+                Compartilhar
+              </Button>
+              {publicUrl ? (
+                <Button variant="outline" onClick={() => copyText(publicUrl, "Link copiado", "Link publico copiado para a area de transferencia.")}>
+                  <Copy className="mr-2 h-4 w-4" />
+                  Copiar link publico
                 </Button>
-              </div>
-            </CardContent>
-          </Card>
+              ) : null}
+              <Button onClick={handleResendInvites} disabled={isSendingInvites} className="bg-emerald-600 hover:bg-emerald-700">
+                <Send className="mr-2 h-4 w-4" />
+                {isSendingInvites ? "Enviando..." : "Enviar convites"}
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <MetricCard title="Total de convidados" value={stats.totalGuests} icon={<Users className="h-4 w-4" />} />
+          <MetricCard title="Confirmados" value={stats.confirmed} icon={<CheckCircle2 className="h-4 w-4" />} tone="emerald" />
+          <MetricCard title="Pendentes" value={stats.pending} icon={<Clock className="h-4 w-4" />} tone="amber" />
+          <MetricCard title="Recusados" value={stats.declined} icon={<XCircle className="h-4 w-4" />} tone="red" />
+          <MetricCard title="Solicitacoes pendentes" value={stats.requests} icon={<Mail className="h-4 w-4" />} />
+          <MetricCard title="Acompanhantes pendentes" value={stats.pendingCompanions} icon={<Users className="h-4 w-4" />} />
+          <MetricCard title="Gastos" value={currency.format(stats.totalCost)} icon={<DollarSign className="h-4 w-4" />} />
+          <MetricCard title="Fotos" value={stats.photoCount} icon={<ImageIcon className="h-4 w-4" />} />
         </div>
 
-        {/* Tabs */}
-        <Tabs defaultValue="items" className="mb-8">
-          <TabsList className="mb-6 bg-white/80 backdrop-blur-sm p-1">
-            <TabsTrigger value="items" className="data-[state=active]:bg-white">
-              Itens ({event.items?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="guests" className="data-[state=active]:bg-white">
-              Convidados ({event.guests?.length || 0})
-            </TabsTrigger>
-            <TabsTrigger value="requests" className="data-[state=active]:bg-white relative">
-              Solicitações
-            </TabsTrigger>
-            <TabsTrigger value="photos" className="data-[state=active]:bg-white">
-              Fotos ({event.photos?.length || 0})
-            </TabsTrigger>
+        <Card className="mb-6">
+          <CardContent className="flex flex-wrap gap-2 p-4">
+            <Button size="sm" variant="outline" onClick={() => setIsEditEventOpen(true)}><Edit3 className="mr-2 h-4 w-4" /> Editar evento</Button>
+            <Button size="sm" variant="outline" onClick={() => setIsAddGuestOpen(true)}><Plus className="mr-2 h-4 w-4" /> Adicionar convidado</Button>
+            <Button size="sm" variant="outline" onClick={handleResendInvites}><Mail className="mr-2 h-4 w-4" /> Enviar convites</Button>
+            <Button size="sm" variant="outline" onClick={handleShare}><Copy className="mr-2 h-4 w-4" /> Copiar link publico</Button>
+            <Button size="sm" variant="outline" onClick={() => setIsAddItemOpen(true)}><DollarSign className="mr-2 h-4 w-4" /> Adicionar gasto</Button>
+            <Button size="sm" variant="outline" onClick={() => setActiveTab("requests")}><Mail className="mr-2 h-4 w-4" /> Ver solicitacoes</Button>
+            <Button size="sm" variant="outline" onClick={() => setActiveTab("photos")}><ImageIcon className="mr-2 h-4 w-4" /> Galeria</Button>
+            <Button size="sm" variant="outline" onClick={() => setActiveTab("analytics")}><BarChart3 className="mr-2 h-4 w-4" /> Analises do evento</Button>
+          </CardContent>
+        </Card>
+
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="flex h-auto flex-wrap justify-start">
+            <TabsTrigger value="overview">Visao geral</TabsTrigger>
+            <TabsTrigger value="guests">Convidados ({stats.totalGuests})</TabsTrigger>
+            <TabsTrigger value="requests">Solicitacoes ({stats.requests})</TabsTrigger>
+            <TabsTrigger value="expenses">Gastos ({stats.itemCount})</TabsTrigger>
+            <TabsTrigger value="photos">Fotos ({stats.photoCount})</TabsTrigger>
+            <TabsTrigger value="analytics">Analises</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="items">
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-xl">Itens do evento</CardTitle>
-                <Button
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                  onClick={() => setIsAddItemOpen(true)}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Adicionar item
-                </Button>
-              </CardHeader>
-              <CardContent>
-                <ItemsList items={event.items || []} eventId={event.id} />
-
-                {event.type === "Colaborativo" && event.items && event.items.length > 0 && (
-                  <div className="mt-6 p-4 bg-emerald-50 rounded-lg border border-emerald-200">
-                    <div className="flex justify-between items-center mb-2">
-                      <h3 className="font-semibold">Resumo de custos</h3>
-                      <Badge variant="outline" className="bg-white">
-                        Colaborativo
-                      </Badge>
+          <TabsContent value="overview">
+            <div className="grid gap-6 lg:grid-cols-3">
+              <Card className="lg:col-span-2">
+                <CardHeader><CardTitle>Resumo do evento</CardTitle></CardHeader>
+                <CardContent className="space-y-5">
+                  <div>
+                    <div className="mb-2 flex justify-between text-sm">
+                      <span>Confirmacoes</span>
+                      <span>{stats.confirmed}/{stats.totalGuests}</span>
                     </div>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Custo total:</span>
-                        <span className="font-medium">R$ {totalCost.toFixed(2)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Número de participantes:</span>
-                        <span className="font-medium">{event.confirmedGuests}</span>
-                      </div>
-                      <div className="flex justify-between pt-2 border-t border-emerald-200 text-emerald-700 font-semibold">
-                        <span>Valor por pessoa:</span>
-                        <span>R$ {costPerPerson}</span>
-                      </div>
-                    </div>
+                    <Progress value={stats.confirmationRate} className="h-2" />
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  <div className="grid gap-3 md:grid-cols-3">
+                    <InfoBox label="Capacidade" value={event.capacity ? `${stats.totalGuests}/${event.capacity}` : "Sem limite"} />
+                    <InfoBox label="Acompanhantes" value={event.allowCompanions ? `Ate ${event.maxCompanionsPerGuest || 0}` : "Nao permitido"} />
+                    <InfoBox label="Link publico" value={event.publicInviteEnabled ? "Ativado" : "Desativado"} />
+                    <InfoBox label="Custo total" value={currency.format(stats.totalCost)} />
+                    <InfoBox label="Custo por confirmado" value={currency.format(stats.costPerConfirmed)} />
+                    <InfoBox label="Orcamento" value={event.budgetEstimated ? currency.format(Number(event.budgetEstimated)) : "Nao definido"} />
+                  </div>
+                  {event.financialNotes ? <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">Notas financeiras: {event.financialNotes}</p> : null}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader><CardTitle>Proximas acoes</CardTitle></CardHeader>
+                <CardContent className="space-y-3">
+                  {recommendations.length > 0 ? recommendations.map((note) => (
+                    <div key={note} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{note}</div>
+                  )) : (
+                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                      O evento esta com dados basicos, convidados e custos em dia.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="guests">
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-              <CardHeader className="pb-3 flex flex-row items-center justify-between">
-                <CardTitle className="text-xl">Lista de convidados</CardTitle>
-                <Button
-                  size="sm"
-                  className="bg-emerald-600 hover:bg-emerald-700"
-                  onClick={() => setIsAddGuestOpen(true)}
-                >
-                  <Plus className="h-4 w-4 mr-1" /> Adicionar convidados
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Convidados</CardTitle>
+                <Button size="sm" onClick={() => setIsAddGuestOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
+                  <Plus className="mr-2 h-4 w-4" /> Adicionar
                 </Button>
               </CardHeader>
-              <CardContent>
-                <GuestList guests={event.guests || []} eventId={event.id} />
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <EmailPreview
-                    eventId={event.id}
-                    guestId={event.guests?.[0]?.id || "example"}
-                    eventTitle={event.title}
-                    guestName={event.guests?.[0]?.name || "Convidado Exemplo"}
-                    eventDate={event.date}
-                    eventTime={event.time}
-                    eventLocation={event.location}
-                  />
-                  <SmsPreview
-                    eventId={event.id}
-                    guestId={event.guests?.[0]?.id || "example"}
-                    eventTitle={event.title}
-                    guestName={event.guests?.[0]?.name || "Convidado Exemplo"}
-                  />
-                </div>
-              </CardContent>
+              <CardContent><GuestList guests={event.guests || []} eventId={event.id} /></CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="photos">
-            <EventGallery eventId={event.id} photos={event.photos || []} canUpload={true} currentUser="Usuário Atual" />
-          </TabsContent>
-
           <TabsContent value="requests">
-            <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-lg">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-xl">Solicitações de Participação</CardTitle>
-              </CardHeader>
+            <Card>
+              <CardHeader><CardTitle>Solicitacoes e link publico</CardTitle></CardHeader>
               <CardContent className="space-y-6">
                 <PublicInviteShare
                   eventId={event.id}
@@ -305,20 +402,85 @@ export default function EventPage() {
                   eventFullDate={event.fullDate}
                   eventLocation={event.location}
                   eventDescription={event.description}
-                  confirmedGuests={event.confirmedGuests}
-                  totalGuests={event.totalGuests}
+                  confirmedGuests={stats.confirmed}
+                  totalGuests={stats.totalGuests}
                 />
                 <PendingRequestsList eventId={event.id} />
               </CardContent>
             </Card>
           </TabsContent>
+
+          <TabsContent value="expenses">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle>Gastos do evento</CardTitle>
+                <Button size="sm" onClick={() => setIsAddItemOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
+                  <Plus className="mr-2 h-4 w-4" /> Adicionar gasto
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-5">
+                <ItemsList items={event.items || []} eventId={event.id} />
+                <div className="rounded-md border bg-slate-50 p-4 text-sm">
+                  <div className="flex justify-between"><span>Total de gastos cadastrados</span><strong>{currency.format(stats.totalCost)}</strong></div>
+                  <div className="flex justify-between"><span>Custo medio por confirmado</span><strong>{currency.format(stats.costPerConfirmed)}</strong></div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="photos">
+            <EventGallery eventId={event.id} photos={event.photos || []} canUpload currentUser="Usuario atual" />
+          </TabsContent>
+
+          <TabsContent value="analytics">
+            <Card>
+              <CardHeader><CardTitle>Analises deste evento</CardTitle></CardHeader>
+              <CardContent className="grid gap-4 md:grid-cols-3">
+                <InfoBox label="Taxa de confirmacao" value={`${stats.confirmationRate}%`} />
+                <InfoBox label="Solicitacoes pendentes" value={String(stats.requests)} />
+                <InfoBox label="Custo total" value={currency.format(stats.totalCost)} />
+                <InfoBox label="Convidados sem resposta" value={String(stats.pending)} />
+                <InfoBox label="Acompanhantes pendentes" value={String(stats.pendingCompanions)} />
+                <InfoBox label="Fotos" value={String(stats.photoCount)} />
+              </CardContent>
+            </Card>
+          </TabsContent>
         </Tabs>
 
-        {/* Dialogs */}
         <AddItemDialog open={isAddItemOpen} onOpenChange={setIsAddItemOpen} eventId={event.id} />
         <AddGuestDialog open={isAddGuestOpen} onOpenChange={setIsAddGuestOpen} eventId={event.id} />
         <EditEventDialog open={isEditEventOpen} onOpenChange={setIsEditEventOpen} eventId={event.id} />
       </div>
+    </div>
+  )
+}
+
+function MetricCard({ title, value, icon, tone = "slate" }: { title: string; value: string | number; icon: React.ReactNode; tone?: "slate" | "emerald" | "amber" | "red" }) {
+  const tones = {
+    slate: "text-slate-700 bg-slate-100",
+    emerald: "text-emerald-700 bg-emerald-100",
+    amber: "text-amber-700 bg-amber-100",
+    red: "text-red-700 bg-red-100",
+  }
+
+  return (
+    <Card>
+      <CardContent className="flex items-center justify-between p-4">
+        <div>
+          <p className="text-sm text-slate-500">{title}</p>
+          <p className="mt-1 text-2xl font-semibold text-slate-950">{value}</p>
+        </div>
+        <div className={`rounded-md p-2 ${tones[tone]}`}>{icon}</div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function InfoBox({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-white p-3">
+      <p className="text-xs uppercase text-slate-500">{label}</p>
+      <p className="mt-1 font-medium text-slate-950">{value}</p>
     </div>
   )
 }

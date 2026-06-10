@@ -1,26 +1,18 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { RadioGroup, RadioItem } from "@/components/ui/radio-group"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { CalendarIcon, MapPin, Clock } from "lucide-react"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
+import { updateEventDetails } from "@/app/actions/events"
+import { useAuth } from "@/context/auth-context"
 import { useEventStore } from "@/stores/event-store"
 
 interface EditEventDialogProps {
@@ -29,75 +21,161 @@ interface EditEventDialogProps {
   eventId: string
 }
 
+const eventTypes = ["Festa", "Casamento", "Aniversario", "Corporativo", "Viagem", "Religioso", "Colaborativo", "Outro"]
+
+const toNumberOrNull = (value: string) => {
+  if (!value.trim()) return null
+  const parsed = Number(value.replace(",", "."))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const toInputDate = (event: any) => {
+  if (event?.startDate) return event.startDate
+  if (!event?.fullDate) return ""
+  const [day, month, year] = String(event.fullDate).split("/").map(Number)
+  if (!day || !month || !year) return ""
+  return `${year}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+}
+
 export default function EditEventDialog({ open, onOpenChange, eventId }: EditEventDialogProps) {
   const { toast } = useToast()
+  const { isDemoMode } = useAuth()
   const { getEventById, updateEvent } = useEventStore()
   const event = getEventById(eventId)
-
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [eventType, setEventType] = useState<string | undefined>(undefined)
-  const [eventName, setEventName] = useState("")
-  const [eventDescription, setEventDescription] = useState("")
-  const [date, setDate] = useState<Date | undefined>(undefined)
-  const [eventTime, setEventTime] = useState("")
-  const [eventLocation, setEventLocation] = useState("")
+  const [form, setForm] = useState({
+    title: "",
+    description: "",
+    type: "Festa",
+    status: "active",
+    startDate: "",
+    startTime: "",
+    endDate: "",
+    endTime: "",
+    location: "",
+    address: "",
+    mapsUrl: "",
+    eventMode: "presential",
+    meetingUrl: "",
+    capacity: "",
+    allowCompanions: false,
+    maxCompanionsPerGuest: "0",
+    companionsRequireApproval: true,
+    publicInviteEnabled: false,
+    rsvpDeadline: "",
+    budgetEstimated: "",
+    initialEstimatedCost: "",
+    financialNotes: "",
+  })
 
-  // Carregar dados do evento quando o diálogo for aberto
   useEffect(() => {
-    if (event && open) {
-      setEventType(event.type === "Festa" ? "festa" : "colaborativo")
-      setEventName(event.title)
-      setEventDescription(event.description)
-
-      // Converter a data do formato string para Date
-      if (event.fullDate) {
-        const [day, month, year] = event.fullDate.split("/").map(Number)
-        setDate(new Date(year, month - 1, day))
-      }
-
-      setEventTime(event.time)
-      setEventLocation(event.location)
-    }
+    if (!event || !open) return
+    setForm({
+      title: event.title || "",
+      description: event.description || "",
+      type: event.type || "Festa",
+      status: event.status || "active",
+      startDate: toInputDate(event),
+      startTime: event.startTime || event.time || "",
+      endDate: event.endDate || toInputDate(event),
+      endTime: event.endTime || "",
+      location: event.location || "",
+      address: event.address || "",
+      mapsUrl: event.mapsUrl || "",
+      eventMode: event.eventMode || "presential",
+      meetingUrl: event.meetingUrl || "",
+      capacity: event.capacity == null ? "" : String(event.capacity),
+      allowCompanions: Boolean(event.allowCompanions),
+      maxCompanionsPerGuest: String(event.maxCompanionsPerGuest ?? 0),
+      companionsRequireApproval: event.companionsRequireApproval ?? true,
+      publicInviteEnabled: Boolean(event.publicInviteEnabled),
+      rsvpDeadline: event.rsvpDeadline || "",
+      budgetEstimated: event.budgetEstimated == null ? "" : String(event.budgetEstimated),
+      initialEstimatedCost: event.initialEstimatedCost == null ? "" : String(event.initialEstimatedCost),
+      financialNotes: event.financialNotes || "",
+    })
   }, [event, open])
+
+  const setField = (field: keyof typeof form, value: string | boolean) => {
+    setForm((current) => ({ ...current, [field]: value }))
+  }
+
+  const validate = () => {
+    const capacity = toNumberOrNull(form.capacity)
+    const maxCompanions = toNumberOrNull(form.maxCompanionsPerGuest)
+    const budget = toNumberOrNull(form.budgetEstimated)
+    const initialCost = toNumberOrNull(form.initialEstimatedCost)
+
+    if (!form.title.trim()) return "Informe o nome do evento."
+    if (!form.startDate) return "Informe a data do evento."
+    if (!form.startTime) return "Informe o horario de inicio."
+    if (form.endTime && form.startTime && form.endTime <= form.startTime) return "O horario final precisa ser depois do inicio."
+    if (form.eventMode !== "online" && !form.location.trim()) return "Informe o local para eventos presenciais ou hibridos."
+    if (form.eventMode !== "presential" && !form.meetingUrl.trim()) return "Informe o link da reuniao para eventos online ou hibridos."
+    if (capacity !== null && capacity < 0) return "A capacidade nao pode ser negativa."
+    if (maxCompanions !== null && maxCompanions < 0) return "O maximo de acompanhantes nao pode ser negativo."
+    if (form.rsvpDeadline && form.startDate && form.rsvpDeadline > form.startDate) {
+      return "A data limite de confirmacao nao pode ser depois da data do evento."
+    }
+    if (budget !== null && budget < 0) return "O orcamento previsto nao pode ser negativo."
+    if (initialCost !== null && initialCost < 0) return "O custo inicial nao pode ser negativo."
+    return null
+  }
 
   const handleUpdateEvent = async () => {
     if (!event) return
-
-    if (!eventName || !date || !eventTime || !eventLocation) {
-      toast({
-        title: "Campos obrigatórios",
-        description: "Por favor, preencha todos os campos obrigatórios.",
-        variant: "destructive",
-      })
+    const error = validate()
+    if (error) {
+      toast({ title: "Revise os campos", description: error, variant: "destructive" })
       return
     }
 
     setIsSubmitting(true)
-
     try {
-      // Atualizar evento
-      const updatedEvent = {
+      const displayDate = format(new Date(`${form.startDate}T00:00:00`), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })
+      const fullDate = format(new Date(`${form.startDate}T00:00:00`), "dd/MM/yyyy")
+      const payload = {
         ...event,
-        title: eventName,
-        type: eventType === "festa" ? "Festa" : "Colaborativo",
-        date: date ? format(date, "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR }) : event.date,
-        time: eventTime,
-        fullDate: date ? format(date, "dd/MM/yyyy") : event.fullDate,
-        location: eventLocation,
-        description: eventDescription,
+        title: form.title.trim(),
+        description: form.description,
+        type: form.type,
+        category: form.type,
+        status: form.status,
+        date: displayDate,
+        fullDate,
+        time: form.startTime,
+        startDate: form.startDate,
+        startTime: form.startTime,
+        endDate: form.endDate || form.startDate,
+        endTime: form.endTime,
+        location: form.location,
+        address: form.address,
+        mapsUrl: form.mapsUrl,
+        eventMode: form.eventMode,
+        meetingUrl: form.meetingUrl,
+        capacity: toNumberOrNull(form.capacity),
+        allowCompanions: form.allowCompanions,
+        maxCompanionsPerGuest: toNumberOrNull(form.maxCompanionsPerGuest) || 0,
+        companionsRequireApproval: form.companionsRequireApproval,
+        publicInviteEnabled: form.publicInviteEnabled,
+        rsvpDeadline: form.rsvpDeadline || null,
+        budgetEstimated: toNumberOrNull(form.budgetEstimated),
+        initialEstimatedCost: toNumberOrNull(form.initialEstimatedCost),
+        financialNotes: form.financialNotes,
       }
 
-      updateEvent(event.id, updatedEvent)
-      onOpenChange(false)
+      if (!isDemoMode) {
+        const result = await updateEventDetails(event.id, payload)
+        if (result.error || !result.data) throw new Error(result.error || "Nao foi possivel atualizar o evento.")
+      }
 
-      toast({
-        title: "Evento atualizado",
-        description: "As informações do evento foram atualizadas com sucesso.",
-      })
+      updateEvent(event.id, payload)
+      onOpenChange(false)
+      toast({ title: "Evento atualizado", description: "A central de gestao ja reflete as novas informacoes." })
     } catch (error) {
       toast({
         title: "Erro ao atualizar evento",
-        description: "Ocorreu um erro ao atualizar o evento. Tente novamente.",
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
         variant: "destructive",
       })
     } finally {
@@ -109,112 +187,132 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl">
+      <DialogContent className="max-h-[90vh] max-w-5xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Editar evento</DialogTitle>
-          <DialogDescription>Atualize as informações do seu evento.</DialogDescription>
+          <DialogDescription>Atualize os dados principais, RSVP, convidados e informacoes financeiras.</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-6 py-4">
-          <div className="grid grid-cols-1 gap-4">
-            <div>
-              <Label htmlFor="event-type">Tipo de evento</Label>
-              <RadioGroup value={eventType} onValueChange={setEventType} className="grid grid-cols-2 gap-4 mt-2">
-                <div>
-                  <RadioItem value="festa" id="festa" className="peer sr-only" />
-                  <Label
-                    htmlFor="festa"
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-emerald-500 [&:has([data-state=checked])]:border-emerald-500"
-                  >
-                    <div className="text-center">
-                      <h3 className="font-semibold">Festa</h3>
-                      <p className="text-sm text-gray-500">Você é o anfitrião e os convidados não precisam pagar</p>
-                    </div>
-                  </Label>
-                </div>
 
-                <div>
-                  <RadioItem value="colaborativo" id="colaborativo" className="peer sr-only" />
-                  <Label
-                    htmlFor="colaborativo"
-                    className="flex flex-col items-center justify-between rounded-md border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-emerald-500 [&:has([data-state=checked])]:border-emerald-500"
-                  >
-                    <div className="text-center">
-                      <h3 className="font-semibold">Colaborativo</h3>
-                      <p className="text-sm text-gray-500">Cada convidado contribui com uma parte dos custos</p>
-                    </div>
-                  </Label>
-                </div>
-              </RadioGroup>
+        <div className="grid gap-6 py-2">
+          <section className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="event-title">Nome do evento*</Label>
+              <Input id="event-title" value={form.title} onChange={(e) => setField("title", e.target.value)} />
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="event-name">Nome do evento*</Label>
-              <Input
-                id="event-name"
-                placeholder="Ex: Churrasco de aniversário"
-                value={eventName}
-                onChange={(e) => setEventName(e.target.value)}
-              />
+              <Label>Tipo</Label>
+              <Select value={form.type} onValueChange={(value) => setField("type", value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{eventTypes.map((type) => <SelectItem key={type} value={type}>{type}</SelectItem>)}</SelectContent>
+              </Select>
             </div>
-
             <div className="space-y-2">
-              <Label htmlFor="event-description">Descrição (opcional)</Label>
-              <Textarea
-                id="event-description"
-                placeholder="Detalhes sobre o evento..."
-                value={eventDescription}
-                onChange={(e) => setEventDescription(e.target.value)}
-              />
+              <Label>Status</Label>
+              <Select value={form.status} onValueChange={(value) => setField("status", value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="draft">Rascunho</SelectItem>
+                  <SelectItem value="active">Ativo</SelectItem>
+                  <SelectItem value="completed">Concluido</SelectItem>
+                  <SelectItem value="canceled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Data*</Label>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="outline"
-                      className={cn("w-full justify-start text-left font-normal", !date && "text-muted-foreground")}
-                    >
-                      <CalendarIcon className="mr-2 h-4 w-4" />
-                      {date ? format(date, "PPP", { locale: ptBR }) : "Selecione uma data"}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0">
-                    <Calendar mode="single" selected={date} onSelect={setDate} initialFocus locale={ptBR} />
-                  </PopoverContent>
-                </Popover>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="event-time">Horário*</Label>
-                <div className="relative">
-                  <Input id="event-time" type="time" value={eventTime} onChange={(e) => setEventTime(e.target.value)} />
-                  <Clock className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
-                </div>
-              </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Descricao</Label>
+              <Textarea value={form.description} onChange={(e) => setField("description", e.target.value)} />
             </div>
+          </section>
 
+          <section className="grid gap-4 md:grid-cols-4">
             <div className="space-y-2">
-              <Label htmlFor="event-location">Local*</Label>
-              <div className="relative">
-                <Input
-                  id="event-location"
-                  placeholder="Endereço do evento"
-                  value={eventLocation}
-                  onChange={(e) => setEventLocation(e.target.value)}
-                />
-                <MapPin className="absolute right-3 top-2.5 h-4 w-4 text-gray-400" />
-              </div>
+              <Label>Data*</Label>
+              <Input type="date" value={form.startDate} onChange={(e) => setField("startDate", e.target.value)} />
             </div>
-          </div>
+            <div className="space-y-2">
+              <Label>Inicio*</Label>
+              <Input type="time" value={form.startTime} onChange={(e) => setField("startTime", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Fim</Label>
+              <Input type="time" value={form.endTime} onChange={(e) => setField("endTime", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Modo</Label>
+              <Select value={form.eventMode} onValueChange={(value) => setField("eventMode", value)}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="presential">Presencial</SelectItem>
+                  <SelectItem value="online">Online</SelectItem>
+                  <SelectItem value="hybrid">Hibrido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Local</Label>
+              <Input value={form.location} onChange={(e) => setField("location", e.target.value)} />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Endereco completo</Label>
+              <Input value={form.address} onChange={(e) => setField("address", e.target.value)} />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Google Maps</Label>
+              <Input value={form.mapsUrl} onChange={(e) => setField("mapsUrl", e.target.value)} />
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <Label>Link da reuniao</Label>
+              <Input value={form.meetingUrl} onChange={(e) => setField("meetingUrl", e.target.value)} />
+            </div>
+          </section>
+
+          <section className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Capacidade</Label>
+              <Input type="number" min="0" value={form.capacity} onChange={(e) => setField("capacity", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Max. acompanhantes</Label>
+              <Input type="number" min="0" value={form.maxCompanionsPerGuest} onChange={(e) => setField("maxCompanionsPerGuest", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Limite RSVP</Label>
+              <Input type="date" value={form.rsvpDeadline} onChange={(e) => setField("rsvpDeadline", e.target.value)} />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <Label>Permitir acompanhantes</Label>
+              <Switch checked={form.allowCompanions} onCheckedChange={(checked) => setField("allowCompanions", checked)} />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <Label>Acompanhante exige aprovacao</Label>
+              <Switch checked={form.companionsRequireApproval} onCheckedChange={(checked) => setField("companionsRequireApproval", checked)} />
+            </div>
+            <div className="flex items-center justify-between rounded-md border p-3">
+              <Label>Link publico ativo</Label>
+              <Switch checked={form.publicInviteEnabled} onCheckedChange={(checked) => setField("publicInviteEnabled", checked)} />
+            </div>
+          </section>
+
+          <section className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Orcamento previsto</Label>
+              <Input value={form.budgetEstimated} onChange={(e) => setField("budgetEstimated", e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Custo inicial estimado</Label>
+              <Input value={form.initialEstimatedCost} onChange={(e) => setField("initialEstimatedCost", e.target.value)} />
+            </div>
+            <div className="space-y-2 md:col-span-3">
+              <Label>Observacoes financeiras</Label>
+              <Textarea value={form.financialNotes} onChange={(e) => setField("financialNotes", e.target.value)} />
+            </div>
+          </section>
         </div>
+
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleUpdateEvent} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700">
-            {isSubmitting ? "Salvando..." : "Salvar alterações"}
+            {isSubmitting ? "Salvando..." : "Salvar alteracoes"}
           </Button>
         </DialogFooter>
       </DialogContent>

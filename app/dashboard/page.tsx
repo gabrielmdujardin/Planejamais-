@@ -12,6 +12,7 @@ import EventCard from "@/components/event-card"
 import Link from "next/link"
 import { useAuth } from "@/context/auth-context"
 import { useEventStore } from "@/stores/event-store"
+import { getEvents } from "@/app/actions/events"
 import { motion } from "framer-motion"
 import { AnimatedCard } from "@/components/animated-card"
 import { Calendar, dateFnsLocalizer, type View, Views } from "react-big-calendar"
@@ -142,7 +143,7 @@ const mockCalendarEvents: DatabaseEvent[] = [
 
 export default function Dashboard() {
   const { user } = useAuth()
-  const { events } = useEventStore()
+  const { events, setEvents } = useEventStore()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("events")
@@ -159,12 +160,25 @@ export default function Dashboard() {
   // Simular carregamento de eventos do usuário
   useEffect(() => {
     const loadEvents = async () => {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-      setIsLoading(false)
+      try {
+        const result = await getEvents()
+        if (!result.error) {
+          setEvents(result.data)
+        }
+      } catch (error) {
+        console.error("Erro ao carregar eventos:", error)
+        toast({
+          title: "Erro ao carregar eventos",
+          description: "Não foi possível buscar seus eventos no Supabase.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsLoading(false)
+      }
     }
 
     loadEvents()
-  }, [])
+  }, [setEvents, toast])
 
   // Buscar eventos mockados para o calendário
   useEffect(() => {
@@ -177,8 +191,19 @@ export default function Dashboard() {
         // Simular delay de rede
         await new Promise((resolve) => setTimeout(resolve, 800))
 
-        // Usar dados mockados
-        const data = mockCalendarEvents
+        const data: DatabaseEvent[] =
+          events.length > 0
+            ? events.map((event) => ({
+                id: event.id,
+                title: event.title,
+                date: event.fullDate || event.date,
+                time: event.time,
+                location: event.location,
+                description: event.description,
+                type: event.type,
+                status: "confirmed",
+              }))
+            : mockCalendarEvents
 
         // Converter eventos do banco para formato do calendário
         const calendarEventsData: CalendarEvent[] = data.map((event) => {
@@ -234,7 +259,7 @@ export default function Dashboard() {
     }
 
     fetchCalendarEvents()
-  }, [activeTab, toast])
+  }, [activeTab, events, toast])
 
   // Filtrar eventos por tipo
   useEffect(() => {

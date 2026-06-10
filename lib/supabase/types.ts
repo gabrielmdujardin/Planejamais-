@@ -23,6 +23,18 @@ export type Database = {
           full_date: string | null
           location: string
           description: string
+          status: string
+          image: string | null
+          start_date: string | null
+          start_time: string | null
+          end_date: string | null
+          end_time: string | null
+          address: string | null
+          maps_url: string | null
+          event_mode: string
+          meeting_url: string | null
+          capacity: number | null
+          allow_guests: boolean
           confirmed_guests: number
           total_guests: number
           public_invite_token: string | null
@@ -31,6 +43,15 @@ export type Database = {
           rsvp_deadline: string | null
           allow_companions: boolean
           max_companions: number
+          companions_require_approval: boolean
+          rsvp_enabled: boolean
+          allow_response_edit: boolean
+          invitation_message: string | null
+          budget_estimated: number | null
+          initial_estimated_cost: number | null
+          currency: string
+          financial_notes: string | null
+          visibility: string
           created_at: string
           updated_at: string
           user_id: string
@@ -45,6 +66,18 @@ export type Database = {
           full_date?: string | null
           location: string
           description: string
+          status?: string
+          image?: string | null
+          start_date?: string | null
+          start_time?: string | null
+          end_date?: string | null
+          end_time?: string | null
+          address?: string | null
+          maps_url?: string | null
+          event_mode?: string
+          meeting_url?: string | null
+          capacity?: number | null
+          allow_guests?: boolean
           confirmed_guests?: number
           total_guests?: number
           public_invite_token?: string | null
@@ -53,6 +86,15 @@ export type Database = {
           rsvp_deadline?: string | null
           allow_companions?: boolean
           max_companions?: number
+          companions_require_approval?: boolean
+          rsvp_enabled?: boolean
+          allow_response_edit?: boolean
+          invitation_message?: string | null
+          budget_estimated?: number | null
+          initial_estimated_cost?: number | null
+          currency?: string
+          financial_notes?: string | null
+          visibility?: string
           created_at?: string
           updated_at?: string
           user_id: string
@@ -67,6 +109,18 @@ export type Database = {
           full_date?: string | null
           location?: string
           description?: string
+          status?: string
+          image?: string | null
+          start_date?: string | null
+          start_time?: string | null
+          end_date?: string | null
+          end_time?: string | null
+          address?: string | null
+          maps_url?: string | null
+          event_mode?: string
+          meeting_url?: string | null
+          capacity?: number | null
+          allow_guests?: boolean
           confirmed_guests?: number
           total_guests?: number
           public_invite_token?: string | null
@@ -75,6 +129,15 @@ export type Database = {
           rsvp_deadline?: string | null
           allow_companions?: boolean
           max_companions?: number
+          companions_require_approval?: boolean
+          rsvp_enabled?: boolean
+          allow_response_edit?: boolean
+          invitation_message?: string | null
+          budget_estimated?: number | null
+          initial_estimated_cost?: number | null
+          currency?: string
+          financial_notes?: string | null
+          visibility?: string
           created_at?: string
           updated_at?: string
           user_id?: string

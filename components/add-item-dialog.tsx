@@ -2,19 +2,13 @@
 
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
+import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { useEventStore } from "@/stores/event-store"
 import ImageUpload from "@/components/image-upload"
+import { useEventStore } from "@/stores/event-store"
 
 interface AddItemDialogProps {
   open: boolean
@@ -22,65 +16,67 @@ interface AddItemDialogProps {
   eventId: string
 }
 
-export default function AddItemDialog({ open, onOpenChange, eventId }: AddItemDialogProps) {
-  const [itemName, setItemName] = useState("")
-  const [itemPrice, setItemPrice] = useState("")
-  const [itemImage, setItemImage] = useState("")
-  const [isSubmitting, setIsSubmitting] = useState(false)
+const parseMoney = (value: string) => Number(value.replace(",", "."))
 
+export default function AddItemDialog({ open, onOpenChange, eventId }: AddItemDialogProps) {
+  const [name, setName] = useState("")
+  const [category, setCategory] = useState("")
+  const [description, setDescription] = useState("")
+  const [quantity, setQuantity] = useState("1")
+  const [unitPrice, setUnitPrice] = useState("")
+  const [notes, setNotes] = useState("")
+  const [image, setImage] = useState("")
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const { toast } = useToast()
   const { addItem } = useEventStore()
 
+  const total = (Number(quantity.replace(",", ".")) || 0) * (Number(unitPrice.replace(",", ".")) || 0)
+
+  const reset = () => {
+    setName("")
+    setCategory("")
+    setDescription("")
+    setQuantity("1")
+    setUnitPrice("")
+    setNotes("")
+    setImage("")
+  }
+
   const handleAddItem = () => {
-    if (!itemName) {
-      toast({
-        title: "Nome obrigatório",
-        description: "Por favor, informe o nome do item.",
-        variant: "destructive",
-      })
+    if (!name.trim()) {
+      toast({ title: "Nome obrigatorio", description: "Informe o nome do gasto.", variant: "destructive" })
       return
     }
 
-    const price = Number.parseFloat(itemPrice.replace(",", "."))
-    if (isNaN(price) || price <= 0) {
-      toast({
-        title: "Valor inválido",
-        description: "Por favor, informe um valor válido para o item.",
-        variant: "destructive",
-      })
+    const parsedQuantity = Number(quantity.replace(",", "."))
+    const parsedUnitPrice = parseMoney(unitPrice)
+    if (!Number.isFinite(parsedQuantity) || parsedQuantity <= 0 || !Number.isFinite(parsedUnitPrice) || parsedUnitPrice < 0) {
+      toast({ title: "Valor invalido", description: "Informe quantidade maior que zero e valor unitario valido.", variant: "destructive" })
       return
     }
 
     setIsSubmitting(true)
-
     try {
-      // Adicionar item ao evento
-      const newItem = {
+      const price = parsedQuantity * parsedUnitPrice
+      addItem(eventId, {
         id: Date.now().toString(),
-        name: itemName,
+        name: name.trim(),
+        category: category.trim() || "Geral",
+        description,
+        quantity: parsedQuantity,
+        unitPrice: parsedUnitPrice,
         price,
+        estimatedCost: price,
+        paymentStatus: "estimated",
+        notes,
         assignedTo: null,
-        image: itemImage || null,
-      }
-
-      addItem(eventId, newItem)
-
-      // Limpar formulário
-      setItemName("")
-      setItemPrice("")
-      setItemImage("")
+        image: image || null,
+      })
+      reset()
       onOpenChange(false)
-
-      toast({
-        title: "Item adicionado",
-        description: `${itemName} foi adicionado ao evento.`,
-      })
+      toast({ title: "Gasto adicionado", description: `${name} entrou no resumo financeiro do evento.` })
     } catch (error) {
-      toast({
-        title: "Erro ao adicionar item",
-        description: "Ocorreu um erro ao adicionar o item. Tente novamente.",
-        variant: "destructive",
-      })
+      toast({ title: "Erro ao adicionar gasto", description: "Tente novamente em instantes.", variant: "destructive" })
     } finally {
       setIsSubmitting(false)
     }
@@ -88,44 +84,51 @@ export default function AddItemDialog({ open, onOpenChange, eventId }: AddItemDi
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Adicionar item</DialogTitle>
-          <DialogDescription>Adicione um novo item ao seu evento.</DialogDescription>
+          <DialogTitle>Adicionar gasto</DialogTitle>
+          <DialogDescription>Cadastre custos estimados ou reais do evento.</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
+        <div className="grid gap-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="item-name">Nome do item*</Label>
-            <Input
-              id="item-name"
-              placeholder="Ex: Carne para churrasco"
-              value={itemName}
-              onChange={(e) => setItemName(e.target.value)}
-            />
+            <Label>Nome*</Label>
+            <Input placeholder="Ex: Buffet, decoracao, bebidas" value={name} onChange={(event) => setName(event.target.value)} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Categoria</Label>
+              <Input placeholder="Ex: Alimentacao" value={category} onChange={(event) => setCategory(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Quantidade*</Label>
+              <Input type="number" min="0" step="0.01" value={quantity} onChange={(event) => setQuantity(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Valor unitario (R$)*</Label>
+              <Input placeholder="Ex: 150,00" value={unitPrice} onChange={(event) => setUnitPrice(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Total</Label>
+              <Input readOnly value={`R$ ${total.toFixed(2)}`} />
+            </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="item-price">Valor (R$)*</Label>
-            <Input
-              id="item-price"
-              placeholder="Ex: 150,00"
-              value={itemPrice}
-              onChange={(e) => setItemPrice(e.target.value)}
-            />
+            <Label>Descricao</Label>
+            <Textarea value={description} onChange={(event) => setDescription(event.target.value)} />
           </div>
           <div className="space-y-2">
-            <Label>Foto do item (opcional)</Label>
-            <ImageUpload onImageSelect={setItemImage} currentImage={itemImage} />
-            <p className="text-xs text-gray-500 mt-1">
-              Adicione uma foto do item comprado para compartilhar com os participantes
-            </p>
+            <Label>Observacoes</Label>
+            <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} />
+          </div>
+          <div className="space-y-2">
+            <Label>Foto do comprovante ou item (demo/local)</Label>
+            <ImageUpload onImageSelect={setImage} currentImage={image} />
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancelar
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleAddItem} disabled={isSubmitting} className="bg-emerald-600 hover:bg-emerald-700">
-            {isSubmitting ? "Adicionando..." : "Adicionar item"}
+            {isSubmitting ? "Adicionando..." : "Adicionar gasto"}
           </Button>
         </DialogFooter>
       </DialogContent>

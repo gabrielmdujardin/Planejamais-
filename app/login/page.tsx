@@ -35,7 +35,7 @@ export default function LoginPage() {
       await login(email, password)
       router.push("/dashboard")
     } catch (err) {
-      setError("Email ou senha inválidos")
+      setError(err instanceof Error ? err.message : "Email ou senha inválidos")
     } finally {
       setLoading(false)
     }
@@ -52,11 +52,11 @@ export default function LoginPage() {
           <Alert className="mb-6 bg-blue-50 border-blue-200">
             <Info className="h-4 w-4 text-blue-600" />
             <AlertDescription className="text-blue-800">
-              <strong>Modo Demo:</strong> Use qualquer email e senha ou{" "}
+              <strong>Modo Demo:</strong> use demo@planeja.app / demo123. Com Supabase configurado, use uma conta real.{" "}
               <button type="button" onClick={handleDemoFill} className="underline font-semibold hover:text-blue-900">
                 clique aqui
               </button>{" "}
-              para preencher automaticamente
+              para preencher a demo.
             </AlertDescription>
           </Alert>
 

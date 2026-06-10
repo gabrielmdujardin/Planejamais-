@@ -976,8 +976,8 @@ export default function AnalyticsPage() {
                 <ChartCard title="Matriz de risco do evento" description="Risco baseado em confirmação, pendências, proximidade, custo e aprovações.">
                   {data.charts.riskMatrix.length > 0 ? (
                     <div className="space-y-3">
-                      {data.charts.riskMatrix.map((event) => (
-                        <div key={event.name} className="rounded-lg border p-4 transition hover:border-emerald-200 hover:shadow-sm" title={event.reason}>
+                      {data.charts.riskMatrix.map((event, index) => (
+                        <div key={`${event.name}-${index}`} className="rounded-lg border p-4 transition hover:border-emerald-200 hover:shadow-sm" title={event.reason}>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <p className="font-medium">{event.name}</p>
@@ -1003,8 +1003,8 @@ export default function AnalyticsPage() {
                 <ChartCard title="Ranking de eventos que precisam de atenção" description="Ordenado por sinais de risco e pendências operacionais." className="lg:col-span-2">
                   {data.rankings.attentionEvents.length > 0 ? (
                     <div className="grid gap-3 md:grid-cols-2">
-                      {data.rankings.attentionEvents.map((event) => (
-                        <div key={event.name} className="rounded-lg border bg-white p-4 transition hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-md" title={event.reason}>
+                      {data.rankings.attentionEvents.map((event, index) => (
+                        <div key={`${event.name}-${index}`} className="rounded-lg border bg-white p-4 transition hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-md" title={event.reason}>
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="font-medium">{event.name}</p>
@@ -1115,8 +1115,8 @@ export default function AnalyticsPage() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {data.charts.advancedComparison.map((event) => (
-                            <TableRow key={event.name}>
+                          {data.charts.advancedComparison.map((event, index) => (
+                            <TableRow key={`${event.name}-${index}`}>
                               <TableCell className="min-w-[180px] font-medium">{event.name}</TableCell>
                               <TableCell>{formatPercent(event.confirmationRate || 0)}</TableCell>
                               <TableCell>{event.totalGuests || 0}</TableCell>
