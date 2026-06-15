@@ -121,3 +121,19 @@ PRESSMAN, Roger S.; MAXIM, Bruce R. *Software engineering: a practitioner's appr
 PROJECT MANAGEMENT INSTITUTE. *A guide to the Project Management Body of Knowledge (PMBOK Guide)*. 7. ed. Newtown Square: Project Management Institute, 2021.
 
 SOMMERVILLE, Ian. *Software engineering*. 10. ed. Harlow: Pearson, 2019.
+
+## 13. Kanban no GitHub
+
+O projeto **Planejamais** utiliza o GitHub como ferramenta de apoio ao fluxo Kanban, aplicando conceitos simples de maneira prática e integrada ao desenvolvimento. Abaixo estão os principais pontos adotados:
+
+- **Issues como cartões**: Cada tarefa ou funcionalidade foi criada como uma *Issue* no repositório. O título descreve a tarefa e o corpo contém detalhes, critérios de aceitação e referências.
+- **Projects (Board)**: Foi habilitado o recurso *GitHub Projects (beta)* no repositório, configurado como um quadro Kanban com as colunas **Backlog**, **Em progresso** e **Concluído**. As *Issues* são movidas entre as colunas de acordo com seu status.
+- **WIP limit**: Embora o GitHub não ofereça limite de trabalho em progresso nativo, o time adotou a prática de limitar manualmente a quantidade de cartões na coluna *Em progresso* a **3**. Quando o limite é atingido, novas tarefas permanecem em *Backlog* até que algum cartão seja concluído.
+- **Etiquetas (Labels)**: Foram criadas etiquetas para categorizar as tarefas: `feature`, `bug`, `enhancement`, `priority:high`, `priority:low`. As etiquetas ajudam a filtrar o board e priorizar itens críticos.
+- **Milestones**: Cada sprint ou ciclo de entrega recebeu um *Milestone* no GitHub. As *Issues* são associadas ao *Milestone* correspondente, permitindo visualizar o progresso do sprint no relatório de *burndown*.
+- **Pull Requests como “Done”**: Quando uma *Issue* é resolvida, um *Pull Request* é aberto vinculando‑a. Ao mesclar o PR, a *Issue* é automaticamente movida para a coluna **Concluído** e o estado é fechado, completando o ciclo Kanban.
+- **Automação via GitHub Actions**: Um workflow simples foi criado para validar que a *Issue* vinculada ao PR tem a label `ready-for-review` antes de permitir o merge, reforçando a disciplina do fluxo.
+
+Essas práticas mantêm todo o time visível sobre o que está sendo trabalhado, facilitam a priorização e permitem que o histórico de decisões fique registrado diretamente no repositório, integrando gestão de projeto e desenvolvimento de código em um único lugar.
+
+> **Observação**: O Kanban adotado aqui é deliberadamente simples, focado em melhorar a comunicação e fluxo de trabalho sem introduzir ferramentas externas complexas. A equipe pode evoluir para recursos mais avançados (por exemplo, automações de limites WIP ou integração com métricas de lead time) conforme a necessidade.
