@@ -132,12 +132,18 @@ type LocalEvent = {
   type: string
   category?: string
   status?: string
+  publicInviteEnabled?: boolean
   date: string
   createdAt?: string
   guests?: Array<{
     id: string
     name: string
-    status: "pending" | "confirmed" | "declined"
+    status: "pending" | "confirmed" | "declined" | "awaiting_approval" | "pending_approval" | "rejected"
+    companions?: Array<{
+      id: string
+      name: string
+      status: "pending" | "approved" | "rejected"
+    }>
   }>
   items?: Array<{
     id: string
@@ -170,15 +176,24 @@ function formatPercent(value: number) {
 function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): AnalyticsData {
   const filteredEvents = selectedEventId === "all" ? events : events.filter((event) => event.id === selectedEventId)
   const allGuests = filteredEvents.flatMap((event) => event.guests || [])
+  const allCompanions = allGuests.flatMap((guest) => guest.companions || [])
   const allItems = filteredEvents.flatMap((event) => itemEventPairs(event))
   const confirmedGuests = allGuests.filter((guest) => guest.status === "confirmed").length
   const pendingGuests = allGuests.filter((guest) => guest.status === "pending").length
   const declinedGuests = allGuests.filter((guest) => guest.status === "declined").length
+  const pendingRequests = allGuests.filter((guest) => guest.status === "awaiting_approval" || guest.status === "pending_approval").length
+  const approvedCompanions = allCompanions.filter((companion) => companion.status === "approved").length
+  const pendingCompanions = allCompanions.filter((companion) => companion.status === "pending").length
+  const rejectedCompanions = allCompanions.filter((companion) => companion.status === "rejected").length
+  const publicInviteGuests = filteredEvents.reduce(
+    (sum, event) => sum + (event.publicInviteEnabled ? (event.guests || []).length : 0),
+    0,
+  )
   const estimatedCost = allItems.reduce((sum, item) => sum + item.value, 0)
   const confirmationRate = allGuests.length > 0 ? (confirmedGuests / allGuests.length) * 100 : 0
   const responseRate = allGuests.length > 0 ? ((confirmedGuests + declinedGuests) / allGuests.length) * 100 : 0
-  const projectedPeopleLikely = confirmedGuests + Math.ceil(pendingGuests * 0.45)
-  const projectedPeopleMax = confirmedGuests + pendingGuests
+  const projectedPeopleLikely = confirmedGuests + approvedCompanions + Math.ceil((pendingGuests + pendingCompanions) * 0.45)
+  const projectedPeopleMax = confirmedGuests + pendingGuests + approvedCompanions + pendingCompanions
   const costPerPersonBase = projectedPeopleMax > 0 ? estimatedCost / projectedPeopleMax : 0
 
   const costByEvent = filteredEvents
@@ -220,6 +235,7 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
 
   const advancedComparison = filteredEvents.map((event) => {
     const guests = event.guests || []
+    const companions = guests.flatMap((guest) => guest.companions || [])
     const confirmed = guests.filter((guest) => guest.status === "confirmed").length
     const pending = guests.filter((guest) => guest.status === "pending").length
     const totalCost = (event.items || []).reduce((sum, item) => sum + (Number(item.price) || 0), 0)
@@ -231,8 +247,8 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
       totalCost,
       costPerGuest: guests.length > 0 ? totalCost / guests.length : 0,
       pending,
-      publicRequests: 0,
-      companions: 0,
+      publicRequests: guests.filter((guest) => guest.status === "awaiting_approval" || guest.status === "pending_approval").length,
+      companions: companions.length,
     }
   })
 
@@ -266,6 +282,25 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
     return acc
   }, {})
 
+  const confirmationsOverTimeMap = filteredEvents.reduce<Record<string, number>>((acc, event) => {
+    const confirmed = (event.guests || []).filter((guest) => guest.status === "confirmed").length
+    if (confirmed === 0) return acc
+
+    const date = new Date(event.createdAt || event.date || "")
+    const label = Number.isNaN(date.getTime())
+      ? "Sem data"
+      : date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })
+
+    acc[label] = (acc[label] || 0) + confirmed
+    return acc
+  }, {})
+
+  let cumulativeConfirmations = 0
+  const confirmationsOverTime = Object.entries(confirmationsOverTimeMap).map(([name, value]) => {
+    cumulativeConfirmations += value
+    return { name, value: cumulativeConfirmations }
+  })
+
   const metrics = {
     totalEvents: filteredEvents.length,
     totalGuests: allGuests.length,
@@ -274,14 +309,14 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
     declinedGuests,
     confirmationRate,
     responseRate,
-    pendingRequests: 0,
-    requestedCompanions: 0,
-    approvedCompanions: 0,
-    pendingCompanions: 0,
-    rejectedCompanions: 0,
-    publicInviteGuests: 0,
+    pendingRequests,
+    requestedCompanions: allCompanions.length,
+    approvedCompanions,
+    pendingCompanions,
+    rejectedCompanions,
+    publicInviteGuests,
     totalPeopleEstimated: projectedPeopleMax,
-    totalPeopleConfirmed: confirmedGuests,
+    totalPeopleConfirmed: confirmedGuests + approvedCompanions,
     projectedPeopleLikely,
     projectedPeopleMax,
     estimatedCost,
@@ -308,9 +343,9 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
         { name: "Aguardando aprovação", value: 0 },
       ],
       companionStatus: [
-        { name: "Aprovados", value: 0 },
-        { name: "Pendentes", value: 0 },
-        { name: "Recusados", value: 0 },
+        { name: "Aprovados", value: approvedCompanions },
+        { name: "Pendentes", value: pendingCompanions },
+        { name: "Recusados", value: rejectedCompanions },
       ],
       confirmationFunnel: [
         { name: "Total de convidados", value: allGuests.length },
@@ -318,8 +353,8 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
         { name: "Confirmados", value: confirmedGuests },
         { name: "Recusados", value: declinedGuests },
         { name: "Aguardando aprovação", value: 0 },
-        { name: "Acompanhantes solicitados", value: 0 },
-        { name: "Acompanhantes aprovados", value: 0 },
+        { name: "Acompanhantes solicitados", value: allCompanions.length },
+        { name: "Acompanhantes aprovados", value: approvedCompanions },
       ],
       attendanceProjection: [
         { name: "Mínima", value: confirmedGuests, detail: "Apenas confirmados" },
@@ -337,7 +372,7 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
       costByEvent,
       costByItem: paretoCosts,
       confirmationsByEvent,
-      confirmationsOverTime: [],
+      confirmationsOverTime,
       eventsByStatus: Object.entries(eventsByStatusMap).map(([name, value]) => ({ name, value })),
       eventsByMonth: Object.entries(eventsByMonthMap).map(([name, value]) => ({
         name,
