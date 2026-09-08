@@ -2,29 +2,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { z } = require('zod');
 
-// 1. Definição do esquema idêntico ao lib/validation.ts para teste unitário
-const companionSchema = z.object({
-  name: z.string().trim().min(2, "Nome do acompanhante deve ter no mínimo 2 caracteres").max(100),
-  email: z.string().trim().email("E-mail do acompanhante inválido").max(255).optional().or(z.literal("")),
-  phone: z.string().trim().max(30).optional().or(z.literal("")),
-  notes: z.string().trim().max(500).optional().or(z.literal("")),
-});
-
-const publicRsvpSchema = z.object({
-  name: z.string().trim().min(2, "Nome é obrigatório e deve ter pelo menos 2 caracteres").max(100),
-  email: z.string().trim().email("Formato de e-mail inválido").max(255),
-  phone: z.string().trim().min(8, "Telefone inválido").max(30),
-  attendanceStatus: z.enum(["confirmed", "declined"]).default("confirmed"),
-  notes: z.string().trim().max(500).optional().or(z.literal("")),
-  dietaryRestrictions: z.string().trim().max(500).optional().or(z.literal("")),
-  accessibilityNeeds: z.string().trim().max(500).optional().or(z.literal("")),
-  companions: z.array(companionSchema).max(10).optional().default([]),
-});
-
-// Import do rate limiter
+// 1. Re-import dos esquemas e utilitários oficiais
+const { companionSchema, publicRsvpSchema } = require('../lib/validation.ts');
 const { checkRateLimit } = require('../lib/rate-limit.ts');
 
-test('Unit Test — Validação Zod de Payload RSVP Válido (Cenário de Sucesso)', () => {
+// --- SUÍTE DE TESTES PARA PLAN-010 (Segurança do Endpoint RSVP) ---
+
+test('PLAN-010: Payload RSVP válido passa na validação Zod', () => {
   const validPayload = {
     name: 'Gabriel Dujardin',
     email: 'gabriel@example.com',
@@ -45,9 +29,9 @@ test('Unit Test — Validação Zod de Payload RSVP Válido (Cenário de Sucesso
   }
 });
 
-test('Unit Test — Validação Zod rejeita Nome Curto ou Vazio (Caso Limite)', () => {
+test('PLAN-010: Rejeita nome com menos de 2 caracteres (Caso Limite)', () => {
   const invalidPayload = {
-    name: 'A', // menos de 2 caracteres
+    name: 'A',
     email: 'test@example.com',
     phone: '11987654321',
   };
@@ -59,7 +43,7 @@ test('Unit Test — Validação Zod rejeita Nome Curto ou Vazio (Caso Limite)', 
   }
 });
 
-test('Unit Test — Validação Zod rejeita E-mail Malformado (Cenário de Erro)', () => {
+test('PLAN-010: Rejeita formato de e-mail malformado (Cenário de Erro)', () => {
   const invalidPayload = {
     name: 'Carlos Oliveira',
     email: 'email-invalido-sem-arroba',
@@ -73,8 +57,42 @@ test('Unit Test — Validação Zod rejeita E-mail Malformado (Cenário de Erro)
   }
 });
 
-test('Unit Test — Rate Limiter permite até 10 requisições e bloqueia a 11ª (Cenário de Limite)', () => {
-  const testIp = '192.168.1.100';
+test('PLAN-010: Mass Assignment Protection - Ignora e descarta atributos sensíveis injetados (Segurança)', () => {
+  const maliciousPayload = {
+    name: 'Atacante',
+    email: 'hacker@example.com',
+    phone: '11999998888',
+    // Tentativa de Mass Assignment para forçar aprovação direta
+    status: 'approved',
+    approved_by: 'admin_id_fake',
+    role: 'super_admin',
+  };
+
+  const result = publicRsvpSchema.safeParse(maliciousPayload);
+  assert.equal(result.success, true);
+  if (result.success) {
+    // Garante que o objeto parseado NÃO contém status, approved_by ou role
+    assert.equal(result.data.status, undefined);
+    assert.equal(result.data.approved_by, undefined);
+    assert.equal(result.data.role, undefined);
+  }
+});
+
+test('PLAN-010: companionSchema valida campos individuais de acompanhantes', () => {
+  const invalidCompanion = {
+    name: 'X', // muito curto
+    email: 'email-invalido',
+  };
+
+  const result = companionSchema.safeParse(invalidCompanion);
+  assert.equal(result.success, false);
+});
+
+
+// --- SUÍTE DE TESTES PARA PLAN-011 (Rate Limiting por IP) ---
+
+test('PLAN-011: Rate Limiter permite até 10 requisições e bloqueia a 11ª', () => {
+  const testIp = '192.168.1.200';
 
   // 10 requisições permitidas
   for (let i = 1; i <= 10; i++) {
@@ -87,11 +105,12 @@ test('Unit Test — Rate Limiter permite até 10 requisições e bloqueia a 11ª
   const blockedRes = checkRateLimit(testIp, 10, 60000);
   assert.equal(blockedRes.success, false, '11ª requisição deve ser bloqueada com status 429');
   assert.equal(blockedRes.remaining, 0);
+  assert.ok(blockedRes.resetTime > Date.now());
 });
 
-test('Unit Test — Rate Limiter isola IPs diferentes', () => {
-  const ipA = '10.0.0.1';
-  const ipB = '10.0.0.2';
+test('PLAN-011: Rate Limiter isola limites entre diferentes IPs', () => {
+  const ipA = '10.0.1.1';
+  const ipB = '10.0.1.2';
 
   // Esgota limite para IP A
   for (let i = 0; i < 10; i++) {
@@ -103,4 +122,17 @@ test('Unit Test — Rate Limiter isola IPs diferentes', () => {
   // IP B continua funcionando normalmente
   const resB = checkRateLimit(ipB, 10, 60000);
   assert.equal(resB.success, true, 'IP B deve ser permitido independentemente do IP A');
+});
+
+
+// --- SUÍTE DE TESTES PARA PLAN-001 (Design System Core e Tokens) ---
+
+test('PLAN-001: Validação dos componentes do Design System e utilitários', () => {
+  const { isValidEmail, isValidPhone, formatPhone } = require('../lib/validation.ts');
+  
+  assert.equal(isValidEmail('usuario@planejamais.com'), true);
+  assert.equal(isValidEmail('email-invalido'), false);
+
+  assert.equal(isValidPhone('(11) 98765-4321'), true);
+  assert.equal(formatPhone('11987654321'), '(11) 98765-4321');
 });

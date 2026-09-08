@@ -105,7 +105,7 @@ export async function POST(
     const { data: event, error: eventError } = await supabase
       .from("events")
       .select(
-        "id, public_invite_enabled, rsvp_deadline, allow_companions, max_companions, auto_approve_public_guests"
+        "id, public_invite_enabled, rsvp_deadline, allow_companions, max_companions, auto_approve_public_guests, rsvp_enabled"
       )
       .eq("public_invite_token", token.trim())
       .single()
@@ -114,14 +114,28 @@ export async function POST(
       return NextResponse.json({ error: "Convite público não encontrado ou desativado" }, { status: 404 })
     }
 
+    // Check se confirmações RSVP estão ativas para este evento
+    if (event.rsvp_enabled === false) {
+      return NextResponse.json({ error: "As confirmações de presença para este evento estão desativadas" }, { status: 400 })
+    }
+
     // 3. Validação de prazo expirado
     if (event.rsvp_deadline && new Date(event.rsvp_deadline) < new Date()) {
       return NextResponse.json({ error: "O prazo para confirmação de presença expirou" }, { status: 400 })
     }
 
-    // 4. Validação de acompanhantes
+    // 4. Validação de acompanhantes e remoção de duplicados na mesma submissão
     const willAttend = attendanceStatus !== "declined"
-    const requestedCompanions = willAttend ? companions : []
+    const uniqueCompanionsMap = new Map<string, typeof companions[0]>()
+    if (willAttend && Array.isArray(companions)) {
+      companions.forEach((c) => {
+        const key = c.name.trim().toLowerCase()
+        if (!uniqueCompanionsMap.has(key)) {
+          uniqueCompanionsMap.set(key, c)
+        }
+      })
+    }
+    const requestedCompanions = Array.from(uniqueCompanionsMap.values())
 
     if (!event.allow_companions && requestedCompanions.length > 0) {
       return NextResponse.json({ error: "Este evento não permite acompanhantes" }, { status: 400 })

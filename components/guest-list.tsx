@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Clock, Copy, Edit, Mail, MoreHorizontal, Send, Trash2, X } from "lucide-react"
+import { Check, Clock, Copy, Edit, Mail, MoreHorizontal, Send, Trash2, Users, X } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { EmptyState } from "@/components/ui/empty-state"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
 
@@ -68,7 +69,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     if (status === "confirmed") return "confirmado"
     if (status === "pending") return "pendente"
     if (status === "declined" || status === "rejected") return "recusado"
-    return "aguardando aprovacao"
+    return "aguardando aprovação"
   }
 
   const handleUpdateStatus = async (guestId: string, status: GuestStatus) => {
@@ -109,7 +110,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
       const data = await response.json().catch(() => null)
       if (response.ok && data?.url) url = data.url
     } catch (error) {
-      // Demo/local keeps the deterministic local URL.
+      // Fallback local
     }
 
     await navigator.clipboard.writeText(url)
@@ -125,11 +126,11 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
         body: JSON.stringify({ eventId }),
       })
       const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || "Envio indisponivel")
+      if (!response.ok) throw new Error(data?.error || "Envio indisponível")
       toast({ title: "Convite enviado", description: `Convite enviado para ${guest.email}.` })
     } catch (error) {
       toast({
-        title: "Envio real indisponivel",
+        title: "Envio real indisponível",
         description: "Configure Supabase/Resend para enviar por email. O link individual pode ser copiado agora.",
         variant: "destructive",
       })
@@ -141,7 +142,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
   const sendAllPending = async () => {
     const pendingGuests = guests.filter((guest) => guest.status === "pending")
     if (pendingGuests.length === 0) {
-      toast({ title: "Nenhum convidado pendente", description: "Todos os convidados ja foram tratados." })
+      toast({ title: "Nenhum convidado pendente", description: "Todos os convidados já foram tratados." })
       return
     }
 
@@ -153,12 +154,12 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
         body: JSON.stringify({ guestIds: pendingGuests.map((guest) => guest.id) }),
       })
       const data = await response.json().catch(() => null)
-      if (!response.ok) throw new Error(data?.error || "Envio indisponivel")
+      if (!response.ok) throw new Error(data?.error || "Envio indisponível")
       toast({ title: "Convites processados", description: `${pendingGuests.length} convite(s) processado(s).` })
     } catch (error) {
       toast({
-        title: "Envio real indisponivel",
-        description: "Configure Supabase/Resend para envio em lote. Os links individuais continuam disponiveis.",
+        title: "Envio real indisponível",
+        description: "Configure Supabase/Resend para envio em lote. Os links individuais continuam disponíveis.",
         variant: "destructive",
       })
     } finally {
@@ -169,7 +170,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
   const saveGuest = () => {
     if (!editingGuest) return
     if (!editingGuest.name.trim() || !editingGuest.email.trim()) {
-      toast({ title: "Dados incompletos", description: "Nome e email sao obrigatorios.", variant: "destructive" })
+      toast({ title: "Dados incompletos", description: "Nome e e-mail são obrigatórios.", variant: "destructive" })
       return
     }
     updateGuest(eventId, editingGuest.id, editingGuest)
@@ -186,30 +187,31 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
       .slice(0, 2)
     return (
       <Avatar>
-        <AvatarFallback className="bg-emerald-100 text-emerald-800">{initials}</AvatarFallback>
+        <AvatarFallback className="bg-slate-100 text-slate-800 font-semibold">{initials}</AvatarFallback>
       </Avatar>
     )
   }
 
   const statusBadge = (status: GuestStatus) => {
     if (status === "confirmed") {
-      return <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-200"><Check className="mr-1 h-3 w-3" /> Confirmado</Badge>
+      return <Badge variant="paid"><Check className="mr-1 h-3 w-3" /> Confirmado</Badge>
     }
     if (status === "pending") {
-      return <Badge variant="outline" className="bg-amber-100 text-amber-800 border-amber-200"><Clock className="mr-1 h-3 w-3" /> Pendente</Badge>
+      return <Badge variant="pending"><Clock className="mr-1 h-3 w-3" /> Pendente</Badge>
     }
     if (status === "declined" || status === "rejected") {
-      return <Badge variant="outline" className="bg-red-100 text-red-800 border-red-200"><X className="mr-1 h-3 w-3" /> Recusado</Badge>
+      return <Badge variant="destructive"><X className="mr-1 h-3 w-3" /> Recusado</Badge>
     }
-    return <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-200"><Clock className="mr-1 h-3 w-3" /> Aguardando aprovacao</Badge>
+    return <Badge variant="info"><Clock className="mr-1 h-3 w-3" /> Aguardando aprovação</Badge>
   }
 
   if (guests.length === 0) {
     return (
-      <div className="py-8 text-center">
-        <p className="mb-2 text-gray-500">Nenhum convidado adicionado</p>
-        <p className="text-sm text-gray-400">Adicione convidados para comecar o controle de RSVP.</p>
-      </div>
+      <EmptyState
+        icon={Users}
+        title="Nenhum convidado adicionado"
+        description="Adicione convidados ao seu evento para começar o controle automatizado de RSVP e confirmações."
+      />
     )
   }
 
@@ -230,27 +232,27 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
         ) : null}
       </div>
 
-      <Input placeholder="Buscar por nome, email ou telefone..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="max-w-sm" />
+      <Input placeholder="Buscar por nome, e-mail ou telefone..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="max-w-sm" />
 
-      <div className="overflow-x-auto rounded-md border">
-        <table className="w-full border-collapse bg-white">
+      <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
+        <table className="w-full border-collapse bg-white dark:bg-slate-900">
           <thead>
-            <tr className="border-b bg-slate-50 text-left">
-              <th className="p-3 font-medium">Convidado</th>
-              <th className="p-3 font-medium">Contato</th>
-              <th className="p-3 font-medium">Status</th>
-              <th className="p-3 text-right font-medium">Acoes</th>
+            <tr className="border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-left text-xs uppercase tracking-wider text-slate-500">
+              <th className="p-3 font-semibold">Convidado</th>
+              <th className="p-3 font-semibold">Contato</th>
+              <th className="p-3 font-semibold">Status</th>
+              <th className="p-3 text-right font-semibold">Ações</th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
             {filteredGuests.map((guest) => (
-              <tr key={guest.id} className="border-b last:border-0">
+              <tr key={guest.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                 <td className="p-3">
-                  <div className="flex items-center gap-3">{avatar(guest.name)}<span className="font-medium">{guest.name}</span></div>
+                  <div className="flex items-center gap-3">{avatar(guest.name)}<span className="font-medium text-slate-900 dark:text-slate-100">{guest.name}</span></div>
                 </td>
-                <td className="p-3 text-sm text-slate-600">
+                <td className="p-3 text-slate-600 dark:text-slate-400">
                   <div>{guest.email}</div>
-                  <div>{guest.phone}</div>
+                  <div className="text-xs text-slate-400">{guest.phone}</div>
                 </td>
                 <td className="p-3">{statusBadge(guest.status)}</td>
                 <td className="p-3 text-right">
@@ -267,7 +269,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
                       <DropdownMenuItem onClick={() => handleUpdateStatus(guest.id, "declined")}><X className="mr-2 h-4 w-4 text-red-600" /> Marcar recusado</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setEditingGuest(guest)}><Edit className="mr-2 h-4 w-4" /> Editar convidado</DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={() => sendInvite(guest)} disabled={sendingInviteId === guest.id}><Send className="mr-2 h-4 w-4" /> {sendingInviteId === guest.id ? "Enviando..." : "Enviar por email"}</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => sendInvite(guest)} disabled={sendingInviteId === guest.id}><Send className="mr-2 h-4 w-4" /> {sendingInviteId === guest.id ? "Enviando..." : "Enviar por e-mail"}</DropdownMenuItem>
                       <DropdownMenuItem onClick={() => copyInviteLink(guest)}><Copy className="mr-2 h-4 w-4" /> Copiar link</DropdownMenuItem>
                       <DropdownMenuSeparator />
                       <DropdownMenuItem className="text-red-600" onClick={() => handleRemoveGuest(guest)}><Trash2 className="mr-2 h-4 w-4" /> Remover</DropdownMenuItem>
@@ -286,13 +288,13 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
           {editingGuest ? (
             <div className="space-y-4 py-2">
               <div className="space-y-2"><Label>Nome</Label><Input value={editingGuest.name} onChange={(event) => setEditingGuest({ ...editingGuest, name: event.target.value })} /></div>
-              <div className="space-y-2"><Label>Email</Label><Input value={editingGuest.email} onChange={(event) => setEditingGuest({ ...editingGuest, email: event.target.value })} /></div>
+              <div className="space-y-2"><Label>E-mail</Label><Input value={editingGuest.email} onChange={(event) => setEditingGuest({ ...editingGuest, email: event.target.value })} /></div>
               <div className="space-y-2"><Label>Telefone</Label><Input value={editingGuest.phone} onChange={(event) => setEditingGuest({ ...editingGuest, phone: event.target.value })} /></div>
             </div>
           ) : null}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditingGuest(null)}>Cancelar</Button>
-            <Button onClick={saveGuest} className="bg-emerald-600 hover:bg-emerald-700">Salvar</Button>
+            <Button onClick={saveGuest}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

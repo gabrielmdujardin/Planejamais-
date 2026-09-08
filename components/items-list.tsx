@@ -3,7 +3,8 @@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { MoreHorizontal, Trash2, Edit, User, Users, ImageIcon } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
+import { MoreHorizontal, Trash2, Edit, User, Users, ImageIcon, Receipt } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
@@ -72,10 +73,11 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
 
   if (items.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-gray-500 mb-4">Nenhum gasto cadastrado</p>
-        <p className="text-sm text-gray-400 mb-4">Adicione itens para seu evento usando o botão acima.</p>
-      </div>
+      <EmptyState
+        icon={Receipt}
+        title="Nenhum gasto cadastrado"
+        description="Adicione custos e itens ao seu evento para gerenciar o orçamento e atribuir responsáveis."
+      />
     )
   }
 
@@ -99,7 +101,7 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
             <TableRow key={item.id}>
               <TableCell>
                 <div className="font-medium">{item.name}</div>
-                {item.description ? <div className="text-xs text-gray-500">{item.description}</div> : null}
+                {item.description ? <div className="text-xs text-slate-500">{item.description}</div> : null}
               </TableCell>
               <TableCell>{item.category || "Geral"}</TableCell>
               <TableCell>{item.quantity || 1}</TableCell>
@@ -109,7 +111,7 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
                 {item.assignedTo && item.assignedTo.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
                     {item.assignedTo.map((person, index) => (
-                      <Badge key={index} variant="outline" className="bg-blue-50 text-blue-800 border-blue-200">
+                      <Badge key={index} variant="info">
                         {person.name}
                       </Badge>
                     ))}
@@ -118,7 +120,7 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-gray-500 h-7 px-2"
+                    className="text-slate-500 h-7 px-2"
                     onClick={() => handleAssignPerson(item)}
                   >
                     <User className="h-3.5 w-3.5 mr-1" /> Atribuir
@@ -130,13 +132,13 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-blue-500 h-7 px-2"
+                    className="text-blue-600 h-7 px-2"
                     onClick={() => handleViewImage(item.image as string)}
                   >
                     <ImageIcon className="h-3.5 w-3.5 mr-1" /> Ver foto
                   </Button>
                 ) : (
-                  <span className="text-gray-400 text-sm">Sem foto</span>
+                  <span className="text-slate-400 text-sm">Sem foto</span>
                 )}
               </TableCell>
               <TableCell className="text-right">
