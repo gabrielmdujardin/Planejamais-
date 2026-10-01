@@ -47,69 +47,6 @@ interface ContactStore {
   initializeData: () => void
 }
 
-const sampleContacts: Contact[] = [
-  {
-    id: "contact_1",
-    name: "João Silva",
-    email: "joao@example.com",
-    phone: "(11) 98765-4321",
-    isFavorite: true,
-    lists: ["list_1"],
-    createdAt: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: "contact_2",
-    name: "Maria Oliveira",
-    email: "maria@example.com",
-    phone: "(11) 91234-5678",
-    isFavorite: true,
-    lists: ["list_1"],
-    createdAt: "2024-01-15T10:05:00Z",
-  },
-  {
-    id: "contact_3",
-    name: "Pedro Santos",
-    email: "pedro@example.com",
-    phone: "(11) 99876-5432",
-    isFavorite: false,
-    lists: ["list_2"],
-    createdAt: "2024-01-15T10:10:00Z",
-  },
-  {
-    id: "contact_4",
-    name: "Ana Costa",
-    email: "ana@example.com",
-    phone: "(11) 95555-4444",
-    isFavorite: false,
-    lists: [],
-    createdAt: "2024-01-15T10:15:00Z",
-  },
-  {
-    id: "contact_5",
-    name: "Lucas Ferreira",
-    email: "lucas@example.com",
-    phone: "(11) 93333-2222",
-    isFavorite: false,
-    lists: ["list_2"],
-    createdAt: "2024-01-15T10:20:00Z",
-  },
-]
-
-const sampleContactLists: ContactList[] = [
-  {
-    id: "list_1",
-    name: "Amigos próximos",
-    contacts: ["contact_1", "contact_2"],
-    createdAt: "2024-01-15T09:00:00Z",
-  },
-  {
-    id: "list_2",
-    name: "Colegas de trabalho",
-    contacts: ["contact_3", "contact_5"],
-    createdAt: "2024-01-15T09:05:00Z",
-  },
-]
-
 export const useContactStore = create<ContactStore>()(
   persist(
     (set, get) => ({
@@ -117,12 +54,7 @@ export const useContactStore = create<ContactStore>()(
       contactLists: [],
       isLoading: false,
 
-      initializeData: () => {
-        const { contacts, contactLists } = get()
-        if (contacts.length === 0) {
-          set({ contacts: sampleContacts, contactLists: sampleContactLists })
-        }
-      },
+      initializeData: () => {},
 
       addContact: (contactData) => {
         const newContact: Contact = {

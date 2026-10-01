@@ -28,20 +28,17 @@ export default function VisualizationPage() {
 
   useEffect(() => {
     const loadEvents = async () => {
-      console.log("[v0] Loading events from database...")
       setIsLoading(true)
       try {
         const { data, error } = await getEvents()
 
         if (error) {
-          console.error("[v0] Error loading events:", error)
           toast({
             title: "Erro ao carregar eventos",
             description: error,
             variant: "destructive",
           })
         } else {
-          console.log("[v0] Events loaded:", data.length)
           setEvents(data)
           toast({
             title: "Eventos carregados",
@@ -49,7 +46,6 @@ export default function VisualizationPage() {
           })
         }
       } catch (error) {
-        console.error("[v0] Exception loading events:", error)
         toast({
           title: "Erro ao carregar eventos",
           description: "Ocorreu um erro inesperado",

@@ -77,69 +77,7 @@ interface DatabaseEvent {
   status: "confirmed" | "pending" | "cancelled"
 }
 
-// Dados mockados para demonstração
-const mockCalendarEvents: DatabaseEvent[] = [
-  {
-    id: "1",
-    title: "Festa de Aniversário da Maria",
-    date: "15/01/2025",
-    time: "19:00",
-    location: "Salão de Festas do Condomínio",
-    description: "Festa de 30 anos da Maria com tema tropical",
-    type: "festa",
-    status: "confirmed",
-  },
-  {
-    id: "2",
-    title: "Reunião de Trabalho",
-    date: "18/01/2025",
-    time: "14:00",
-    location: "Escritório Central",
-    description: "Reunião mensal da equipe de desenvolvimento",
-    type: "trabalho",
-    status: "confirmed",
-  },
-  {
-    id: "3",
-    title: "Casamento do João",
-    date: "25/01/2025",
-    time: "16:00",
-    location: "Igreja São José",
-    description: "Cerimônia de casamento seguida de recepção",
-    type: "casamento",
-    status: "pending",
-  },
-  {
-    id: "4",
-    title: "Churrasco da Família",
-    date: "02/02/2025",
-    time: "12:00",
-    location: "Casa da Vovó",
-    description: "Almoço de domingo em família",
-    type: "família",
-    status: "confirmed",
-  },
-  {
-    id: "5",
-    title: "Conferência Tech",
-    date: "10/02/2025",
-    time: "09:00",
-    location: "Centro de Convenções",
-    description: "Conferência anual de tecnologia",
-    type: "trabalho",
-    status: "pending",
-  },
-  {
-    id: "6",
-    title: "Aniversário Cancelado",
-    date: "20/02/2025",
-    time: "20:00",
-    location: "Restaurante Central",
-    description: "Evento cancelado devido ao tempo",
-    type: "festa",
-    status: "cancelled",
-  },
-]
+// Dados mockados removidos
 
 export default function Dashboard() {
   const { user } = useAuth()
@@ -191,19 +129,16 @@ export default function Dashboard() {
         // Simular delay de rede
         await new Promise((resolve) => setTimeout(resolve, 800))
 
-        const data: DatabaseEvent[] =
-          events.length > 0
-            ? events.map((event) => ({
-                id: event.id,
-                title: event.title,
-                date: event.fullDate || event.date,
-                time: event.time,
-                location: event.location,
-                description: event.description,
-                type: event.type,
-                status: "confirmed",
-              }))
-            : mockCalendarEvents
+        const data: DatabaseEvent[] = events.map((event) => ({
+          id: event.id,
+          title: event.title,
+          date: event.fullDate || event.date,
+          time: event.time,
+          location: event.location,
+          description: event.description,
+          type: event.type,
+          status: "confirmed",
+        }))
 
         // Converter eventos do banco para formato do calendário
         const calendarEventsData: CalendarEvent[] = data.map((event) => {

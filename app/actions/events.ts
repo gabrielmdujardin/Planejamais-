@@ -72,7 +72,6 @@ function toDisplayEvent(event: any, guests: any[] = [], items: any[] = [], photo
 }
 
 export async function getEvents() {
-  console.log("[v0] Fetching events from Supabase...")
   if (!isSupabaseConfigured()) {
     return { data: [], error: "Supabase not configured" }
   }
@@ -85,11 +84,9 @@ export async function getEvents() {
   } = await supabase.auth.getUser()
 
   if (userError || !user) {
-    console.log("[v0] No authenticated user found:", userError?.message)
     return { data: [], error: "Not authenticated" }
   }
 
-  console.log("[v0] User authenticated:", user.id)
 
   const { data: events, error } = await supabase
     .from("events")
@@ -105,11 +102,9 @@ export async function getEvents() {
     .order("created_at", { ascending: false })
 
   if (error) {
-    console.error("[v0] Error fetching events:", error)
     return { data: [], error: error.message }
   }
 
-  console.log("[v0] Events fetched successfully:", events?.length || 0)
 
   const transformedEvents = events?.map((event) =>
     toDisplayEvent(event, event.guests || [], event.items || [], event.event_photos || []),
@@ -149,7 +144,6 @@ export async function getEventById(eventId: string) {
     .maybeSingle()
 
   if (error) {
-    console.error("[v0] Error fetching event:", error)
     return { data: null, error: error.message }
   }
 
@@ -252,7 +246,6 @@ export async function updateEventDetails(eventId: string, eventData: any) {
     .single()
 
   if (error) {
-    console.error("[v0] Error updating event:", error)
     return { data: null, error: error.message }
   }
 
@@ -262,7 +255,6 @@ export async function updateEventDetails(eventId: string, eventData: any) {
 }
 
 export async function createEvent(eventData: any) {
-  console.log("[v0] Creating event in Supabase...")
   if (!isSupabaseConfigured()) {
     return { data: null, error: "Supabase not configured" }
   }
@@ -275,7 +267,6 @@ export async function createEvent(eventData: any) {
   } = await supabase.auth.getUser()
 
   if (userError || !user) {
-    console.log("[v0] No authenticated user found:", userError?.message)
     return { data: null, error: "Not authenticated" }
   }
 
@@ -359,7 +350,6 @@ export async function createEvent(eventData: any) {
     .single()
 
   if (error) {
-    console.error("[v0] Error creating event:", error)
     return { data: null, error: error.message }
   }
 
@@ -380,14 +370,12 @@ export async function createEvent(eventData: any) {
       .select()
 
     if (guestsError) {
-      console.error("[v0] Error creating event guests:", guestsError)
       return { data: toDisplayEvent(data), error: "Evento criado, mas não foi possível adicionar convidados." }
     }
 
     insertedGuests = guests || []
   }
 
-  console.log("[v0] Event created successfully:", data.id)
   revalidatePath("/dashboard")
   revalidatePath(`/event/${data.id}`)
   return { data: toDisplayEvent(data, insertedGuests), error: null }
