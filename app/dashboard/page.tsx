@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Skeleton, SkeletonCard } from "@/components/ui/skeleton-loader"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { Plus, CalendarDays, Grid3X3, MapPin, Clock, Filter } from "lucide-react"
 import EventCard from "@/components/event-card"
@@ -354,11 +355,7 @@ export default function Dashboard() {
               transition={{ duration: 0.5 }}
             >
               {[1, 2, 3].map((i) => (
-                <Card key={i} className="h-[280px] animate-pulse">
-                  <CardContent className="p-6">
-                    <div className="h-full bg-gray-200 dark:bg-gray-700 rounded-md"></div>
-                  </CardContent>
-                </Card>
+                <SkeletonCard key={i} className="h-[280px]" />
               ))}
             </motion.div>
           ) : (
@@ -438,9 +435,9 @@ export default function Dashboard() {
         {/* Aba do Calendário */}
         <TabsContent value="calendar" className="space-y-6">
           {calendarLoading ? (
-            <div className="animate-pulse space-y-6">
-              <div className="h-10 bg-gray-200 dark:bg-gray-700 rounded w-1/3"></div>
-              <div className="h-96 bg-gray-200 dark:bg-gray-700 rounded"></div>
+            <div className="space-y-6">
+              <Skeleton className="h-10 w-1/3" />
+              <Skeleton className="h-96 w-full rounded-xl" />
             </div>
           ) : (
             <>

@@ -338,7 +338,7 @@ export const useEventStore = create<EventStore>()(
         return {
           ...currentState,
           ...persisted,
-          events: mergeEventsWithDemoData(persisted?.events, currentState.events),
+          events: persisted?.events ?? currentState.events,
         }
       },
     },
