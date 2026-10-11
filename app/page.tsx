@@ -196,12 +196,19 @@ export default function Home() {
           </p>
           <div className="flex flex-col sm:flex-row gap-3 justify-center pt-2">
             <Link href="/register">
-              <Button size="lg" variant="secondary" className="font-semibold px-8 text-foreground">
+              <Button
+                size="lg"
+                className="bg-white text-emerald-950 hover:bg-white/90 font-semibold px-8 shadow-md active:scale-[0.98]"
+              >
                 Começar gratuitamente
               </Button>
             </Link>
             <Link href="/login">
-              <Button size="lg" variant="outline" className="border-primary-foreground/30 text-primary-foreground hover:bg-primary-foreground/10 px-8">
+              <Button
+                size="lg"
+                variant="outline"
+                className="border-2 border-white bg-transparent text-white hover:bg-white/10 hover:text-white font-semibold px-8"
+              >
                 Acessar minha conta
               </Button>
             </Link>

@@ -34,7 +34,7 @@
     --popover: 222 22% 12%;
     --popover-foreground: 210 20% 96%;
     --primary: 158 64% 45%;             /* Esmeralda luminoso equilibrado para fundo escuro */
-    --primary-foreground: 222 30% 6%;
+    --primary-foreground: 0 0% 100%;    /* Branco puro para contraste perfeito sobre esmeralda */
     --secondary: 222 18% 16%;
     --secondary-foreground: 210 20% 90%;
     --muted: 222 18% 16%;

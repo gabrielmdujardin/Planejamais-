@@ -434,10 +434,10 @@ function itemEventPairs(event: LocalEvent) {
 
 function getToneClasses(tone: "positive" | "attention" | "critical" | "neutral") {
   const classes = {
-    positive: "border-emerald-200 bg-emerald-50/70 text-emerald-700",
-    attention: "border-amber-200 bg-amber-50/70 text-amber-700",
-    critical: "border-red-200 bg-red-50/70 text-red-700",
-    neutral: "border-slate-200 bg-slate-50/70 text-slate-700",
+    positive: "border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300",
+    attention: "border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300",
+    critical: "border-red-200 dark:border-red-900/50 bg-red-50/70 dark:bg-red-950/40 text-red-700 dark:text-red-300",
+    neutral: "border-border bg-muted/50 text-foreground",
   }
   return classes[tone]
 }
@@ -449,15 +449,15 @@ function getInsightIcon(tone: Insight["tone"]) {
 }
 
 function getInsightClasses(tone: Insight["tone"]) {
-  if (tone === "success") return "border-emerald-200 bg-emerald-50 text-emerald-800"
-  if (tone === "risk") return "border-red-200 bg-red-50 text-red-800"
-  if (tone === "warning") return "border-amber-200 bg-amber-50 text-amber-800"
-  return "border-blue-200 bg-blue-50 text-blue-800"
+  if (tone === "success") return "border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/80 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-200"
+  if (tone === "risk") return "border-red-200 dark:border-red-900/50 bg-red-50/80 dark:bg-red-950/40 text-red-800 dark:text-red-200"
+  if (tone === "warning") return "border-amber-200 dark:border-amber-900/50 bg-amber-50/80 dark:bg-amber-950/40 text-amber-800 dark:text-amber-200"
+  return "border-blue-200 dark:border-blue-900/50 bg-blue-50/80 dark:bg-blue-950/40 text-blue-800 dark:text-blue-200"
 }
 
 function EmptyChart({ label = "Sem dados suficientes para este gráfico." }: { label?: string }) {
   return (
-    <div className="flex h-[280px] items-center justify-center rounded-lg border border-dashed bg-slate-50/70 p-6 text-center">
+    <div className="flex h-[280px] items-center justify-center rounded-lg border border-dashed bg-muted/20 p-6 text-center">
       <p className="max-w-sm text-sm text-muted-foreground">{label}</p>
     </div>
   )
@@ -475,31 +475,31 @@ function EmptyAnalyticsState({
   onClearFilters: () => void
 }) {
   return (
-    <Card className="border-slate-200 bg-white shadow-sm">
+    <Card className="border-border bg-card shadow-sm">
       <CardContent className="flex min-h-[300px] flex-col items-center justify-center gap-4 p-8 text-center">
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-slate-500">
-          <ClipboardList className="h-9 w-9" />
+        <div className="rounded-2xl border border-border bg-muted/40 p-4 text-muted-foreground">
+          <ClipboardList className="h-9 w-9 text-primary" />
         </div>
         <div className="space-y-2">
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2 className="text-lg font-semibold text-foreground">{title}</h2>
           <p className="mx-auto max-w-xl text-sm text-muted-foreground">{description}</p>
-          {reason && <p className="mx-auto max-w-xl text-xs text-slate-500">{reason}</p>}
+          {reason && <p className="mx-auto max-w-xl text-xs text-muted-foreground">{reason}</p>}
         </div>
         <div className="grid w-full max-w-2xl gap-3 text-left md:grid-cols-3">
-          <div className="rounded-lg border bg-slate-50 p-3">
-            <p className="text-sm font-medium">1. Verifique a sessão</p>
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <p className="text-sm font-medium text-foreground">1. Verifique a sessão</p>
             <p className="mt-1 text-xs text-muted-foreground">As análises usam apenas dados Supabase do usuário autenticado.</p>
           </div>
-          <div className="rounded-lg border bg-slate-50 p-3">
-            <p className="text-sm font-medium">2. Cadastre dados</p>
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <p className="text-sm font-medium text-foreground">2. Cadastre dados</p>
             <p className="mt-1 text-xs text-muted-foreground">Eventos, convidados e custos liberam os gráficos do dashboard.</p>
           </div>
-          <div className="rounded-lg border bg-slate-50 p-3">
-            <p className="text-sm font-medium">3. Revise filtros</p>
+          <div className="rounded-lg border border-border bg-muted/30 p-3">
+            <p className="text-sm font-medium text-foreground">3. Revise filtros</p>
             <p className="mt-1 text-xs text-muted-foreground">Um recorte restrito pode ocultar eventos que já existem.</p>
           </div>
         </div>
-        <Button variant="outline" className="gap-2 bg-white hover:border-emerald-300" onClick={onClearFilters}>
+        <Button variant="outline" className="gap-2" onClick={onClearFilters}>
           <FilterX className="h-4 w-4" />
           Limpar filtros
         </Button>
@@ -519,8 +519,8 @@ function SectionHeader({
 }) {
   return (
     <div className="space-y-1">
-      <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">{eyebrow}</p>
-      <h2 className="text-xl font-semibold tracking-tight text-slate-950">{title}</h2>
+      <p className="text-xs font-semibold uppercase tracking-wide text-primary">{eyebrow}</p>
+      <h2 className="text-xl font-semibold tracking-tight text-foreground">{title}</h2>
       <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
     </div>
   )
@@ -544,11 +544,11 @@ function MetricCard({
   return (
     <Card
       title={helper}
-      className="group border-slate-200 bg-white/95 shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg"
+      className="group border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
     >
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-3">
         <div className="space-y-1">
-          <CardTitle className="text-sm font-medium text-slate-600">{title}</CardTitle>
+          <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle>
           {detail && <CardDescription className="text-xs">{detail}</CardDescription>}
         </div>
         <div className={`rounded-lg border p-2 ${getToneClasses(tone)}`}>
@@ -556,7 +556,7 @@ function MetricCard({
         </div>
       </CardHeader>
       <CardContent>
-        <div className="text-2xl font-bold tracking-tight text-slate-950">{value}</div>
+        <div className="text-2xl font-bold tracking-tight text-foreground">{value}</div>
       </CardContent>
     </Card>
   )
@@ -574,9 +574,9 @@ function ChartCard({
   className?: string
 }) {
   return (
-    <Card className={`border-slate-200 bg-white/95 shadow-sm ${className}`}>
+    <Card className={`border-border bg-card shadow-sm ${className}`}>
       <CardHeader>
-        <CardTitle className="text-base font-semibold text-slate-950">{title}</CardTitle>
+        <CardTitle className="text-base font-semibold text-foreground">{title}</CardTitle>
         <CardDescription>{description}</CardDescription>
       </CardHeader>
       <CardContent>{children}</CardContent>
@@ -588,14 +588,14 @@ function CustomTooltip({ active, payload, label }: any) {
   if (!active || !payload?.length) return null
 
   return (
-    <div className="rounded-lg border bg-white p-3 text-sm shadow-lg">
-      <p className="mb-2 font-medium text-slate-950">{label || payload[0]?.name}</p>
+    <div className="rounded-lg border border-border bg-card p-3 text-sm shadow-lg text-card-foreground">
+      <p className="mb-2 font-medium text-foreground">{label || payload[0]?.name}</p>
       <div className="space-y-1">
         {payload.map((entry: any) => (
           <div key={`${entry.dataKey}-${entry.name}`} className="flex items-center gap-2">
             <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
             <span className="text-muted-foreground">{entry.name}:</span>
-            <span className="font-medium text-slate-900">
+            <span className="font-medium text-foreground">
               {String(entry.dataKey || "").toLowerCase().includes("cost") || entry.name?.toLowerCase().includes("custo")
                 ? formatCurrency(Number(entry.value))
                 : entry.value}
@@ -697,11 +697,11 @@ export default function AnalyticsPage() {
     : "neutral"
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 pt-16 text-slate-950 md:p-8 md:pt-20">
+    <div className="min-h-screen bg-background p-4 pt-16 text-foreground md:p-8 md:pt-20">
       <div className="mx-auto max-w-7xl space-y-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <p className="text-sm font-medium text-emerald-700">Planeja+ Analytics</p>
+            <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Planeja+ Analytics</p>
             <h1 className="text-3xl font-bold tracking-tight">Análises</h1>
             <p className="mt-1 max-w-2xl text-muted-foreground">
               Painel de decisão com dados reais dos seus eventos, convidados, aprovações e custos.
@@ -716,13 +716,13 @@ export default function AnalyticsPage() {
             title="Contexto da análise"
             description="Selecione o recorte desejado para atualizar todos os indicadores, gráficos e insights sem recarregar a página."
           />
-          <Card className="border-slate-200 bg-white/95 shadow-sm">
+          <Card className="border-border bg-card shadow-sm">
             <CardContent className="pt-6">
               <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
                 <div className="space-y-2">
                   <Label>Evento</Label>
                   <Select value={selectedEventId} onValueChange={setSelectedEventId}>
-                    <SelectTrigger className="bg-white transition hover:border-emerald-300">
+                    <SelectTrigger className="border-input bg-background transition hover:border-emerald-400">
                       <SelectValue placeholder="Selecionar evento" />
                     </SelectTrigger>
                     <SelectContent>
@@ -739,7 +739,7 @@ export default function AnalyticsPage() {
                 <div className="space-y-2">
                   <Label>Período</Label>
                   <Select value={period} onValueChange={setPeriod}>
-                    <SelectTrigger className="bg-white transition hover:border-emerald-300">
+                    <SelectTrigger className="border-input bg-background transition hover:border-emerald-400">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -756,7 +756,7 @@ export default function AnalyticsPage() {
                 <div className="space-y-2">
                   <Label>Status do evento</Label>
                   <Select value={eventStatus} onValueChange={setEventStatus}>
-                    <SelectTrigger className="bg-white transition hover:border-emerald-300">
+                    <SelectTrigger className="border-input bg-background transition hover:border-emerald-400">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -771,7 +771,7 @@ export default function AnalyticsPage() {
                 <div className="space-y-2">
                   <Label>Status de convidados</Label>
                   <Select value={guestStatus} onValueChange={setGuestStatus}>
-                    <SelectTrigger className="bg-white transition hover:border-emerald-300">
+                    <SelectTrigger className="border-input bg-background transition hover:border-emerald-400">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -785,7 +785,7 @@ export default function AnalyticsPage() {
                 </div>
 
                 <div className="flex items-end">
-                  <Button variant="outline" className="w-full gap-2 bg-white hover:border-emerald-300" onClick={clearFilters}>
+                  <Button variant="outline" className="w-full gap-2 border-border bg-background hover:bg-muted" onClick={clearFilters}>
                     <FilterX className="h-4 w-4" />
                     Limpar filtros
                   </Button>
@@ -809,7 +809,7 @@ export default function AnalyticsPage() {
         </section>
 
         {loading && (
-          <div className="flex min-h-[360px] items-center justify-center rounded-xl border bg-white">
+          <div className="flex min-h-[360px] items-center justify-center rounded-xl border border-border bg-card">
             <div className="flex items-center gap-3 text-muted-foreground">
               <Loader2 className="h-5 w-5 animate-spin" />
               Carregando análises...
@@ -818,8 +818,8 @@ export default function AnalyticsPage() {
         )}
 
         {!loading && error && (
-          <Card className="border-red-200 bg-red-50">
-            <CardContent className="flex items-center gap-3 pt-6 text-red-700">
+          <Card className="border-red-500/20 bg-red-500/10">
+            <CardContent className="flex items-center gap-3 pt-6 text-red-600 dark:text-red-400">
               <AlertTriangle className="h-5 w-5" />
               <p>{error}</p>
             </CardContent>
@@ -917,7 +917,7 @@ export default function AnalyticsPage() {
                   {data.charts.confirmationFunnel.some((item) => (item.value || 0) > 0) ? (
                     <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={data.charts.confirmationFunnel} layout="vertical" margin={{ left: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis type="number" allowDecimals={false} />
                         <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
                         <Tooltip content={<CustomTooltip />} />
@@ -933,7 +933,7 @@ export default function AnalyticsPage() {
                   {data.charts.attendanceProjection.some((item) => (item.value || 0) > 0) ? (
                     <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={data.charts.attendanceProjection}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="name" />
                         <YAxis allowDecimals={false} />
                         <Tooltip content={<CustomTooltip />} />
@@ -971,7 +971,7 @@ export default function AnalyticsPage() {
                   {data.charts.confirmationsOverTime.length > 0 ? (
                     <ResponsiveContainer width="100%" height={300}>
                       <LineChart data={data.charts.confirmationsOverTime}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="name" />
                         <YAxis allowDecimals={false} />
                         <Tooltip content={<CustomTooltip />} />
@@ -996,7 +996,7 @@ export default function AnalyticsPage() {
                   {data.charts.costProjection.some((item) => (item.value || 0) > 0) ? (
                     <ResponsiveContainer width="100%" height={310}>
                       <BarChart data={data.charts.costProjection}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                         <YAxis tickFormatter={(value) => formatCurrency(Number(value))} />
                         <Tooltip content={<CustomTooltip />} />
@@ -1012,7 +1012,7 @@ export default function AnalyticsPage() {
                   {data.charts.riskMatrix.length > 0 ? (
                     <div className="space-y-3">
                       {data.charts.riskMatrix.map((event, index) => (
-                        <div key={`${event.name}-${index}`} className="rounded-lg border p-4 transition hover:border-emerald-200 hover:shadow-sm" title={event.reason}>
+                        <div key={`${event.name}-${index}`} className="rounded-lg border border-border bg-card/60 p-4 transition hover:border-emerald-500/40 hover:shadow-sm" title={event.reason}>
                           <div className="flex flex-wrap items-center justify-between gap-3">
                             <div>
                               <p className="font-medium">{event.name}</p>
@@ -1039,7 +1039,7 @@ export default function AnalyticsPage() {
                   {data.rankings.attentionEvents.length > 0 ? (
                     <div className="grid gap-3 md:grid-cols-2">
                       {data.rankings.attentionEvents.map((event, index) => (
-                        <div key={`${event.name}-${index}`} className="rounded-lg border bg-white p-4 transition hover:-translate-y-0.5 hover:border-amber-200 hover:shadow-md" title={event.reason}>
+                        <div key={`${event.name}-${index}`} className="rounded-lg border border-border bg-card p-4 transition hover:-translate-y-0.5 hover:border-amber-500/40 hover:shadow-md" title={event.reason}>
                           <div className="flex items-start justify-between gap-3">
                             <div>
                               <p className="font-medium">{event.name}</p>
@@ -1068,7 +1068,7 @@ export default function AnalyticsPage() {
                   {data.charts.paretoCosts.length > 0 ? (
                     <ResponsiveContainer width="100%" height={330}>
                       <ComposedChart data={data.charts.paretoCosts}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                         <YAxis yAxisId="left" tickFormatter={(value) => formatCurrency(Number(value))} />
                         <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${value}%`} />
@@ -1088,7 +1088,7 @@ export default function AnalyticsPage() {
                   {data.charts.costByEvent.length > 0 ? (
                     <ResponsiveContainer width="100%" height={330}>
                       <BarChart data={data.charts.costByEvent} layout="vertical" margin={{ left: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis type="number" tickFormatter={(value) => formatCurrency(Number(value))} />
                         <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
                         <Tooltip content={<CustomTooltip />} />
@@ -1113,7 +1113,7 @@ export default function AnalyticsPage() {
                   {data.charts.confirmationsByEvent.length > 0 ? (
                     <ResponsiveContainer width="100%" height={320}>
                       <BarChart data={data.charts.confirmationsByEvent}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
                         <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                         <YAxis allowDecimals={false} />
                         <Tooltip content={<CustomTooltip />} />
@@ -1128,7 +1128,7 @@ export default function AnalyticsPage() {
                   )}
                 </ChartCard>
 
-                <Card className="border-slate-200 bg-white/95 shadow-sm">
+                <Card className="border-border bg-card shadow-sm">
                   <CardHeader>
                     <CardTitle className="text-base">Comparativo avançado</CardTitle>
                     <CardDescription>Indicadores por evento para priorizar decisões.</CardDescription>
@@ -1193,7 +1193,7 @@ export default function AnalyticsPage() {
                         <div>
                           <div className="flex flex-wrap items-center gap-2">
                             <h3 className="font-medium">{insight.title}</h3>
-                            <Badge variant="outline" className="bg-white/70 capitalize">
+                            <Badge variant="outline" className="bg-background/80 capitalize">
                               {insight.tone === "risk" ? "Risco" : insight.tone === "warning" ? "Atenção" : insight.tone === "success" ? "Oportunidade" : "Informação"}
                             </Badge>
                           </div>

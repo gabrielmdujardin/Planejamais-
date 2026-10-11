@@ -167,7 +167,7 @@ export default function Navbar() {
       <AnimatePresence>
         {isMenuOpen && (
           <motion.div
-            className="md:hidden bg-white dark:bg-gray-800 border-t border-gray-100 dark:border-gray-700 py-2"
+            className="md:hidden bg-card border-t border-border py-2 shadow-lg"
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: "auto" }}
             exit={{ opacity: 0, height: 0 }}
@@ -183,8 +183,8 @@ export default function Navbar() {
                         key={link.href}
                         href={link.href}
                         className={cn(
-                          "flex items-center text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-emerald-600 dark:hover:text-emerald-400 px-3 py-2 rounded-md text-base font-medium transition-colors",
-                          pathname === link.href ? "text-primary" : "",
+                          "flex items-center text-muted-foreground hover:bg-muted hover:text-foreground px-3 py-2 rounded-md text-base font-medium transition-colors",
+                          pathname === link.href ? "text-primary font-semibold bg-primary/10" : "",
                         )}
                         onClick={toggleMenu}
                       >
@@ -198,7 +198,7 @@ export default function Navbar() {
                       logout()
                       toggleMenu()
                     }}
-                    className="flex w-full items-center text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 px-3 py-2 rounded-md text-base font-medium transition-colors"
+                    className="flex w-full items-center text-red-600 dark:text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-md text-base font-medium transition-colors"
                   >
                     <LogOut className="h-5 w-5 mr-2" />
                     Sair
@@ -213,8 +213,8 @@ export default function Navbar() {
                         key={link.href}
                         href={link.href}
                         className={cn(
-                          "flex items-center text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-emerald-600 dark:hover:text-emerald-400 px-3 py-2 rounded-md text-base font-medium transition-colors",
-                          pathname === link.href ? "text-primary" : "",
+                          "flex items-center text-muted-foreground hover:bg-muted hover:text-foreground px-3 py-2 rounded-md text-base font-medium transition-colors",
+                          pathname === link.href ? "text-primary font-semibold bg-primary/10" : "",
                         )}
                         onClick={toggleMenu}
                       >
@@ -225,14 +225,14 @@ export default function Navbar() {
                   })}
                   <Link
                     href="/login"
-                    className="flex items-center text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-emerald-600 dark:hover:text-emerald-400 px-3 py-2 rounded-md text-base font-medium transition-colors"
+                    className="flex items-center text-muted-foreground hover:bg-muted hover:text-foreground px-3 py-2 rounded-md text-base font-medium transition-colors"
                     onClick={toggleMenu}
                   >
                     Entrar
                   </Link>
                   <Link
                     href="/register"
-                    className="flex items-center text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 px-3 py-2 rounded-md text-base font-medium transition-colors"
+                    className="flex items-center text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 px-3 py-2 rounded-md text-base font-medium transition-colors"
                     onClick={toggleMenu}
                   >
                     Cadastrar

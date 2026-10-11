@@ -216,16 +216,16 @@ export default function EventPage() {
 
   if (isLoading || !event) {
     return (
-      <div className="min-h-screen bg-slate-50">
+      <div className="min-h-screen bg-background">
         <div className="container mx-auto max-w-7xl px-4 py-8">
           <div className="animate-pulse space-y-6">
-            <div className="h-9 w-56 rounded bg-slate-200" />
-            <div className="h-64 rounded-lg bg-slate-200" />
+            <div className="h-9 w-56 rounded bg-muted" />
+            <div className="h-64 rounded-lg bg-muted" />
             <div className="grid gap-4 md:grid-cols-4">
-              <div className="h-28 rounded-lg bg-slate-200" />
-              <div className="h-28 rounded-lg bg-slate-200" />
-              <div className="h-28 rounded-lg bg-slate-200" />
-              <div className="h-28 rounded-lg bg-slate-200" />
+              <div className="h-28 rounded-lg bg-muted" />
+              <div className="h-28 rounded-lg bg-muted" />
+              <div className="h-28 rounded-lg bg-muted" />
+              <div className="h-28 rounded-lg bg-muted" />
             </div>
           </div>
         </div>
@@ -237,7 +237,7 @@ export default function EventPage() {
   const capacityLine = event.capacity ? `${stats.totalGuests}/${event.capacity} convidados` : `${stats.totalGuests} convidados`
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-background">
       <div className="container mx-auto max-w-7xl px-4 py-8">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Link href="/dashboard">
@@ -254,25 +254,25 @@ export default function EventPage() {
           </Link>
         </div>
 
-        <section className="mb-6 rounded-lg border bg-white p-5 shadow-sm">
+        <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div className="space-y-4">
               <div className="flex flex-wrap gap-2">
-                <Badge className="bg-emerald-100 text-emerald-800 hover:bg-emerald-100">{event.type || "Evento"}</Badge>
+                <Badge className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20">{event.type || "Evento"}</Badge>
                 <Badge variant="outline">{statusLabel[event.status || "active"] || event.status}</Badge>
                 <Badge variant="outline">{modeLabel[event.eventMode || "presential"] || event.eventMode || "Presencial"}</Badge>
-                {event.publicInviteEnabled ? <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100">Link publico ativo</Badge> : null}
+                {event.publicInviteEnabled ? <Badge className="bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/20 hover:bg-blue-500/20">Link publico ativo</Badge> : null}
               </div>
 
               <div>
-                <h1 className="text-3xl font-bold tracking-normal text-slate-950">{event.title}</h1>
-                {event.description ? <p className="mt-2 max-w-3xl text-sm text-slate-600">{event.description}</p> : null}
+                <h1 className="text-3xl font-bold tracking-normal text-foreground">{event.title}</h1>
+                {event.description ? <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{event.description}</p> : null}
               </div>
 
-              <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-2 lg:grid-cols-3">
-                <div className="flex gap-2"><Calendar className="h-4 w-4 text-emerald-600" /> {eventDateLine || "Data nao definida"}</div>
-                <div className="flex gap-2"><MapPin className="h-4 w-4 text-emerald-600" /> {event.location || event.address || "Local nao definido"}</div>
-                <div className="flex gap-2"><Users className="h-4 w-4 text-emerald-600" /> {capacityLine}</div>
+              <div className="grid gap-3 text-sm text-muted-foreground sm:grid-cols-2 lg:grid-cols-3">
+                <div className="flex gap-2"><Calendar className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> {eventDateLine || "Data nao definida"}</div>
+                <div className="flex gap-2"><MapPin className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> {event.location || event.address || "Local nao definido"}</div>
+                <div className="flex gap-2"><Users className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> {capacityLine}</div>
                 {event.address ? <div className="sm:col-span-2">Endereco: {event.address}</div> : null}
                 {event.meetingUrl ? <div className="sm:col-span-2">Reuniao: {event.meetingUrl}</div> : null}
                 {event.rsvpDeadline ? <div>Limite RSVP: {new Date(`${event.rsvpDeadline}T00:00:00`).toLocaleDateString("pt-BR")}</div> : null}
@@ -357,7 +357,7 @@ export default function EventPage() {
                     <InfoBox label="Custo por confirmado" value={currency.format(stats.costPerConfirmed)} />
                     <InfoBox label="Orcamento" value={event.budgetEstimated ? currency.format(Number(event.budgetEstimated)) : "Nao definido"} />
                   </div>
-                  {event.financialNotes ? <p className="rounded-md bg-slate-50 p-3 text-sm text-slate-700">Notas financeiras: {event.financialNotes}</p> : null}
+                  {event.financialNotes ? <p className="rounded-md bg-muted/50 p-3 text-sm text-foreground">Notas financeiras: {event.financialNotes}</p> : null}
                 </CardContent>
               </Card>
 
@@ -365,9 +365,9 @@ export default function EventPage() {
                 <CardHeader><CardTitle>Proximas acoes</CardTitle></CardHeader>
                 <CardContent className="space-y-3">
                   {recommendations.length > 0 ? recommendations.map((note) => (
-                    <div key={note} className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{note}</div>
+                    <div key={note} className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-300">{note}</div>
                   )) : (
-                    <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+                    <div className="rounded-md border border-emerald-500/30 bg-emerald-500/10 p-3 text-sm text-emerald-700 dark:text-emerald-300">
                       O evento esta com dados basicos, convidados e custos em dia.
                     </div>
                   )}
@@ -420,7 +420,7 @@ export default function EventPage() {
               </CardHeader>
               <CardContent className="space-y-5">
                 <ItemsList items={event.items || []} eventId={event.id} />
-                <div className="rounded-md border bg-slate-50 p-4 text-sm">
+                <div className="rounded-md border border-border bg-muted/40 p-4 text-sm">
                   <div className="flex justify-between"><span>Total de gastos cadastrados</span><strong>{currency.format(stats.totalCost)}</strong></div>
                   <div className="flex justify-between"><span>Custo medio por confirmado</span><strong>{currency.format(stats.costPerConfirmed)}</strong></div>
                 </div>
@@ -457,18 +457,18 @@ export default function EventPage() {
 
 function MetricCard({ title, value, icon, tone = "slate" }: { title: string; value: string | number; icon: React.ReactNode; tone?: "slate" | "emerald" | "amber" | "red" }) {
   const tones = {
-    slate: "text-slate-700 bg-slate-100",
-    emerald: "text-emerald-700 bg-emerald-100",
-    amber: "text-amber-700 bg-amber-100",
-    red: "text-red-700 bg-red-100",
+    slate: "text-muted-foreground bg-muted",
+    emerald: "text-emerald-700 bg-emerald-100 dark:text-emerald-300 dark:bg-emerald-950/50",
+    amber: "text-amber-700 bg-amber-100 dark:text-amber-300 dark:bg-amber-950/50",
+    red: "text-red-700 bg-red-100 dark:text-red-300 dark:bg-red-950/50",
   }
 
   return (
     <Card>
       <CardContent className="flex items-center justify-between p-4">
         <div>
-          <p className="text-sm text-slate-500">{title}</p>
-          <p className="mt-1 text-2xl font-semibold text-slate-950">{value}</p>
+          <p className="text-sm text-muted-foreground">{title}</p>
+          <p className="mt-1 text-2xl font-semibold text-foreground">{value}</p>
         </div>
         <div className={`rounded-md p-2 ${tones[tone]}`}>{icon}</div>
       </CardContent>
@@ -478,9 +478,9 @@ function MetricCard({ title, value, icon, tone = "slate" }: { title: string; val
 
 function InfoBox({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-md border bg-white p-3">
-      <p className="text-xs uppercase text-slate-500">{label}</p>
-      <p className="mt-1 font-medium text-slate-950">{value}</p>
+    <div className="rounded-md border border-border bg-card p-3">
+      <p className="text-xs uppercase text-muted-foreground">{label}</p>
+      <p className="mt-1 font-medium text-foreground">{value}</p>
     </div>
   )
 }
