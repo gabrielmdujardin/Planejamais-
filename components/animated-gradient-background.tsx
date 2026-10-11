@@ -25,20 +25,20 @@ export function AnimatedGradientBackground() {
     resizeCanvas()
     window.addEventListener("resize", resizeCanvas)
 
-    // Configuração dos círculos
-    const circles = Array.from({ length: 5 }, () => ({
+    // Configuração sutil dos círculos com tons esmeralda e neutros
+    const circles = Array.from({ length: 4 }, () => ({
       x: Math.random() * width,
       y: Math.random() * height,
-      radius: Math.random() * 300 + 100,
-      vx: Math.random() * 0.2 - 0.1,
-      vy: Math.random() * 0.2 - 0.1,
-      color: Math.floor(Math.random() * 360),
+      radius: Math.random() * 250 + 150,
+      vx: Math.random() * 0.1 - 0.05,
+      vy: Math.random() * 0.1 - 0.05,
+      color: 158, // Matiz esmeralda da marca
     }))
 
-    const drawCircle = (x: number, y: number, radius: number, color: number) => {
+    const drawCircle = (x: number, y: number, radius: number, hue: number) => {
       const gradient = ctx.createRadialGradient(x, y, 0, x, y, radius)
-      gradient.addColorStop(0, `hsla(${color}, 100%, 60%, 0.3)`)
-      gradient.addColorStop(1, `hsla(${color}, 100%, 60%, 0)`)
+      gradient.addColorStop(0, `hsla(${hue}, 50%, 50%, 0.08)`)
+      gradient.addColorStop(1, `hsla(${hue}, 50%, 50%, 0)`)
 
       ctx.fillStyle = gradient
       ctx.beginPath()
@@ -47,26 +47,19 @@ export function AnimatedGradientBackground() {
     }
 
     const animate = () => {
-      // Limpar o canvas com um fundo semi-transparente para criar um efeito de rastro
-      ctx.fillStyle = "rgba(255, 255, 255, 0.03)"
-      ctx.fillRect(0, 0, width, height)
+      // Limpeza suave
+      ctx.clearRect(0, 0, width, height)
 
       // Desenhar e mover os círculos
       circles.forEach((circle) => {
-        // Atualizar posição
         circle.x += circle.vx
         circle.y += circle.vy
 
-        // Mudar direção ao tocar nas bordas
         if (circle.x < -circle.radius) circle.x = width + circle.radius
         if (circle.x > width + circle.radius) circle.x = -circle.radius
         if (circle.y < -circle.radius) circle.y = height + circle.radius
         if (circle.y > height + circle.radius) circle.y = -circle.radius
 
-        // Mudar cor gradualmente
-        circle.color = (circle.color + 0.1) % 360
-
-        // Desenhar círculo
         drawCircle(circle.x, circle.y, circle.radius, circle.color)
       })
 

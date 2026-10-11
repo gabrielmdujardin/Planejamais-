@@ -8,7 +8,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Skeleton, SkeletonCard } from "@/components/ui/skeleton-loader"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import { Plus, CalendarDays, Grid3X3, MapPin, Clock, Filter } from "lucide-react"
+import { EmptyState } from "@/components/ui/empty-state"
+import { Plus, CalendarDays, Grid3X3, MapPin, Clock, Filter, Users, Sparkles, CheckCircle2, TrendingUp } from "lucide-react"
 import EventCard from "@/components/event-card"
 import Link from "next/link"
 import { useAuth } from "@/context/auth-context"
@@ -303,6 +304,23 @@ export default function Dashboard() {
     return { total, confirmed, pending, cancelled }
   }, [filteredEvents])
 
+  // Indicadores consolidados com dados reais
+  const eventMetrics = useMemo(() => {
+    const totalEvents = events.length
+    const totalConfirmedGuests = events.reduce((acc, ev) => acc + (ev.confirmedGuests || 0), 0)
+    const totalGuests = events.reduce((acc, ev) => acc + (ev.totalGuests || 0), 0)
+    const collaborativeEvents = events.filter((ev) => ev.type === "Colaborativo").length
+    const confirmationRate = totalGuests > 0 ? Math.round((totalConfirmedGuests / totalGuests) * 100) : 0
+
+    return {
+      totalEvents,
+      totalConfirmedGuests,
+      totalGuests,
+      collaborativeEvents,
+      confirmationRate,
+    }
+  }, [events])
+
   // Variantes para animações
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -315,121 +333,145 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl py-8 px-4">
+    <div className="container mx-auto max-w-6xl py-8 px-4 space-y-8">
+      {/* Cabeçalho Editorial com Ação Primária */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4"
+        transition={{ duration: 0.4 }}
+        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-border/60"
       >
         <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
-          <p className="text-gray-600 dark:text-gray-300">Gerencie seus eventos e visualize seu calendário</p>
+          <span className="text-xs font-semibold uppercase tracking-wider text-primary">Painel de Controle</span>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground mt-0.5">Seus eventos</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Acompanhe confirmações de convidados, datas importantes e custos dos seus eventos.
+          </p>
         </div>
         <Link href="/create-event">
-          <Button className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600">
-            <Plus className="h-4 w-4 mr-2" /> Criar novo evento
+          <Button size="default" className="shadow-sm font-medium gap-2">
+            <Plus className="h-4 w-4" /> Criar novo evento
           </Button>
         </Link>
       </motion.div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-8">
-          <TabsTrigger value="events" className="flex items-center gap-2">
-            <Grid3X3 className="h-4 w-4" />
-            Meus Eventos
+      {/* Indicadores Compactos (KPIs) com Dados Reais */}
+      <motion.div
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, delay: 0.1 }}
+        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
+      >
+        <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80">
+          <div className="flex items-center justify-between text-muted-foreground mb-2">
+            <span className="text-xs font-medium uppercase tracking-wider">Total de Eventos</span>
+            <CalendarDays className="h-4 w-4 text-primary" />
+          </div>
+          <div className="text-2xl font-bold tracking-tight text-foreground">{eventMetrics.totalEvents}</div>
+          <p className="text-xs text-muted-foreground mt-1">cadastrados no sistema</p>
+        </Card>
+
+        <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80">
+          <div className="flex items-center justify-between text-muted-foreground mb-2">
+            <span className="text-xs font-medium uppercase tracking-wider">Confirmados</span>
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+          </div>
+          <div className="text-2xl font-bold tracking-tight text-foreground">{eventMetrics.totalConfirmedGuests}</div>
+          <p className="text-xs text-muted-foreground mt-1">
+            de {eventMetrics.totalGuests} convidados ({eventMetrics.confirmationRate}%)
+          </p>
+        </Card>
+
+        <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80">
+          <div className="flex items-center justify-between text-muted-foreground mb-2">
+            <span className="text-xs font-medium uppercase tracking-wider">Colaborativos</span>
+            <Sparkles className="h-4 w-4 text-amber-500" />
+          </div>
+          <div className="text-2xl font-bold tracking-tight text-foreground">{eventMetrics.collaborativeEvents}</div>
+          <p className="text-xs text-muted-foreground mt-1">com divisão de tarefas e itens</p>
+        </Card>
+
+        <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80">
+          <div className="flex items-center justify-between text-muted-foreground mb-2">
+            <span className="text-xs font-medium uppercase tracking-wider">Taxa de Adesão</span>
+            <TrendingUp className="h-4 w-4 text-primary" />
+          </div>
+          <div className="text-2xl font-bold tracking-tight text-foreground">{eventMetrics.confirmationRate}%</div>
+          <p className="text-xs text-muted-foreground mt-1">média geral de presença</p>
+        </Card>
+      </motion.div>
+
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
+        <TabsList className="grid w-full sm:w-80 grid-cols-2 p-1 bg-muted/60 rounded-lg">
+          <TabsTrigger value="events" className="flex items-center gap-2 text-xs font-medium">
+            <Grid3X3 className="h-3.5 w-3.5" />
+            Meus Eventos ({events.length})
           </TabsTrigger>
-          <TabsTrigger value="calendar" className="flex items-center gap-2">
-            <CalendarDays className="h-4 w-4" />
+          <TabsTrigger value="calendar" className="flex items-center gap-2 text-xs font-medium">
+            <CalendarDays className="h-3.5 w-3.5" />
             Calendário
           </TabsTrigger>
         </TabsList>
 
         {/* Aba de Eventos */}
-        <TabsContent value="events" className="space-y-8">
+        <TabsContent value="events" className="space-y-6 outline-none">
           {isLoading ? (
             <motion.div
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              transition={{ duration: 0.5 }}
+              transition={{ duration: 0.4 }}
             >
               {[1, 2, 3].map((i) => (
-                <SkeletonCard key={i} className="h-[280px]" />
+                <SkeletonCard key={i} />
               ))}
             </motion.div>
-          ) : (
+          ) : events.length > 0 ? (
             <motion.div
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12"
+              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
               variants={containerVariants}
               initial="hidden"
               animate="visible"
             >
-              {events.length > 0
-                ? events.map((event, index) => (
-                    <AnimatedCard key={event.id} delay={index * 0.1}>
-                      <Link href={`/event/${event.id}`}>
-                        <EventCard event={event} />
-                      </Link>
-                    </AnimatedCard>
-                  ))
-                : null}
+              {events.map((event, index) => (
+                <AnimatedCard key={event.id} delay={index * 0.05}>
+                  <Link href={`/event/${event.id}`} className="block h-full">
+                    <EventCard event={event} />
+                  </Link>
+                </AnimatedCard>
+              ))}
 
-              {/* Create Event Card */}
-              <AnimatedCard delay={events.length * 0.1}>
-                <Link href="/create-event">
-                  <Card className="border-dashed border-2 border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors cursor-pointer h-full">
-                    <CardContent className="p-6 flex flex-col items-center justify-center h-full min-h-[280px]">
-                      <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900 flex items-center justify-center mb-4">
-                        <Plus className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-                      </div>
-                      <h3 className="text-xl font-semibold mb-2 text-center">Criar novo evento</h3>
-                      <p className="text-gray-600 dark:text-gray-300 text-center mb-4">
-                        Comece a planejar seu próximo evento com facilidade
-                      </p>
-                      <Button variant="outline" className="mt-2 bg-transparent">
-                        Começar agora
-                      </Button>
-                    </CardContent>
+              {/* Card Compacto para Adicionar Novo Evento */}
+              <AnimatedCard delay={events.length * 0.05}>
+                <Link href="/create-event" className="block h-full">
+                  <Card
+                    variant="interactive"
+                    className="border-dashed border-2 border-border/80 hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all p-6 flex flex-col items-center justify-center text-center h-full min-h-[220px]"
+                  >
+                    <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-3">
+                      <Plus className="h-6 w-6" />
+                    </div>
+                    <h3 className="font-semibold text-foreground text-base mb-1">Criar novo evento</h3>
+                    <p className="text-xs text-muted-foreground max-w-xs mb-3">
+                      Defina local, convidados e tarefas em poucos minutos.
+                    </p>
+                    <Button variant="outline" size="sm" className="pointer-events-none">
+                      Começar agora
+                    </Button>
                   </Card>
                 </Link>
               </AnimatedCard>
             </motion.div>
+          ) : (
+            <EmptyState
+              icon={CalendarDays}
+              title="Nenhum evento criado ainda"
+              description="Você ainda não possui eventos planejados. Crie seu primeiro evento e comece a convidar seus amigos e gerenciar tarefas."
+              actionLabel="Criar meu primeiro evento"
+              actionHref="/create-event"
+              className="my-8"
+            />
           )}
-
-          {!isLoading && events.length === 0 ? (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5, delay: 0.2 }}
-              className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-12"
-            >
-              <div className="w-16 h-16 mx-auto bg-emerald-100 dark:bg-emerald-900 rounded-full flex items-center justify-center mb-4">
-                <CalendarDays className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <h2 className="text-2xl font-bold mb-2">Nenhum evento criado</h2>
-              <p className="text-gray-600 dark:text-gray-300 mb-6 max-w-md mx-auto">
-                Você ainda não criou nenhum evento. Comece agora mesmo a organizar seu próximo evento!
-              </p>
-              <Link href="/create-event">
-                <Button className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600">
-                  <Plus className="h-4 w-4 mr-2" /> Criar meu primeiro evento
-                </Button>
-              </Link>
-            </motion.div>
-          ) : null}
-
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.5, delay: 0.3 }}>
-            <h2 className="text-2xl font-bold mb-6">Eventos Recentes</h2>
-            <Card>
-              <CardContent className="p-6">
-                <div className="text-center py-8">
-                  <p className="text-gray-500 dark:text-gray-400 mb-4">Você ainda não tem eventos passados</p>
-                  <Button variant="outline">Ver tutoriais</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </motion.div>
         </TabsContent>
 
         {/* Aba do Calendário */}

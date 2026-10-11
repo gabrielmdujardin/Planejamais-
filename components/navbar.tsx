@@ -56,42 +56,45 @@ export default function Navbar() {
 
   return (
     <nav
-      className={`sticky top-0 z-50 transition-all duration-300 ${
+      className={`sticky top-0 z-50 transition-all duration-300 border-b ${
         scrolled || !isHomePage
-          ? "bg-white/90 dark:bg-gray-900/90 backdrop-blur-md shadow-sm"
+          ? "bg-background/85 backdrop-blur-md border-border/80 shadow-xs"
           : isHomePage
-            ? "bg-transparent"
-            : "bg-white dark:bg-gray-900"
+            ? "bg-transparent border-transparent"
+            : "bg-background border-border/80"
       }`}
       aria-label="Navegação principal"
     >
-      <div className="container mx-auto px-4">
+      <div className="container mx-auto px-4 max-w-6xl">
         <div className="flex justify-between items-center h-16">
           <Logo size="md" animated={false} />
 
-          <div className="hidden md:flex items-center space-x-4">
+          <div className="hidden md:flex items-center space-x-1">
             {user ? (
               <>
                 {links.slice(0, 4).map((link) => {
                   const Icon = link.icon
+                  const isActive = pathname === link.href
                   return (
                     <Link
                       key={link.href}
                       href={link.href}
                       className={cn(
-                        "text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2",
-                        pathname === link.href ? "text-primary" : "",
+                        "px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5",
+                        isActive
+                          ? "bg-primary/10 text-primary font-semibold"
+                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
                       )}
                     >
-                      <Icon className="h-4 w-4" />
+                      <Icon className="h-3.5 w-3.5" />
                       {link.label}
                     </Link>
                   )
                 })}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2">
-                      <User className="h-4 w-4" />
+                    <Button variant="ghost" size="sm" className="gap-2 text-xs ml-2">
+                      <User className="h-3.5 w-3.5" />
                       {user.name || "Usuário"}
                     </Button>
                   </DropdownMenuTrigger>
@@ -119,36 +122,33 @@ export default function Navbar() {
               <>
                 {links.slice(0, 2).map((link) => {
                   const Icon = link.icon
+                  const isActive = pathname === link.href
                   return (
                     <Link
                       key={link.href}
                       href={link.href}
                       className={cn(
-                        "text-gray-600 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-400 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                        pathname === link.href ? "text-primary" : "",
+                        "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
+                        isActive ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
                       )}
                     >
-                      <Icon className="h-4 w-4" />
                       {link.label}
                     </Link>
                   )
                 })}
                 <Link href="/login">
-                  <Button variant="outline" size="sm">
+                  <Button variant="ghost" size="sm" className="text-xs">
                     Entrar
                   </Button>
                 </Link>
                 <Link href="/register">
-                  <Button
-                    size="sm"
-                    className="bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600"
-                  >
+                  <Button size="sm" className="text-xs">
                     Cadastrar
                   </Button>
                 </Link>
               </>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 ml-2">
               <ThemeToggle />
               <AccessibilityMenu />
             </div>
