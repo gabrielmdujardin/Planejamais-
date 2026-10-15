@@ -20,7 +20,10 @@ interface Item {
   unitPrice?: number
   estimatedCost?: number
   actualCost?: number
-  paymentStatus?: string
+  paymentStatus?: "estimated" | "pending" | "partial" | "paid" | string
+  supplier?: string
+  dueDate?: string
+  invoiceNumber?: string
   notes?: string
 }
 
@@ -31,6 +34,10 @@ interface Guest {
   phone: string
   status: "confirmed" | "pending" | "declined" | "awaiting_approval" | "pending_approval" | "rejected"
   contactId?: string
+  department?: string
+  tableNumber?: string
+  dietaryRestrictions?: string
+  accessibilityNeeds?: string
   companions?: Array<{
     id: string
     name: string

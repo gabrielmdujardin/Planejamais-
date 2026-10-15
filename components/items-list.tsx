@@ -30,6 +30,9 @@ interface Item {
   unitPrice?: number
   estimatedCost?: number
   paymentStatus?: string
+  supplier?: string
+  dueDate?: string
+  invoiceNumber?: string
   notes?: string
 }
 
@@ -71,12 +74,25 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
     setIsImageDialogOpen(true)
   }
 
+  const paymentBadge = (status?: string) => {
+    switch (status) {
+      case "paid":
+        return <Badge variant="paid">Pago</Badge>
+      case "partial":
+        return <Badge variant="info">Parcial</Badge>
+      case "pending":
+        return <Badge variant="pending">Pendente</Badge>
+      default:
+        return <Badge variant="secondary">Estimado</Badge>
+    }
+  }
+
   if (items.length === 0) {
     return (
       <EmptyState
         icon={Receipt}
-        title="Nenhum gasto cadastrado"
-        description="Adicione custos e itens ao seu evento para gerenciar o orçamento e atribuir responsáveis."
+        title="Nenhum gasto ou fornecedor cadastrado"
+        description="Adicione custos, contratos de fornecedores e serviços ao seu evento para gerenciar o orçamento."
       />
     )
   }
@@ -86,13 +102,13 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Gasto</TableHead>
+            <TableHead>Gasto / Serviço</TableHead>
+            <TableHead>Fornecedor & Contrato</TableHead>
             <TableHead>Categoria</TableHead>
-            <TableHead>Qtd.</TableHead>
-            <TableHead>Valor unit.</TableHead>
             <TableHead>Total</TableHead>
+            <TableHead>Status</TableHead>
             <TableHead>Responsável(is)</TableHead>
-            <TableHead>Foto</TableHead>
+            <TableHead>Comprovante</TableHead>
             <TableHead className="text-right">Ações</TableHead>
           </TableRow>
         </TableHeader>
@@ -101,12 +117,23 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
             <TableRow key={item.id}>
               <TableCell>
                 <div className="font-medium">{item.name}</div>
-                {item.description ? <div className="text-xs text-slate-500">{item.description}</div> : null}
+                {item.description ? <div className="text-xs text-muted-foreground">{item.description}</div> : null}
+              </TableCell>
+              <TableCell>
+                {item.supplier ? (
+                  <div>
+                    <span className="font-medium text-foreground">{item.supplier}</span>
+                    {item.invoiceNumber ? (
+                      <span className="block text-xs text-muted-foreground">NF: {item.invoiceNumber}</span>
+                    ) : null}
+                  </div>
+                ) : (
+                  <span className="text-xs text-muted-foreground">-</span>
+                )}
               </TableCell>
               <TableCell>{item.category || "Geral"}</TableCell>
-              <TableCell>{item.quantity || 1}</TableCell>
-              <TableCell>R$ {Number(item.unitPrice ?? item.price).toFixed(2)}</TableCell>
-              <TableCell className="font-medium">R$ {Number(item.price || item.estimatedCost || 0).toFixed(2)}</TableCell>
+              <TableCell className="font-semibold">R$ {Number(item.price || item.estimatedCost || 0).toFixed(2)}</TableCell>
+              <TableCell>{paymentBadge(item.paymentStatus)}</TableCell>
               <TableCell>
                 {item.assignedTo && item.assignedTo.length > 0 ? (
                   <div className="flex flex-wrap gap-1">
@@ -120,7 +147,7 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-slate-500 h-7 px-2"
+                    className="text-muted-foreground h-7 px-2"
                     onClick={() => handleAssignPerson(item)}
                   >
                     <User className="h-3.5 w-3.5 mr-1" /> Atribuir
@@ -132,13 +159,13 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="text-blue-600 h-7 px-2"
+                    className="text-primary h-7 px-2"
                     onClick={() => handleViewImage(item.image as string)}
                   >
-                    <ImageIcon className="h-3.5 w-3.5 mr-1" /> Ver foto
+                    <ImageIcon className="h-3.5 w-3.5 mr-1" /> Anexo
                   </Button>
                 ) : (
-                  <span className="text-slate-400 text-sm">Sem foto</span>
+                  <span className="text-xs text-muted-foreground">Sem anexo</span>
                 )}
               </TableCell>
               <TableCell className="text-right">

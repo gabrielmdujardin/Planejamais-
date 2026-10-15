@@ -67,13 +67,15 @@ export async function middleware(request: NextRequest) {
     pathname.startsWith("/convite") ||
     pathname.startsWith("/rsvp") ||
     pathname.startsWith("/solicitar") ||
+    pathname.includes("/host-view") ||
     pathname.startsWith("/api/public-events")
 
   const isAuthPath = pathname === "/login" || pathname === "/register"
   const isProtectedPath =
-    pathname.startsWith("/dashboard") ||
-    pathname.startsWith("/create-event") ||
-    pathname.startsWith("/event")
+    (pathname.startsWith("/dashboard") ||
+      pathname.startsWith("/create-event") ||
+      pathname.startsWith("/event")) &&
+    !pathname.includes("/host-view")
 
   // 4. Verificação de sessão
   let response = NextResponse.next({

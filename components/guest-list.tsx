@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Check, Clock, Copy, Edit, Mail, MoreHorizontal, Send, Trash2, Users, X } from "lucide-react"
+import { Check, Clock, Copy, Download, Edit, Mail, MoreHorizontal, Printer, Send, Trash2, Users, X } from "lucide-react"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -205,6 +205,61 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     return <Badge variant="info"><Clock className="mr-1 h-3 w-3" /> Aguardando aprovação</Badge>
   }
 
+  const handleExportCSV = () => {
+    if (guests.length === 0) {
+      toast({ title: "Lista vazia", description: "Não há convidados para exportar.", variant: "destructive" })
+      return
+    }
+
+    const headers = ["Nome", "E-mail", "Telefone", "Status", "Acompanhantes", "Restricoes_Alimentares"]
+    const rows = guests.map((g: any) => [
+      `"${(g.name || "").replace(/"/g, '""')}"`,
+      `"${(g.email || "").replace(/"/g, '""')}"`,
+      `"${(g.phone || "").replace(/"/g, '""')}"`,
+      `"${statusText(g.status)}"`,
+      `"${g.companions?.length || 0}"`,
+      `"${(g.dietary_restrictions || g.dietaryRestrictions || "").replace(/"/g, '""')}"`,
+    ])
+
+    const csvContent = "\uFEFF" + [headers.join(";"), ...rows.map((r) => r.join(";"))].join("\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.setAttribute("download", `lista-convidados-evento-${eventId}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({ title: "Lista exportada!", description: "Arquivo CSV compatível com Excel baixado com sucesso." })
+  }
+
+  const handleCopyAllLinks = async () => {
+    if (guests.length === 0) return
+
+    const baseUrl = typeof window !== "undefined" ? window.location.origin : ""
+    const linksList = guests
+      .map((g: any) => {
+        const link = g.token || g.confirmation_token
+          ? `${baseUrl}/confirm/${g.token || g.confirmation_token}`
+          : `${baseUrl}/confirm-invitation/${eventId}/${g.id}`
+        return `• ${g.name}: ${link}`
+      })
+      .join("\n")
+
+    const fullMessage = `Convites com Link de RSVP:\n\n${linksList}`
+    await navigator.clipboard.writeText(fullMessage)
+    toast({
+      title: "Links copiados!",
+      description: `${guests.length} link(s) nominal(is) copiados para a área de transferência.`,
+    })
+  }
+
+  const handlePrintList = () => {
+    window.print()
+  }
+
   if (guests.length === 0) {
     return (
       <EmptyState
@@ -217,7 +272,15 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Cabeçalho exclusivo para impressão em papel */}
+      <div className="hidden print:block mb-4 border-b pb-2">
+        <h1 className="text-xl font-bold">Planeja+ · Lista de Credenciamento e Presença</h1>
+        <p className="text-sm text-gray-500">
+          Total de convidados: {guests.length} | Confirmados: {counts.confirmed} | Impresso em: {new Date().toLocaleDateString("pt-BR")}
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between print:hidden">
         <div className="flex flex-wrap gap-2">
           <Button variant={filter === "all" ? "default" : "outline"} size="sm" onClick={() => setFilter("all")}>Todos ({guests.length})</Button>
           <Button variant={filter === "confirmed" ? "default" : "outline"} size="sm" onClick={() => setFilter("confirmed")}>Confirmados ({counts.confirmed})</Button>
@@ -225,14 +288,26 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
           <Button variant={filter === "approval" ? "default" : "outline"} size="sm" onClick={() => setFilter("approval")}>Aprovar ({counts.approval})</Button>
           <Button variant={filter === "declined" ? "default" : "outline"} size="sm" onClick={() => setFilter("declined")}>Recusados ({counts.declined})</Button>
         </div>
-        {counts.pending > 0 ? (
-          <Button size="sm" variant="outline" onClick={sendAllPending} disabled={isLoading}>
-            <Mail className="mr-2 h-4 w-4" /> Enviar convites ({counts.pending})
+
+        <div className="flex flex-wrap items-center gap-2">
+          {counts.pending > 0 ? (
+            <Button size="sm" variant="outline" onClick={sendAllPending} disabled={isLoading} className="text-xs gap-1">
+              <Mail className="h-3.5 w-3.5" /> Disparar e-mails ({counts.pending})
+            </Button>
+          ) : null}
+          <Button size="sm" variant="outline" onClick={handleCopyAllLinks} className="text-xs gap-1" title="Copiar links para WhatsApp">
+            <Copy className="h-3.5 w-3.5" /> Copiar Links
           </Button>
-        ) : null}
+          <Button size="sm" variant="outline" onClick={handleExportCSV} className="text-xs gap-1" title="Baixar planilha Excel">
+            <Download className="h-3.5 w-3.5" /> Exportar CSV
+          </Button>
+          <Button size="sm" variant="outline" onClick={handlePrintList} className="text-xs gap-1" title="Imprimir lista de presença">
+            <Printer className="h-3.5 w-3.5" /> Imprimir
+          </Button>
+        </div>
       </div>
 
-      <Input placeholder="Buscar por nome, e-mail ou telefone..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="max-w-sm" />
+      <Input placeholder="Buscar por nome, e-mail ou telefone..." value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} className="max-w-sm print:hidden" />
 
       <div className="overflow-x-auto rounded-md border border-slate-200 dark:border-slate-800">
         <table className="w-full border-collapse bg-white dark:bg-slate-900">
@@ -241,21 +316,47 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
               <th className="p-3 font-semibold">Convidado</th>
               <th className="p-3 font-semibold">Contato</th>
               <th className="p-3 font-semibold">Status</th>
-              <th className="p-3 text-right font-semibold">Ações</th>
+              <th className="hidden print:table-cell p-3 font-semibold">Check-in / Assinatura</th>
+              <th className="p-3 text-right font-semibold print:hidden">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800 text-sm">
             {filteredGuests.map((guest) => (
               <tr key={guest.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/50 transition-colors">
                 <td className="p-3">
-                  <div className="flex items-center gap-3">{avatar(guest.name)}<span className="font-medium text-slate-900 dark:text-slate-100">{guest.name}</span></div>
+                  <div className="flex items-center gap-3">
+                    {avatar(guest.name)}
+                    <div>
+                      <span className="font-medium text-slate-900 dark:text-slate-100">{guest.name}</span>
+                      <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                        {guest.department ? (
+                          <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                            {guest.department}
+                          </Badge>
+                        ) : null}
+                        {guest.tableNumber ? (
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            Mesa {guest.tableNumber}
+                          </span>
+                        ) : null}
+                        {guest.dietaryRestrictions ? (
+                          <span className="text-[11px] text-amber-600 dark:text-amber-400 font-medium">
+                            🥗 {guest.dietaryRestrictions}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
                 </td>
                 <td className="p-3 text-slate-600 dark:text-slate-400">
                   <div>{guest.email}</div>
                   <div className="text-xs text-slate-400">{guest.phone}</div>
                 </td>
                 <td className="p-3">{statusBadge(guest.status)}</td>
-                <td className="p-3 text-right">
+                <td className="hidden print:table-cell p-3 font-mono text-xs text-slate-500">
+                  [ &nbsp; ] ____________________
+                </td>
+                <td className="p-3 text-right print:hidden">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="sm" disabled={isLoading}>
@@ -283,13 +384,20 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
       </div>
 
       <Dialog open={!!editingGuest} onOpenChange={(open) => !open && setEditingGuest(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Editar convidado</DialogTitle></DialogHeader>
           {editingGuest ? (
             <div className="space-y-4 py-2">
-              <div className="space-y-2"><Label>Nome</Label><Input value={editingGuest.name} onChange={(event) => setEditingGuest({ ...editingGuest, name: event.target.value })} /></div>
-              <div className="space-y-2"><Label>E-mail</Label><Input value={editingGuest.email} onChange={(event) => setEditingGuest({ ...editingGuest, email: event.target.value })} /></div>
-              <div className="space-y-2"><Label>Telefone</Label><Input value={editingGuest.phone} onChange={(event) => setEditingGuest({ ...editingGuest, phone: event.target.value })} /></div>
+              <div className="space-y-2"><Label>Nome *</Label><Input value={editingGuest.name} onChange={(event) => setEditingGuest({ ...editingGuest, name: event.target.value })} /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2"><Label>E-mail</Label><Input value={editingGuest.email} onChange={(event) => setEditingGuest({ ...editingGuest, email: event.target.value })} /></div>
+                <div className="space-y-2"><Label>Telefone / WhatsApp</Label><Input value={editingGuest.phone} onChange={(event) => setEditingGuest({ ...editingGuest, phone: event.target.value })} /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2"><Label>Departamento / Setor</Label><Input placeholder="Ex: RH, Comercial" value={editingGuest.department || ""} onChange={(event) => setEditingGuest({ ...editingGuest, department: event.target.value })} /></div>
+                <div className="space-y-2"><Label>Mesa / Assento</Label><Input placeholder="Ex: 04, VIP" value={editingGuest.tableNumber || ""} onChange={(event) => setEditingGuest({ ...editingGuest, tableNumber: event.target.value })} /></div>
+              </div>
+              <div className="space-y-2"><Label>Restrições Alimentares</Label><Input placeholder="Ex: Vegetariano, Vegano, Celíaco" value={editingGuest.dietaryRestrictions || ""} onChange={(event) => setEditingGuest({ ...editingGuest, dietaryRestrictions: event.target.value })} /></div>
             </div>
           ) : null}
           <DialogFooter>

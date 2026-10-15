@@ -12,7 +12,10 @@ import {
   Clock,
   Copy,
   DollarSign,
+  Download,
   Edit3,
+  Eye,
+  FileSpreadsheet,
   ImageIcon,
   LinkIcon,
   Mail,
@@ -38,6 +41,7 @@ import PublicInviteShare from "@/components/public-invite-share"
 import { getEventById as fetchEventById } from "@/app/actions/events"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
+import { getEventTerminology } from "@/lib/terminology"
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" })
 
@@ -158,6 +162,8 @@ export default function EventPage() {
     return notes
   }, [event, stats])
 
+  const terminology = useMemo(() => getEventTerminology(event?.type), [event?.type])
+
   const publicUrl =
     typeof window !== "undefined" && event?.publicInviteEnabled && event?.publicInviteToken
       ? `${window.location.origin}/convite/${event.publicInviteToken}`
@@ -234,7 +240,7 @@ export default function EventPage() {
   }
 
   const eventDateLine = [event.date, event.startTime || event.time, event.endTime ? `ate ${event.endTime}` : ""].filter(Boolean).join(" ")
-  const capacityLine = event.capacity ? `${stats.totalGuests}/${event.capacity} convidados` : `${stats.totalGuests} convidados`
+  const capacityLine = event.capacity ? `${stats.totalGuests}/${event.capacity} ${terminology.attendeeLabel.toLowerCase()}` : `${stats.totalGuests} ${terminology.attendeeLabel.toLowerCase()}`
 
   return (
     <div className="min-h-screen bg-background">
@@ -246,12 +252,20 @@ export default function EventPage() {
               Visao geral dos eventos
             </Button>
           </Link>
-          <Link href="/dashboard/analytics">
-            <Button variant="outline" size="sm">
-              <BarChart3 className="mr-2 h-4 w-4" />
-              Analises globais
-            </Button>
-          </Link>
+          <div className="flex gap-2">
+            <Link href={`/event/${event.id}/host-view`} target="_blank">
+              <Button variant="outline" size="sm" className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10">
+                <Eye className="mr-2 h-4 w-4" />
+                Painel do Anfitrião (Leitura)
+              </Button>
+            </Link>
+            <Link href="/dashboard/analytics">
+              <Button variant="outline" size="sm">
+                <BarChart3 className="mr-2 h-4 w-4" />
+                Analises globais
+              </Button>
+            </Link>
+          </div>
         </div>
 
         <section className="mb-6 rounded-lg border border-border bg-card p-5 shadow-sm">
@@ -304,23 +318,33 @@ export default function EventPage() {
         </section>
 
         <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MetricCard title="Total de convidados" value={stats.totalGuests} icon={<Users className="h-4 w-4" />} />
-          <MetricCard title="Confirmados" value={stats.confirmed} icon={<CheckCircle2 className="h-4 w-4" />} tone="emerald" />
+          <MetricCard title={`Total de ${terminology.attendeeLabel.toLowerCase()}`} value={stats.totalGuests} icon={<Users className="h-4 w-4" />} />
+          <MetricCard title={terminology.confirmedLabel} value={stats.confirmed} icon={<CheckCircle2 className="h-4 w-4" />} tone="emerald" />
           <MetricCard title="Pendentes" value={stats.pending} icon={<Clock className="h-4 w-4" />} tone="amber" />
           <MetricCard title="Recusados" value={stats.declined} icon={<XCircle className="h-4 w-4" />} tone="red" />
           <MetricCard title="Solicitacoes pendentes" value={stats.requests} icon={<Mail className="h-4 w-4" />} />
           <MetricCard title="Acompanhantes pendentes" value={stats.pendingCompanions} icon={<Users className="h-4 w-4" />} />
-          <MetricCard title="Gastos" value={currency.format(stats.totalCost)} icon={<DollarSign className="h-4 w-4" />} />
+          <MetricCard title="Custos e Serviços" value={currency.format(stats.totalCost)} icon={<DollarSign className="h-4 w-4" />} />
           <MetricCard title="Fotos" value={stats.photoCount} icon={<ImageIcon className="h-4 w-4" />} />
         </div>
 
         <Card className="mb-6">
           <CardContent className="flex flex-wrap gap-2 p-4">
             <Button size="sm" variant="outline" onClick={() => setIsEditEventOpen(true)}><Edit3 className="mr-2 h-4 w-4" /> Editar evento</Button>
-            <Button size="sm" variant="outline" onClick={() => setIsAddGuestOpen(true)}><Plus className="mr-2 h-4 w-4" /> Adicionar convidado</Button>
+            <Button size="sm" variant="outline" onClick={() => setIsAddGuestOpen(true)} className="bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20">
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> {terminology.addAttendee}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => setIsAddItemOpen(true)}><DollarSign className="mr-2 h-4 w-4" /> {terminology.addItem}</Button>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => copyText(`${window.location.origin}/event/${event.id}/host-view`, "Link do Anfitrião copiado", "Link somente leitura pronto para enviar ao cliente.")}
+              className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+            >
+              <Copy className="mr-2 h-4 w-4" /> Link do Anfitrião (Leitura)
+            </Button>
             <Button size="sm" variant="outline" onClick={handleResendInvites}><Mail className="mr-2 h-4 w-4" /> Enviar convites</Button>
             <Button size="sm" variant="outline" onClick={handleShare}><Copy className="mr-2 h-4 w-4" /> Copiar link publico</Button>
-            <Button size="sm" variant="outline" onClick={() => setIsAddItemOpen(true)}><DollarSign className="mr-2 h-4 w-4" /> Adicionar gasto</Button>
             <Button size="sm" variant="outline" onClick={() => setActiveTab("requests")}><Mail className="mr-2 h-4 w-4" /> Ver solicitacoes</Button>
             <Button size="sm" variant="outline" onClick={() => setActiveTab("photos")}><ImageIcon className="mr-2 h-4 w-4" /> Galeria</Button>
             <Button size="sm" variant="outline" onClick={() => setActiveTab("analytics")}><BarChart3 className="mr-2 h-4 w-4" /> Analises do evento</Button>
@@ -330,9 +354,9 @@ export default function EventPage() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex h-auto flex-wrap justify-start">
             <TabsTrigger value="overview">Visao geral</TabsTrigger>
-            <TabsTrigger value="guests">Convidados ({stats.totalGuests})</TabsTrigger>
+            <TabsTrigger value="guests">{terminology.attendeeLabel} ({stats.totalGuests})</TabsTrigger>
             <TabsTrigger value="requests">Solicitacoes ({stats.requests})</TabsTrigger>
-            <TabsTrigger value="expenses">Gastos ({stats.itemCount})</TabsTrigger>
+            <TabsTrigger value="expenses">Custos / Fornecedores ({stats.itemCount})</TabsTrigger>
             <TabsTrigger value="photos">Fotos ({stats.photoCount})</TabsTrigger>
             <TabsTrigger value="analytics">Analises</TabsTrigger>
           </TabsList>
@@ -403,9 +427,9 @@ export default function EventPage() {
           <TabsContent value="guests">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Convidados</CardTitle>
+                <CardTitle>{terminology.attendeeLabel}</CardTitle>
                 <Button size="sm" onClick={() => setIsAddGuestOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
-                  <Plus className="mr-2 h-4 w-4" /> Adicionar
+                  <Plus className="mr-2 h-4 w-4" /> {terminology.addAttendee}
                 </Button>
               </CardHeader>
               <CardContent><GuestList guests={event.guests || []} eventId={event.id} /></CardContent>
@@ -437,9 +461,9 @@ export default function EventPage() {
           <TabsContent value="expenses">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>Gastos do evento</CardTitle>
+                <CardTitle>{terminology.budgetTitle}</CardTitle>
                 <Button size="sm" onClick={() => setIsAddItemOpen(true)} className="bg-emerald-600 hover:bg-emerald-700">
-                  <Plus className="mr-2 h-4 w-4" /> Adicionar gasto
+                  <Plus className="mr-2 h-4 w-4" /> {terminology.addItem}
                 </Button>
               </CardHeader>
               <CardContent className="space-y-5">
