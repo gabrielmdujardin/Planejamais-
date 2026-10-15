@@ -15,6 +15,8 @@ interface Event {
   date: string
   confirmedGuests: number
   totalGuests: number
+  financialMode?: "corporate_budget" | "collaborative_split"
+  budgetEstimated?: number | null
   items?: EventItem[]
 }
 
@@ -23,7 +25,7 @@ interface EventCardProps {
 }
 
 export default function EventCard({ event }: EventCardProps) {
-  const isCollaborative = event.type === "Colaborativo"
+  const isCollaborative = event.financialMode === "collaborative_split" || event.type === "Colaborativo"
   const totalCost = event.items ? event.items.reduce((sum, item) => sum + item.price, 0) : 0
   const costPerPerson =
     event.confirmedGuests > 0 ? (totalCost / event.confirmedGuests).toFixed(2) : "0.00"
@@ -44,7 +46,7 @@ export default function EventCard({ event }: EventCardProps) {
           className={`h-1.5 w-full ${
             isCollaborative
               ? "bg-gradient-to-r from-emerald-500 to-teal-400"
-              : "bg-gradient-to-r from-slate-400 to-slate-300 dark:from-slate-700 dark:to-slate-600"
+              : "bg-gradient-to-r from-slate-700 to-slate-900 dark:from-slate-600 dark:to-slate-800"
           }`}
         />
 
@@ -87,7 +89,7 @@ export default function EventCard({ event }: EventCardProps) {
             </div>
           </div>
 
-          {/* Seção Financeira/Itens (Eventos Colaborativos) */}
+          {/* Seção Financeira: Modo Colaborativo (Rateio) */}
           {isCollaborative && event.items && event.items.length > 0 && (
             <div className="pt-2 border-t border-border/60 space-y-2">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -105,6 +107,30 @@ export default function EventCard({ event }: EventCardProps) {
                   <span className="text-emerald-800 dark:text-emerald-300 font-medium">Por pessoa:</span>
                   <span className="font-bold text-emerald-700 dark:text-emerald-400">
                     R$ {costPerPerson}
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Seção Financeira: Modo Corporativo / Orçamento (Sem Rateio) */}
+          {!isCollaborative && (totalCost > 0 || (event.budgetEstimated && event.budgetEstimated > 0)) && (
+            <div className="pt-2 border-t border-border/60 space-y-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span className="flex items-center gap-1">
+                  <DollarSign className="h-3.5 w-3.5 text-primary" />
+                  {event.budgetEstimated ? "Verba alocada" : "Gastos comprometidos"}
+                </span>
+                <span className="font-semibold text-foreground">
+                  R$ {(event.budgetEstimated || totalCost).toFixed(2)}
+                </span>
+              </div>
+
+              {totalCost > 0 && event.budgetEstimated && (
+                <div className="flex items-center justify-between text-xs bg-muted/60 px-2.5 py-1.5 rounded-md border border-border/50">
+                  <span className="text-muted-foreground font-medium">Executado:</span>
+                  <span className="font-semibold text-foreground">
+                    R$ {totalCost.toFixed(2)}
                   </span>
                 </div>
               )}

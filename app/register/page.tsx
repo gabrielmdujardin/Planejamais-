@@ -4,14 +4,12 @@ import type React from "react"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAuth } from "@/context/auth-context"
 import { Logo } from "@/components/logo"
-import { User, Mail, Lock, Sparkles, KeyRound, ArrowLeft, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react"
+import { AuthShell, authInputClass, authLabelClass } from "@/components/auth-shell"
+import { User, Mail, Lock, ArrowUpRight, AlertCircle, Check, Loader2 } from "lucide-react"
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -22,6 +20,9 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
+
+  const passwordOk = password.length >= 6
+  const matchOk = confirmPassword.length > 0 && password === confirmPassword
 
   const handleDemoFill = () => {
     setName("Usuário Demo")
@@ -57,180 +58,107 @@ export default function RegisterPage() {
     }
   }
 
+  const fields = [
+    { id: "name", label: "Nome", type: "text", value: name, set: setName, icon: User, placeholder: "Como te chamam", auto: "name" },
+    { id: "email", label: "E-mail", type: "email", value: email, set: setEmail, icon: Mail, placeholder: "voce@email.com", auto: "email" },
+    { id: "password", label: "Senha", type: "password", value: password, set: setPassword, icon: Lock, placeholder: "Mínimo 6 caracteres", auto: "new-password" },
+    { id: "confirmPassword", label: "Confirmar senha", type: "password", value: confirmPassword, set: setConfirmPassword, icon: Lock, placeholder: "Repita a senha", auto: "new-password" },
+  ] as const
+
   return (
-    <div className="relative min-h-screen flex flex-col items-center justify-center bg-background text-foreground p-4 selection:bg-primary/20 selection:text-primary overflow-hidden">
-      {/* Luzes decorativas sutis com paleta esmeralda institucional */}
-      <div
-        className="pointer-events-none absolute -top-40 -left-40 h-96 w-96 rounded-full bg-primary/10 blur-3xl opacity-70"
-        aria-hidden="true"
-      />
-      <div
-        className="pointer-events-none absolute -bottom-40 -right-40 h-96 w-96 rounded-full bg-teal-500/10 blur-3xl opacity-60"
-        aria-hidden="true"
-      />
+    <div className="bg-background">
+      <AuthShell
+        brand={<Logo size="md" />}
+        eyebrow="Criar conta"
+        title={
+          <>
+            Seu próximo evento <em className="text-primary">começa aqui</em>.
+          </>
+        }
+        subtitle="Grátis para começar. Seus convidados não precisam criar conta."
+        aside={{
+          quote: (
+            <>
+              “O link de confirmação evitou <em className="text-lime">surpresas</em> no almoço de 60 anos da minha mãe.”
+            </>
+          ),
+          caption: "Rafael · 45 convidados",
+        }}
+      >
+        <button
+          type="button"
+          onClick={handleDemoFill}
+          className="group mb-7 flex w-full items-center justify-between rounded-2xl bg-secondary px-4 py-3 text-left transition-colors duration-300 hover:bg-secondary/70"
+        >
+          <span className="text-sm">Testar com dados de demonstração</span>
+          <span className="rounded-full bg-card px-3 py-1.5 text-xs transition-transform duration-500 ease-fluid group-hover:-translate-x-0.5">
+            Preencher
+          </span>
+        </button>
 
-      <div className="w-full max-w-md relative z-10 space-y-6">
-        {/* Identidade visual no topo */}
-        <div className="text-center space-y-2">
-          <div className="inline-block transition-transform hover:scale-105">
-            <Link href="/" aria-label="Ir para a página inicial">
-              <Logo size="lg" animated={false} />
-            </Link>
-          </div>
-          <p className="text-xs text-muted-foreground">Comece a planejar seus eventos agora mesmo</p>
-        </div>
-
-        <Card className="border-border bg-card shadow-xl rounded-2xl overflow-hidden">
-          <CardHeader className="space-y-1.5 pb-4">
-            <CardTitle className="text-2xl font-bold text-center tracking-tight text-foreground">
-              Criar sua conta
-            </CardTitle>
-            <CardDescription className="text-center text-sm text-muted-foreground">
-              Cadastre-se gratuitamente para gerenciar eventos e convidados
-            </CardDescription>
-          </CardHeader>
-
-          <CardContent className="space-y-5">
-            {/* Bloco Refinado de Modo Demo */}
-            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5 text-xs text-foreground/90">
-              <div className="flex items-start gap-3">
-                <Sparkles className="h-4 w-4 text-primary mt-0.5 shrink-0" />
-                <div className="space-y-1.5 flex-1">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-primary">Preenchimento Automático Demo</span>
-                    <button
-                      type="button"
-                      onClick={handleDemoFill}
-                      className="inline-flex items-center gap-1 text-[11px] font-semibold text-primary hover:underline hover:text-primary/80 transition-colors"
-                      title="Preencher automaticamente para teste"
-                    >
-                      <KeyRound className="h-3 w-3" /> Preencher
-                    </button>
-                  </div>
-                  <p className="text-muted-foreground text-[11px] leading-relaxed">
-                    Clique para preencher os campos com dados de demonstração sem digitação manual.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Nome completo
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {fields.map((f) => {
+            const Icon = f.icon
+            return (
+              <div key={f.id} className="space-y-2">
+                <Label htmlFor={f.id} className={authLabelClass}>
+                  {f.label}
                 </Label>
                 <div className="relative">
                   <Input
-                    id="name"
-                    type="text"
-                    placeholder="Seu nome ou apelido"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
+                    id={f.id}
+                    type={f.type}
+                    autoComplete={f.auto}
+                    placeholder={f.placeholder}
+                    value={f.value}
+                    onChange={(e) => f.set(e.target.value)}
                     required
                     disabled={loading}
-                    className="pl-10 h-10 bg-background border-input focus-visible:ring-ring"
+                    minLength={f.type === "password" ? 6 : undefined}
+                    className={authInputClass}
                   />
-                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Icon className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" strokeWidth={1.5} />
                 </div>
               </div>
+            )
+          })}
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  E-mail
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="email"
-                    type="email"
-                    placeholder="seu@email.com"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    required
-                    disabled={loading}
-                    className="pl-10 h-10 bg-background border-input focus-visible:ring-ring"
-                  />
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
-                </div>
-              </div>
+          {/* Feedback ao vivo da senha */}
+          <ul className="flex flex-wrap gap-x-5 gap-y-1 pt-1 font-mono text-[11px] text-muted-foreground" aria-live="polite">
+            <li className={`flex items-center gap-1.5 transition-colors ${passwordOk ? "text-primary" : ""}`}>
+              <Check className="h-3 w-3" strokeWidth={2} /> 6+ caracteres
+            </li>
+            <li className={`flex items-center gap-1.5 transition-colors ${matchOk ? "text-primary" : ""}`}>
+              <Check className="h-3 w-3" strokeWidth={2} /> senhas iguais
+            </li>
+          </ul>
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Senha (mínimo 6 caracteres)
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    disabled={loading}
-                    minLength={6}
-                    className="pl-10 h-10 bg-background border-input focus-visible:ring-ring"
-                  />
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
-                </div>
-              </div>
+          {error && (
+            <p role="alert" className="flex items-start gap-2 rounded-2xl bg-clay/10 px-4 py-3 text-sm text-clay">
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.5} />
+              {error}
+            </p>
+          )}
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Confirmar senha
-                </Label>
-                <div className="relative">
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="••••••••"
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    required
-                    disabled={loading}
-                    minLength={6}
-                    className="pl-10 h-10 bg-background border-input focus-visible:ring-ring"
-                  />
-                  <CheckCircle2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground pointer-events-none" />
-                </div>
-              </div>
-
-              {error && (
-                <Alert variant="destructive" className="py-2.5">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription className="text-xs">{error}</AlertDescription>
-                </Alert>
+          <button type="submit" disabled={loading} className="btn-pill btn-primary !mt-6 w-full justify-between disabled:opacity-70">
+            {loading ? "Criando conta…" : "Criar minha conta"}
+            <span className="btn-orb">
+              {loading ? (
+                <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.5} />
+              ) : (
+                <ArrowUpRight className="h-4 w-4" strokeWidth={1.5} />
               )}
+            </span>
+          </button>
+        </form>
 
-              <Button
-                type="submit"
-                size="lg"
-                className="w-full font-semibold shadow-md gap-2"
-                isLoading={loading}
-                loadingText="Criando conta..."
-              >
-                Criar minha conta <ArrowRight className="h-4 w-4" />
-              </Button>
-            </form>
-
-            <div className="pt-2 text-center text-sm border-t border-border/60">
-              <span className="text-muted-foreground text-xs">Já possui uma conta? </span>
-              <Link href="/login" className="text-xs text-primary font-semibold hover:underline">
-                Fazer login
-              </Link>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Link de retorno */}
-        <div className="text-center">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <ArrowLeft className="h-3.5 w-3.5" />
-            Voltar para a página inicial
+        <p className="mt-8 text-sm text-muted-foreground">
+          Já tem conta?{" "}
+          <Link href="/login" className="link-underline text-foreground">
+            Entrar
           </Link>
-        </div>
-      </div>
+        </p>
+      </AuthShell>
     </div>
   )
 }

@@ -21,7 +21,19 @@ const config = {
       },
     },
     extend: {
+      fontFamily: {
+        sans: ["var(--font-geist)", "ui-sans-serif", "system-ui", "sans-serif"],
+        serif: ["var(--font-instrument)", "ui-serif", "Georgia", "serif"],
+        mono: ["var(--font-geist-mono)", "ui-monospace", "monospace"],
+      },
+      transitionTimingFunction: {
+        fluid: "cubic-bezier(0.32, 0.72, 0, 1)",
+      },
       colors: {
+        lime: "hsl(var(--lime))",
+        clay: "hsl(var(--clay))",
+        espresso: "hsl(var(--espresso))",
+        "ink-soft": "hsl(var(--ink-soft))",
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
         ring: "hsl(var(--ring))",

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
+import { usePathname } from "next/navigation"
 import { useAuth } from "@/context/auth-context"
 import {
   DropdownMenu,
@@ -11,13 +11,24 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Menu, X, User, LogOut, Calendar, Users, BarChart3 } from "lucide-react"
+import { User, LogOut, ArrowUpRight } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AccessibilityMenu } from "@/components/accessibility-menu"
 import { Logo } from "@/components/logo"
-import { motion, AnimatePresence } from "framer-motion"
-import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
+
+const appLinks = [
+  { href: "/dashboard", label: "Painel" },
+  { href: "/calendar", label: "Calendário" },
+  { href: "/contacts", label: "Contatos" },
+  { href: "/dashboard/analytics", label: "Análise" },
+]
+
+const publicLinks = [
+  { href: "/#recursos", label: "Recursos" },
+  { href: "/#como-funciona", label: "Como funciona" },
+  { href: "/pricing", label: "Preços" },
+]
 
 export default function Navbar() {
   const [isMenuOpen, setIsMenuOpen] = useState(false)
@@ -25,224 +36,197 @@ export default function Navbar() {
   const { user, logout } = useAuth()
   const pathname = usePathname()
 
-  const isHomePage = pathname === "/"
-
-  const toggleMenu = () => {
-    setIsMenuOpen(!isMenuOpen)
-  }
+  const links = user ? appLinks : publicLinks
 
   useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 10) {
-        setScrolled(true)
-      } else {
-        setScrolled(false)
-      }
-    }
-
-    window.addEventListener("scroll", handleScroll)
-    return () => {
-      window.removeEventListener("scroll", handleScroll)
-    }
+    const onScroll = () => setScrolled(window.scrollY > 12)
+    onScroll()
+    window.addEventListener("scroll", onScroll, { passive: true })
+    return () => window.removeEventListener("scroll", onScroll)
   }, [])
 
-  const links = [
-    { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-    { href: "/calendar", label: "Calendário", icon: Calendar },
-    { href: "/contacts", label: "Contatos", icon: Users },
-    { href: "/dashboard/analytics", label: "Análise", icon: BarChart3 },
-    { href: "/profile", label: "Perfil", icon: User },
-  ]
+  // Fecha o menu ao navegar e trava o scroll enquanto aberto
+  useEffect(() => setIsMenuOpen(false), [pathname])
+  useEffect(() => {
+    document.body.style.overflow = isMenuOpen ? "hidden" : ""
+    return () => {
+      document.body.style.overflow = ""
+    }
+  }, [isMenuOpen])
+
+  const isActive = (href: string) => !href.includes("#") && pathname === href
 
   return (
-    <nav
-      className={`sticky top-0 z-50 transition-all duration-300 border-b ${
-        scrolled || !isHomePage
-          ? "bg-background/85 backdrop-blur-md border-border/80 shadow-xs"
-          : isHomePage
-            ? "bg-transparent border-transparent"
-            : "bg-background border-border/80"
-      }`}
-      aria-label="Navegação principal"
-    >
-      <div className="container mx-auto px-4 max-w-6xl">
-        <div className="flex justify-between items-center h-16">
-          <Logo size="md" animated={false} />
+    <>
+      <header className="sticky top-0 z-40 px-3 pt-3 md:px-6 md:pt-5">
+        <nav
+          aria-label="Navegação principal"
+          className={cn(
+            "mx-auto flex h-14 max-w-6xl items-center justify-between rounded-full pl-5 pr-2 transition-[background-color,box-shadow] duration-500 ease-fluid",
+            scrolled || isMenuOpen
+              ? "bg-card/80 shadow-[0_12px_32px_-18px_rgba(28,26,23,0.35)] ring-1 ring-foreground/[0.06] backdrop-blur-xl"
+              : "bg-transparent",
+          )}
+        >
+          <Logo size="sm" />
 
-          <div className="hidden md:flex items-center space-x-1">
-            {user ? (
-              <>
-                {links.slice(0, 4).map((link) => {
-                  const Icon = link.icon
-                  const isActive = pathname === link.href
-                  return (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className={cn(
-                        "px-3 py-1.5 rounded-md text-xs font-medium transition-colors flex items-center gap-1.5",
-                        isActive
-                          ? "bg-primary/10 text-primary font-semibold"
-                          : "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-                      )}
-                    >
-                      <Icon className="h-3.5 w-3.5" />
-                      {link.label}
-                    </Link>
-                  )
-                })}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="gap-2 text-xs ml-2">
-                      <User className="h-3.5 w-3.5" />
-                      {user.name || "Usuário"}
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    {links.slice(4).map((link) => {
-                      const Icon = link.icon
-                      return (
-                        <DropdownMenuItem asChild key={link.href}>
-                          <Link href={link.href} className="cursor-pointer flex items-center gap-2">
-                            <Icon className="mr-2 h-4 w-4" />
-                            <span>{link.label}</span>
-                          </Link>
-                        </DropdownMenuItem>
-                      )
-                    })}
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={logout} className="text-red-600 cursor-pointer flex items-center gap-2">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Sair</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            ) : (
-              <>
-                {links.slice(0, 2).map((link) => {
-                  const Icon = link.icon
-                  const isActive = pathname === link.href
-                  return (
-                    <Link
-                      key={link.href}
-                      href={link.href}
-                      className={cn(
-                        "px-3 py-1.5 rounded-md text-xs font-medium transition-colors",
-                        isActive ? "text-primary font-semibold" : "text-muted-foreground hover:text-foreground",
-                      )}
-                    >
-                      {link.label}
-                    </Link>
-                  )
-                })}
-                <Link href="/login">
-                  <Button variant="ghost" size="sm" className="text-xs">
-                    Entrar
-                  </Button>
-                </Link>
-                <Link href="/register">
-                  <Button size="sm" className="text-xs">
-                    Cadastrar
-                  </Button>
-                </Link>
-              </>
-            )}
-            <div className="flex items-center gap-1.5 ml-2">
+          <div className="hidden items-center gap-1 md:flex">
+            {links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                aria-current={isActive(link.href) ? "page" : undefined}
+                className={cn(
+                  "rounded-full px-3.5 py-2 text-[13.5px] transition-colors duration-300 ease-fluid",
+                  isActive(link.href)
+                    ? "bg-secondary text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {link.label}
+              </Link>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-1">
+            <div className="hidden items-center gap-0.5 sm:flex">
               <ThemeToggle />
               <AccessibilityMenu />
             </div>
-          </div>
 
-          <div className="md:hidden flex items-center gap-2">
-            <ThemeToggle />
-            <AccessibilityMenu />
-            <Button variant="ghost" size="icon" onClick={toggleMenu} aria-label="Menu" aria-expanded={isMenuOpen}>
-              {isMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-            </Button>
+            {user ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    className="hidden items-center gap-2 rounded-full bg-secondary py-1.5 pl-1.5 pr-4 text-[13.5px] md:inline-flex"
+                    aria-label="Menu da conta"
+                  >
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary font-mono text-[11px] text-primary-foreground">
+                      {(user.name || "U").slice(0, 1).toUpperCase()}
+                    </span>
+                    {user.name?.split(" ")[0] || "Conta"}
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-48 rounded-2xl p-1.5">
+                  <DropdownMenuItem asChild className="rounded-xl">
+                    <Link href="/profile" className="flex cursor-pointer items-center gap-2">
+                      <User className="h-4 w-4" strokeWidth={1.5} /> Perfil
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem onClick={logout} className="flex cursor-pointer items-center gap-2 rounded-xl text-clay">
+                    <LogOut className="h-4 w-4" strokeWidth={1.5} /> Sair
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : (
+              <div className="hidden items-center gap-1 md:flex">
+                <Link
+                  href="/login"
+                  className="rounded-full px-4 py-2 text-[13.5px] text-foreground transition-colors hover:bg-secondary"
+                >
+                  Entrar
+                </Link>
+                <Link href="/register" className="btn-pill btn-primary py-1.5 pl-4 pr-1.5 text-[13.5px]">
+                  Começar grátis
+                  <span className="btn-orb h-7 w-7">
+                    <ArrowUpRight className="h-3.5 w-3.5" strokeWidth={1.75} />
+                  </span>
+                </Link>
+              </div>
+            )}
+
+            {/* Hambúrguer que se transforma em X */}
+            <button
+              onClick={() => setIsMenuOpen((v) => !v)}
+              aria-label={isMenuOpen ? "Fechar menu" : "Abrir menu"}
+              aria-expanded={isMenuOpen}
+              aria-controls="mobile-menu"
+              className="relative flex h-10 w-10 items-center justify-center rounded-full bg-secondary md:hidden"
+            >
+              <span
+                className={cn(
+                  "absolute h-[1.5px] w-4 bg-foreground transition-transform duration-500 ease-fluid",
+                  isMenuOpen ? "rotate-45" : "-translate-y-[4px]",
+                )}
+              />
+              <span
+                className={cn(
+                  "absolute h-[1.5px] w-4 bg-foreground transition-transform duration-500 ease-fluid",
+                  isMenuOpen ? "-rotate-45" : "translate-y-[4px]",
+                )}
+              />
+            </button>
+          </div>
+        </nav>
+      </header>
+
+      {/* Menu móvel em tela cheia */}
+      <div
+        id="mobile-menu"
+        className={cn(
+          "fixed inset-0 z-30 bg-background/90 backdrop-blur-2xl transition-opacity duration-500 ease-fluid md:hidden",
+          isMenuOpen ? "opacity-100" : "pointer-events-none opacity-0",
+        )}
+        aria-hidden={!isMenuOpen}
+      >
+        <div className="flex h-full flex-col justify-between px-6 pb-10 pt-28">
+          <ul className="space-y-1">
+            {[...links, ...(user ? [{ href: "/profile", label: "Perfil" }] : [])].map((link, i) => (
+              <li
+                key={link.href}
+                className={cn(
+                  "transition-all duration-700 ease-fluid",
+                  isMenuOpen ? "translate-y-0 opacity-100" : "translate-y-10 opacity-0",
+                )}
+                style={{ transitionDelay: isMenuOpen ? `${80 + i * 60}ms` : "0ms" }}
+              >
+                <Link
+                  href={link.href}
+                  onClick={() => setIsMenuOpen(false)}
+                  tabIndex={isMenuOpen ? 0 : -1}
+                  className="display block py-2 text-5xl text-foreground"
+                >
+                  {link.label}
+                </Link>
+              </li>
+            ))}
+          </ul>
+
+          <div
+            className={cn(
+              "space-y-4 transition-all delay-300 duration-700 ease-fluid",
+              isMenuOpen ? "translate-y-0 opacity-100" : "translate-y-6 opacity-0",
+            )}
+          >
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <AccessibilityMenu />
+            </div>
+            {user ? (
+              <button
+                onClick={() => {
+                  logout()
+                  setIsMenuOpen(false)
+                }}
+                tabIndex={isMenuOpen ? 0 : -1}
+                className="btn-pill btn-ghost btn-plain w-full justify-center"
+              >
+                Sair da conta
+              </button>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                <Link href="/login" tabIndex={isMenuOpen ? 0 : -1} className="btn-pill btn-ghost btn-plain justify-center">
+                  Entrar
+                </Link>
+                <Link href="/register" tabIndex={isMenuOpen ? 0 : -1} className="btn-pill btn-primary justify-center pr-6">
+                  Criar conta
+                </Link>
+              </div>
+            )}
           </div>
         </div>
       </div>
-
-      <AnimatePresence>
-        {isMenuOpen && (
-          <motion.div
-            className="md:hidden bg-card border-t border-border py-2 shadow-lg"
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            <div className="container mx-auto px-4 space-y-1">
-              {user ? (
-                <>
-                  {links.map((link) => {
-                    const Icon = link.icon
-                    return (
-                      <Link
-                        key={link.href}
-                        href={link.href}
-                        className={cn(
-                          "flex items-center text-muted-foreground hover:bg-muted hover:text-foreground px-3 py-2 rounded-md text-base font-medium transition-colors",
-                          pathname === link.href ? "text-primary font-semibold bg-primary/10" : "",
-                        )}
-                        onClick={toggleMenu}
-                      >
-                        <Icon className="h-5 w-5 mr-2" />
-                        {link.label}
-                      </Link>
-                    )
-                  })}
-                  <button
-                    onClick={() => {
-                      logout()
-                      toggleMenu()
-                    }}
-                    className="flex w-full items-center text-red-600 dark:text-red-400 hover:bg-red-500/10 px-3 py-2 rounded-md text-base font-medium transition-colors"
-                  >
-                    <LogOut className="h-5 w-5 mr-2" />
-                    Sair
-                  </button>
-                </>
-              ) : (
-                <>
-                  {links.slice(0, 2).map((link) => {
-                    const Icon = link.icon
-                    return (
-                      <Link
-                        key={link.href}
-                        href={link.href}
-                        className={cn(
-                          "flex items-center text-muted-foreground hover:bg-muted hover:text-foreground px-3 py-2 rounded-md text-base font-medium transition-colors",
-                          pathname === link.href ? "text-primary font-semibold bg-primary/10" : "",
-                        )}
-                        onClick={toggleMenu}
-                      >
-                        <Icon className="h-5 w-5 mr-2" />
-                        {link.label}
-                      </Link>
-                    )
-                  })}
-                  <Link
-                    href="/login"
-                    className="flex items-center text-muted-foreground hover:bg-muted hover:text-foreground px-3 py-2 rounded-md text-base font-medium transition-colors"
-                    onClick={toggleMenu}
-                  >
-                    Entrar
-                  </Link>
-                  <Link
-                    href="/register"
-                    className="flex items-center text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 px-3 py-2 rounded-md text-base font-medium transition-colors"
-                    onClick={toggleMenu}
-                  >
-                    Cadastrar
-                  </Link>
-                </>
-              )}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </nav>
+    </>
   )
 }

@@ -119,6 +119,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const user = demoUser(email.trim().toLowerCase())
         setUser(user)
         localStorage.setItem("user", JSON.stringify(user))
+        if (typeof document !== "undefined") {
+          document.cookie = "planeja_demo_user=true; path=/; max-age=604800; SameSite=Lax"
+        }
         return
       }
 
@@ -138,6 +141,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const user = { ...demoUser(email.trim().toLowerCase()), name: name.trim() || email.split("@")[0] || "demo" }
       setUser(user)
       localStorage.setItem("user", JSON.stringify(user))
+      if (typeof document !== "undefined") {
+        document.cookie = "planeja_demo_user=true; path=/; max-age=604800; SameSite=Lax"
+      }
       return
     }
 
@@ -162,6 +168,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     setUser(null)
     localStorage.removeItem("user")
+    if (typeof document !== "undefined") {
+      document.cookie = "planeja_demo_user=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    }
     router.push("/")
   }
 

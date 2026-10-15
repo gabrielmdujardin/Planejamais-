@@ -353,9 +353,33 @@ export default function EventPage() {
                     <InfoBox label="Capacidade" value={event.capacity ? `${stats.totalGuests}/${event.capacity}` : "Sem limite"} />
                     <InfoBox label="Acompanhantes" value={event.allowCompanions ? `Ate ${event.maxCompanionsPerGuest || 0}` : "Nao permitido"} />
                     <InfoBox label="Link publico" value={event.publicInviteEnabled ? "Ativado" : "Desativado"} />
-                    <InfoBox label="Custo total" value={currency.format(stats.totalCost)} />
-                    <InfoBox label="Custo por confirmado" value={currency.format(stats.costPerConfirmed)} />
-                    <InfoBox label="Orcamento" value={event.budgetEstimated ? currency.format(Number(event.budgetEstimated)) : "Nao definido"} />
+                    <InfoBox label="Custo total realizado" value={currency.format(stats.totalCost)} />
+                    <InfoBox
+                      label={event.financialMode === "collaborative_split" || event.type === "Colaborativo" ? "Rateio por confirmado" : "Orcamento previsto"}
+                      value={
+                        event.financialMode === "collaborative_split" || event.type === "Colaborativo"
+                          ? currency.format(stats.costPerConfirmed)
+                          : event.budgetEstimated
+                            ? currency.format(Number(event.budgetEstimated))
+                            : "Nao definido"
+                      }
+                    />
+                    <InfoBox
+                      label={
+                        event.financialMode === "collaborative_split" || event.type === "Colaborativo"
+                          ? "Orcamento geral"
+                          : event.budgetEstimated
+                            ? "Saldo disponivel da verba"
+                            : "Custo por participante"
+                      }
+                      value={
+                        event.financialMode === "collaborative_split" || event.type === "Colaborativo"
+                          ? event.budgetEstimated ? currency.format(Number(event.budgetEstimated)) : "Nao definido"
+                          : event.budgetEstimated
+                            ? currency.format(Number(event.budgetEstimated) - stats.totalCost)
+                            : currency.format(stats.costPerConfirmed)
+                      }
+                    />
                   </div>
                   {event.financialNotes ? <p className="rounded-md bg-muted/50 p-3 text-sm text-foreground">Notas financeiras: {event.financialNotes}</p> : null}
                 </CardContent>
@@ -420,9 +444,35 @@ export default function EventPage() {
               </CardHeader>
               <CardContent className="space-y-5">
                 <ItemsList items={event.items || []} eventId={event.id} />
-                <div className="rounded-md border border-border bg-muted/40 p-4 text-sm">
-                  <div className="flex justify-between"><span>Total de gastos cadastrados</span><strong>{currency.format(stats.totalCost)}</strong></div>
-                  <div className="flex justify-between"><span>Custo medio por confirmado</span><strong>{currency.format(stats.costPerConfirmed)}</strong></div>
+                <div className="rounded-md border border-border bg-muted/40 p-4 text-sm space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span>Total de gastos cadastrados</span>
+                    <strong className="text-foreground">{currency.format(stats.totalCost)}</strong>
+                  </div>
+                  {event.financialMode === "collaborative_split" || event.type === "Colaborativo" ? (
+                    <div className="flex justify-between items-center text-emerald-700 dark:text-emerald-300">
+                      <span>Rateio estimado por confirmado</span>
+                      <strong>{currency.format(stats.costPerConfirmed)}</strong>
+                    </div>
+                  ) : event.budgetEstimated ? (
+                    <>
+                      <div className="flex justify-between items-center text-muted-foreground">
+                        <span>Orçamento previsto (Verba)</span>
+                        <span>{currency.format(Number(event.budgetEstimated))}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-t border-border/60 pt-2 font-medium">
+                        <span>Saldo da verba disponível</span>
+                        <span className={Number(event.budgetEstimated) - stats.totalCost >= 0 ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-red-500 font-semibold"}>
+                          {currency.format(Number(event.budgetEstimated) - stats.totalCost)}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between items-center text-muted-foreground">
+                      <span>Custo médio por participante confirmado</span>
+                      <span>{currency.format(stats.costPerConfirmed)}</span>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

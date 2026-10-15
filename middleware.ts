@@ -1,10 +1,25 @@
 import { checkRateLimit } from "@/lib/rate-limit"
+import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
 const publicPaths = ["/", "/login", "/register", "/about", "/pricing", "/help", "/contact", "/terms", "/privacy"]
 
-export function middleware(request: NextRequest) {
+function isSupabaseConfigured() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+  return Boolean(
+    url &&
+      key &&
+      !url.includes("example.supabase.co") &&
+      !url.includes("your-project.supabase.co") &&
+      !key.includes("dummy") &&
+      !key.includes("your-supabase"),
+  )
+}
+
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
   // 1. Aplicar Rate Limiting em chamadas POST para endpoints públicos
@@ -40,17 +55,88 @@ export function middleware(request: NextRequest) {
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/static") ||
-    pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|css)$/)
+    pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|css|js|webp)$/)
   ) {
     return NextResponse.next()
   }
 
-  // 3. Rotas públicas de página
-  if (publicPaths.some((path) => pathname === path || pathname.startsWith("/confirm-invitation"))) {
-    return NextResponse.next()
+  // 3. Identificar categorias de rota
+  const isPublicPath =
+    publicPaths.some((path) => pathname === path) ||
+    pathname.startsWith("/confirm-invitation") ||
+    pathname.startsWith("/convite") ||
+    pathname.startsWith("/rsvp") ||
+    pathname.startsWith("/solicitar") ||
+    pathname.startsWith("/api/public-events")
+
+  const isAuthPath = pathname === "/login" || pathname === "/register"
+  const isProtectedPath =
+    pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/create-event") ||
+    pathname.startsWith("/event")
+
+  // 4. Verificação de sessão
+  let response = NextResponse.next({
+    request: {
+      headers: request.headers,
+    },
+  })
+
+  let user = null
+  const hasDemoCookie = Boolean(request.cookies.get("planeja_demo_user")?.value)
+
+  if (isSupabaseConfigured()) {
+    try {
+      const supabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookies: {
+            getAll() {
+              return request.cookies.getAll()
+            },
+            setAll(cookiesToSet) {
+              cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
+              response = NextResponse.next({
+                request: {
+                  headers: request.headers,
+                },
+              })
+              cookiesToSet.forEach(({ name, value, options }) =>
+                response.cookies.set(name, value, options)
+              )
+            },
+          },
+        }
+      )
+
+      const { data } = await supabase.auth.getUser()
+      user = data.user
+    } catch {
+      user = null
+    }
   }
 
-  return NextResponse.next()
+  const isAuthenticated = Boolean(user || hasDemoCookie)
+
+  // 5. Redirecionar para login caso tente acessar rota protegida sem sessão
+  if (isProtectedPath && !isAuthenticated) {
+    const loginUrl = new URL("/login", request.url)
+    loginUrl.searchParams.set("redirect", pathname)
+    return NextResponse.redirect(loginUrl)
+  }
+
+  // 6. Redirecionar usuário autenticado para dashboard se tentar acessar login ou registro
+  if (isAuthPath && isAuthenticated) {
+    return NextResponse.redirect(new URL("/dashboard", request.url))
+  }
+
+  // 7. Liberar rotas públicas
+  if (isPublicPath) {
+    return response
+  }
+
+  return response
 }
 
 export const config = {

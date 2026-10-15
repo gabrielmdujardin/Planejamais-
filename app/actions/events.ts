@@ -25,6 +25,13 @@ function isSupabaseConfigured() {
 }
 
 function toDisplayEvent(event: any, guests: any[] = [], items: any[] = [], photos: any[] = []) {
+  const metadata = typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {}
+  const financialMode =
+    event.financial_mode ||
+    event.financialMode ||
+    metadata.financial_mode ||
+    (event.type === "Colaborativo" ? "collaborative_split" : "corporate_budget")
+
   return {
     id: event.id,
     title: event.title,
@@ -32,6 +39,7 @@ function toDisplayEvent(event: any, guests: any[] = [], items: any[] = [], photo
     category: event.category || undefined,
     status: event.status || "active",
     visibility: event.visibility || "private",
+    financialMode,
     date: event.date,
     time: event.time,
     fullDate: event.full_date || undefined,
@@ -239,6 +247,9 @@ export async function updateEventDetails(eventId: string, eventData: any) {
       initial_estimated_cost: initialEstimatedCost,
       currency: eventData.currency || "BRL",
       financial_notes: eventData.financialNotes || null,
+      metadata: {
+        financial_mode: eventData.financialMode || (eventData.type === "Colaborativo" ? "collaborative_split" : "corporate_budget"),
+      },
     })
     .eq("id", eventId)
     .eq("user_id", user.id)
@@ -344,6 +355,9 @@ export async function createEvent(eventData: any) {
       visibility: eventData.visibility || "private",
       confirmed_guests: eventData.confirmedGuests || 0,
       total_guests: selectedGuests.length || eventData.totalGuests || 0,
+      metadata: {
+        financial_mode: eventData.financialMode || (eventData.type === "Colaborativo" ? "collaborative_split" : "corporate_budget"),
+      },
       user_id: user.id,
     })
     .select()

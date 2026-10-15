@@ -87,12 +87,13 @@ type FormState = {
   initialEstimatedCost: string
   currency: string
   financialNotes: string
+  financialMode: "corporate_budget" | "collaborative_split"
 }
 
 const initialForm: FormState = {
   title: "",
   description: "",
-  type: "Festa",
+  type: "Corporativo",
   status: "active",
   visibility: "private",
   startDate: "",
@@ -120,6 +121,7 @@ const initialForm: FormState = {
   initialEstimatedCost: "",
   currency: "BRL",
   financialNotes: "",
+  financialMode: "corporate_budget",
 }
 
 function toNumberOrNull(value: string) {
@@ -291,6 +293,7 @@ export default function CreateEvent() {
           initialEstimatedCost: toNumberOrNull(form.initialEstimatedCost),
           currency: form.currency,
           financialNotes: form.financialNotes,
+          financialMode: form.financialMode,
           confirmedGuests: 0,
           totalGuests: selectedContactsData.length,
           items: [],
@@ -320,6 +323,7 @@ export default function CreateEvent() {
 
       const result = await createEvent({
         ...form,
+        financialMode: form.financialMode,
         status: finalStatus,
         date: displayDate,
         fullDate,
@@ -386,6 +390,11 @@ export default function CreateEvent() {
                     {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                   </Button>
                 </div>
+                {isDemoMode && (
+                  <div className="mt-2 rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-800 dark:text-amber-300">
+                    <strong>Aviso do Modo Demonstração:</strong> Este evento foi salvo localmente no armazenamento do seu navegador. O link público funciona apenas nesta mesma máquina. Para disponibilizar o RSVP na internet para colaboradores e convidados externos, utilize uma conta conectada ao Supabase.
+                  </div>
+                )}
               </div>
             ) : null}
 
@@ -484,7 +493,17 @@ export default function CreateEvent() {
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label>Tipo do evento</Label>
-                      <Select value={form.type} onValueChange={(value) => updateForm("type", value)}>
+                      <Select
+                        value={form.type}
+                        onValueChange={(value) => {
+                          updateForm("type", value)
+                          if (value === "Colaborativo") {
+                            updateForm("financialMode", "collaborative_split")
+                          } else {
+                            updateForm("financialMode", "corporate_budget")
+                          }
+                        }}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -817,6 +836,30 @@ export default function CreateEvent() {
                     </div>
                   </div>
                   <div className="space-y-2">
+                    <Label>Modelo Financeiro do Evento</Label>
+                    <Select
+                      value={form.financialMode}
+                      onValueChange={(value) => updateForm("financialMode", value as any)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="corporate_budget">
+                          Orçamento Corporativo / Verba Fechada (Empresas, RH e Casamentos)
+                        </SelectItem>
+                        <SelectItem value="collaborative_split">
+                          Rateio Colaborativo (Divisão de custos entre convidados)
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      {form.financialMode === "corporate_budget"
+                        ? "Focado em centro de custo e notas de fornecedores, sem rateio ou cobrança de participantes."
+                        : "Calcula divisão e estimativa de contribuição por participante confirmado."}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="financial-notes">Observações financeiras</Label>
                     <Textarea
                       id="financial-notes"
@@ -833,6 +876,12 @@ export default function CreateEvent() {
                   {[
                     ["Nome", form.title || "Sem nome"],
                     ["Tipo", form.type],
+                    [
+                      "Modelo financeiro",
+                      form.financialMode === "corporate_budget"
+                        ? "Orçamento Corporativo (Verba Fechada)"
+                        : "Rateio Colaborativo",
+                    ],
                     ["Data e horário", `${form.startDate || "Sem data"} às ${form.startTime || "--:--"}`],
                     ["Local", form.eventMode === "online" ? form.meetingUrl : form.location || "A definir"],
                     ["Capacidade", form.capacity || "Sem limite definido"],

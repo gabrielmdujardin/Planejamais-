@@ -1,457 +1,595 @@
 import type { Metadata } from "next"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
 import { Logo } from "@/components/logo"
-import {
-  CalendarDays,
-  Users,
-  CreditCard,
-  CheckCircle2,
-  ArrowRight,
-  ShieldCheck,
-  Sparkles,
-  DollarSign,
-  Clock,
-  Layers,
-  Share2,
-  Check,
-  TrendingUp,
-  MapPin,
-  Smartphone,
-  HeartHandshake,
-} from "lucide-react"
+import { Reveal } from "@/components/reveal"
+import { ArrowUpRight, Building2, Check, MapPin, Plus, Sparkles } from "lucide-react"
 
 export const metadata: Metadata = {
-  title: "Planeja+ | Gestão Inteligente e Colaborativa de Eventos",
+  title: "Planeja+ | Gestão de Eventos Corporativos, Casamentos e Festas",
   description:
-    "Organize encontros, viagens e celebrações sem o estresse de planilhas. Gerenciamento de convidados, RSVP seguro com link público, divisão justa de despesas e tarefas em um só lugar.",
+    "Plataforma para empresas e cerimoniais organizarem confraternizações, eventos corporativos, casamentos e festas: lista de convidados, confirmação por link seguro, aprovação de acompanhantes, orçamento e relatórios em um só lugar.",
   keywords: [
-    "planejamento de eventos",
+    "eventos corporativos",
+    "confraternização de empresa",
     "gestão de convidados",
     "rsvp online",
-    "divisão de despesas",
-    "churrasco colaborativo",
-    "rateio de custos",
+    "software para cerimonial",
+    "planejamento de casamento",
+    "controle de orçamento de evento",
   ],
   openGraph: {
-    title: "Planeja+ | Planejamento Colaborativo de Eventos",
+    title: "Planeja+ | Eventos corporativos e celebrações sem improviso",
     description:
-      "Centralize convidados, confirme presença e divida custos com total transparência e facilidade.",
+      "Convidados, confirmações, acompanhantes, fornecedores e orçamento — com relatórios prontos para quem precisa prestar contas.",
     type: "website",
     locale: "pt_BR",
     siteName: "Planeja+",
   },
 }
 
+const occasions = [
+  "confraternizações",
+  "convenções",
+  "lançamentos",
+  "casamentos",
+  "formaturas",
+  "festas de fim de ano",
+  "aniversários",
+]
+
+const guests = [
+  { name: "Ana Beatriz", note: "Marketing · +1 acompanhante", status: "Confirmado" },
+  { name: "Caio Moreira", note: "Financeiro · via link", status: "Confirmado" },
+  { name: "Júlia Tavares", note: "Comercial · acompanhante em análise", status: "Pendente" },
+  { name: "Otávio Lins", note: "Diretoria · convite individual", status: "Confirmado" },
+]
+
+const audiences = [
+  {
+    icon: Building2,
+    tag: "Para empresas",
+    title: "RH, endomarketing e eventos internos",
+    body: "Confraternizações, convenções e celebrações com centenas de colaboradores — sem planilha paralela nem lista no grupo.",
+    points: [
+      "Convite por link único, sem o colaborador criar conta",
+      "Controle e aprovação de acompanhantes por pessoa",
+      "Orçamento previsto × realizado e custo por convidado",
+      "Indicadores prontos para apresentar à diretoria",
+    ],
+  },
+  {
+    icon: Sparkles,
+    tag: "Para cerimoniais e produtoras",
+    title: "Casamentos, festas e eventos sociais",
+    body: "Vários clientes e eventos em paralelo, cada um com sua lista, seus fornecedores e seu painel — tudo na mesma conta.",
+    points: [
+      "Todos os eventos da agenda em calendário ou lista",
+      "Lista de presença atualizada em tempo real",
+      "Fornecedores e itens com responsável e valor",
+      "Link público com moderação para evitar penetras",
+    ],
+  },
+]
+
+const steps = [
+  {
+    n: "01",
+    title: "Cadastre o evento",
+    body: "Nome, data, local, capacidade e orçamento estimado. Defina se acompanhantes são permitidos e quantos por convidado.",
+  },
+  {
+    n: "02",
+    title: "Convide do jeito certo",
+    body: "Convites individuais com token ou link público com aprovação. O convidado confirma pelo celular em segundos, sem cadastro.",
+  },
+  {
+    n: "03",
+    title: "Acompanhe e preste contas",
+    body: "Confirmações, presença provável, pendências e custos em um painel único — pronto para a reunião de alinhamento com o cliente ou a diretoria.",
+  },
+]
+
+function PillLink({
+  href,
+  children,
+  variant = "primary",
+}: {
+  href: string
+  children: React.ReactNode
+  variant?: "primary" | "ghost"
+}) {
+  return (
+    <Link href={href} className={`btn-pill ${variant === "primary" ? "btn-primary" : "btn-ghost"}`}>
+      {children}
+      <span className="btn-orb">
+        <ArrowUpRight className="h-4 w-4" strokeWidth={1.5} />
+      </span>
+    </Link>
+  )
+}
+
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground selection:bg-primary/20 selection:text-primary">
-      {/* 1. Hero Section Editorial (SSR puro com alta performance) */}
-      <section className="relative overflow-hidden pt-12 pb-20 md:pt-20 md:pb-28 border-b border-border/60">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="grid lg:grid-cols-12 gap-12 items-center">
-            {/* Texto de Proposta de Valor */}
-            <div className="lg:col-span-7 space-y-6 text-left">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold tracking-wide">
-                <Sparkles className="h-3.5 w-3.5" />
-                <span>Planeja+ 2.0 • Plataforma Colaborativa de Eventos</span>
-              </div>
+    <div className="relative z-[2] -mt-[68px] md:-mt-[76px]">
+      {/* ───────────── HERO ───────────── */}
+      <section className="relative overflow-hidden px-4 pb-24 pt-36 md:px-6 md:pb-32 md:pt-44">
+        <div className="mx-auto grid max-w-6xl items-center gap-16 lg:grid-cols-12 lg:gap-10">
+          <div className="lg:col-span-7">
+            <Reveal>
+              <span className="eyebrow">
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Para empresas, cerimoniais e produtoras
+              </span>
+            </Reveal>
 
-              <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight text-foreground leading-[1.12]">
-                Planeje encontros e celebrações sem o estresse da{" "}
-                <span className="text-primary underline decoration-primary/30 underline-offset-8">
-                  desorganização.
-                </span>
+            <Reveal delay={80}>
+              <h1 className="display mt-7 text-[clamp(3.25rem,8vw,6.25rem)] text-foreground">
+                Eventos que acontecem <em className="text-primary">sem improviso</em>.
               </h1>
+            </Reveal>
 
-              <p className="text-lg text-muted-foreground max-w-xl leading-relaxed">
-                Centralize a lista de convidados, automatize confirmações por RSVP com token seguro,
-                atribua responsabilidades e divida custos colaborativos com total transparência.
+            <Reveal delay={160}>
+              <p className="mt-8 max-w-[34rem] text-lg leading-relaxed text-muted-foreground">
+                Da confraternização da empresa ao casamento do seu cliente: convidados, confirmações, acompanhantes,
+                fornecedores e orçamento em um único painel — com números prontos para prestar contas.
               </p>
+            </Reveal>
 
-              <div className="flex flex-col sm:flex-row gap-3 pt-2">
-                <Link href="/register">
-                  <Button size="lg" className="shadow-md text-base px-8 gap-2 w-full sm:w-auto font-semibold">
-                    Criar evento grátis <ArrowRight className="h-4 w-4" />
-                  </Button>
-                </Link>
-                <Link href="/login">
-                  <Button size="lg" variant="outline" className="text-base px-8 w-full sm:w-auto font-semibold">
-                    Acessar minha conta
-                  </Button>
-                </Link>
-              </div>
+            <Reveal delay={240} className="mt-10 flex flex-wrap items-center gap-3">
+              <PillLink href="/register">Criar evento grátis</PillLink>
+              <Link href="/contact" className="btn-pill btn-ghost btn-plain">
+                Falar com a equipe
+              </Link>
+            </Reveal>
 
-              {/* Selos de Confiança Inline */}
-              <div className="flex flex-wrap items-center gap-6 pt-4 text-xs text-muted-foreground border-t border-border/60">
-                <div className="flex items-center gap-1.5">
-                  <ShieldCheck className="h-4 w-4 text-primary" />
-                  <span>RSVP seguro com proteção contra spam</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className="h-4 w-4 text-primary" />
-                  <span>Sem necessidade de cartão</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <Smartphone className="h-4 w-4 text-primary" />
-                  <span>100% responsivo no celular</span>
-                </div>
-              </div>
-            </div>
+            <Reveal delay={320}>
+              <ul className="mt-12 flex flex-wrap gap-x-8 gap-y-3 font-mono text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-primary" strokeWidth={2} /> Convidado não precisa de conta
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-primary" strokeWidth={2} /> Dados isolados por organizador
+                </li>
+                <li className="flex items-center gap-2">
+                  <Check className="h-3.5 w-3.5 text-primary" strokeWidth={2} /> Relatórios em tempo real
+                </li>
+              </ul>
+            </Reveal>
+          </div>
 
-            {/* Showcase Visual do Produto (SSR Realista de Alta Fidelidade) */}
-            <div className="lg:col-span-5">
-              <div className="relative mx-auto max-w-md">
-                {/* Glow decorativo sutil com tema esmeralda */}
-                <div className="absolute -inset-1 rounded-2xl bg-gradient-to-r from-primary/30 to-teal-500/20 blur-xl opacity-60" />
-
-                <Card className="relative bg-card border-border shadow-2xl rounded-2xl overflow-hidden">
-                  {/* Barra superior de simulação de app */}
-                  <div className="bg-muted/70 px-4 py-3 border-b border-border flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="h-2.5 w-2.5 rounded-full bg-red-400/80" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
-                      <div className="h-2.5 w-2.5 rounded-full bg-emerald-500/80" />
-                      <span className="text-[11px] font-medium text-muted-foreground ml-2">planejamais.app/evento</span>
-                    </div>
-                    <Badge variant="success" size="sm" className="font-semibold">
-                      Ao vivo
-                    </Badge>
+          {/* Artefatos: convite corporativo, chip de confirmações e orçamento */}
+          <div className="relative lg:col-span-5">
+            <Reveal delay={200} className="relative mx-auto max-w-[420px]">
+              <div className="bezel md:rotate-[-2.5deg]">
+                <div className="bezel-core overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-dashed border-border px-6 py-4 font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+                    <span>Convite nº 0186</span>
+                    <span>Sex · 12 dez</span>
                   </div>
-
-                  <div className="p-5 space-y-4">
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-muted-foreground mb-1">
-                        <span className="font-semibold text-primary">Churrasco da Turma 2026</span>
-                        <span className="flex items-center gap-1"><CalendarDays className="h-3 w-3" /> 24 Outubro</span>
-                      </div>
-                      <div className="text-lg font-bold text-foreground">Sítio Recanto Verde</div>
-                      <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                        <MapPin className="h-3 w-3 text-primary" /> Estrada das Acácias, 450 • Presencial
-                      </p>
-                    </div>
-
-                    {/* Barra de progresso de confirmações */}
-                    <div className="space-y-1.5 p-3.5 rounded-xl bg-muted/40 border border-border/50 text-xs">
-                      <div className="flex justify-between font-medium">
-                        <span className="text-muted-foreground">Confirmações RSVP</span>
-                        <span className="text-foreground font-semibold">18 / 24 confirmados (75%)</span>
-                      </div>
-                      <div className="w-full h-2 rounded-full bg-muted overflow-hidden">
-                        <div className="h-full bg-primary rounded-full w-[75%]" />
-                      </div>
-                    </div>
-
-                    {/* Resumo da Divisão Colaborativa de Despesas */}
-                    <div className="space-y-2 pt-1 text-xs">
-                      <div className="flex items-center justify-between font-semibold text-foreground">
-                        <span>Rateio Colaborativo</span>
-                        <Badge variant="outline" size="sm">Cálculo Automático</Badge>
-                      </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg border border-border/60 bg-background">
-                        <span className="text-muted-foreground">Carnes & Bebidas</span>
-                        <span className="font-semibold text-foreground">R$ 540,00</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2 rounded-lg border border-border/60 bg-background">
-                        <span className="text-muted-foreground">Locação do Espaço</span>
-                        <span className="font-semibold text-foreground">R$ 360,00</span>
-                      </div>
-                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-primary/10 border border-primary/20 text-primary font-bold">
-                        <span>Custo estimado por pessoa:</span>
-                        <span className="text-sm">R$ 50,00</span>
-                      </div>
+                  <div className="px-6 pb-7 pt-6">
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.18em] text-primary">
+                      Acme Tecnologia convida
+                    </p>
+                    <p className="display mt-3 text-[2.4rem]">
+                      Confraternização de <em>Fim de Ano</em>
+                    </p>
+                    <p className="mt-4 flex items-center gap-1.5 text-sm text-muted-foreground">
+                      <MapPin className="h-3.5 w-3.5" strokeWidth={1.5} /> Espaço Villa Jardim · 19h30
+                    </p>
+                    <div className="mt-6 grid grid-cols-2 gap-2">
+                      <span className="rounded-full bg-primary py-2.5 text-center text-sm text-primary-foreground">
+                        Confirmar presença
+                      </span>
+                      <span className="rounded-full bg-secondary py-2.5 text-center text-sm text-foreground">
+                        Não poderei
+                      </span>
                     </div>
                   </div>
-                </Card>
+                </div>
               </div>
-            </div>
+
+              <div className="absolute -left-6 top-[58%] hidden rounded-2xl bg-espresso px-4 py-3 text-[#F2EDE3] shadow-[0_20px_40px_-20px_rgba(0,0,0,0.6)] sm:block md:-left-14 md:rotate-[3deg]">
+                <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#F2EDE3]/60">Confirmados</p>
+                <p className="num mt-1 text-2xl">
+                  186<span className="text-[#F2EDE3]/40">/240</span>
+                </p>
+                <div className="mt-2 h-1 w-28 overflow-hidden rounded-full bg-white/10">
+                  <div className="h-full w-[78%] rounded-full bg-lime" />
+                </div>
+              </div>
+
+              <div className="relative -mt-6 ml-auto w-[80%] md:-mr-6 md:rotate-[2deg]">
+                <div className="bezel">
+                  <div className="bezel-core px-5 py-4">
+                    <div className="flex items-center justify-between font-mono text-[10.5px] uppercase tracking-[0.18em] text-muted-foreground">
+                      <span>Orçamento</span>
+                      <span>R$ 50 mil</span>
+                    </div>
+                    <dl className="mt-3 space-y-1.5 text-sm">
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">Buffet</dt>
+                        <dd className="num">28.400,00</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">Espaço</dt>
+                        <dd className="num">12.000,00</dd>
+                      </div>
+                      <div className="flex justify-between">
+                        <dt className="text-muted-foreground">Open bar</dt>
+                        <dd className="num">9.600,00</dd>
+                      </div>
+                    </dl>
+                    <div className="mt-3 flex items-end justify-between border-t border-dashed border-border pt-3">
+                      <span className="text-sm">Por convidado</span>
+                      <span className="num rounded-full bg-lime px-3 py-1 text-base text-[#1C1A17]">R$ 208,33</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
           </div>
         </div>
       </section>
 
-      {/* 2. Seção Métricas e Impacto Real */}
-      <section className="py-12 bg-muted/30 border-b border-border/60">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 text-center">
-            <div className="space-y-1 p-4 rounded-xl bg-card border border-border/50 shadow-xs">
-              <p className="text-3xl lg:text-4xl font-extrabold text-primary">+15.000</p>
-              <p className="text-xs lg:text-sm text-muted-foreground font-medium">Presenças confirmadas</p>
-            </div>
-            <div className="space-y-1 p-4 rounded-xl bg-card border border-border/50 shadow-xs">
-              <p className="text-3xl lg:text-4xl font-extrabold text-foreground">100%</p>
-              <p className="text-xs lg:text-sm text-muted-foreground font-medium">Transparência nos custos</p>
-            </div>
-            <div className="space-y-1 p-4 rounded-xl bg-card border border-border/50 shadow-xs">
-              <p className="text-3xl lg:text-4xl font-extrabold text-primary">&lt; 30s</p>
-              <p className="text-xs lg:text-sm text-muted-foreground font-medium">Tempo médio de resposta RSVP</p>
-            </div>
-            <div className="space-y-1 p-4 rounded-xl bg-card border border-border/50 shadow-xs">
-              <p className="text-3xl lg:text-4xl font-extrabold text-foreground">0</p>
-              <p className="text-xs lg:text-sm text-muted-foreground font-medium">Planilhas manuais perdidas</p>
-            </div>
-          </div>
+      {/* ───────────── Faixa de ocasiões ───────────── */}
+      <section aria-label="Tipos de evento" className="border-y border-border/70 py-6">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-baseline justify-center gap-x-6 gap-y-2 px-4 text-center">
+          <span className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-muted-foreground">Feito para</span>
+          {occasions.map((o, i) => (
+            <span key={o} className="font-serif text-2xl italic text-foreground/80 md:text-[1.7rem]">
+              {o}
+              {i < occasions.length - 1 && <span className="ml-6 not-italic text-primary/40">·</span>}
+            </span>
+          ))}
         </div>
       </section>
 
-      {/* 3. Seção Recursos Principais (Editorial Grid) */}
-      <section id="features" className="py-20 bg-background border-b border-border/60">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-primary">Arquitetura de Recursos</span>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
-              Tudo o que seu evento precisa em um só lugar
+      {/* ───────────── PÚBLICOS ───────────── */}
+      <section id="para-quem" className="scroll-mt-28 px-4 py-24 md:px-6 md:py-36">
+        <div className="mx-auto max-w-6xl">
+          <Reveal>
+            <span className="eyebrow">Para quem é</span>
+            <h2 className="display mt-6 max-w-3xl text-[clamp(2.5rem,5.5vw,4.25rem)]">
+              Um painel para quem <em className="text-primary">responde</em> pelo evento.
             </h2>
-            <p className="text-muted-foreground text-sm md:text-base leading-relaxed">
-              Elimine a dispersão de mensagens soltas, anotações perdidas e cobranças constrangedoras.
-            </p>
-          </div>
+          </Reveal>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <Card className="p-6 bg-card border-border shadow-sm space-y-4 hover:border-primary/50 hover:shadow-md transition-all">
-              <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                <CalendarDays className="h-5 w-5" />
-              </div>
-              <h3 className="font-semibold text-base text-foreground">Planejamento Ágil</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Configure data, local, capacidade máxima e cronograma com visualização integrada por calendário ou lista.
-              </p>
-            </Card>
-
-            <Card className="p-6 bg-card border-border shadow-sm space-y-4 hover:border-primary/50 hover:shadow-md transition-all">
-              <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                <Users className="h-5 w-5" />
-              </div>
-              <h3 className="font-semibold text-base text-foreground">RSVP Automatizado</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Envie links públicos ou privados com token individual, suporte a acompanhantes e aprovação em um clique.
-              </p>
-            </Card>
-
-            <Card className="p-6 bg-card border-border shadow-sm space-y-4 hover:border-primary/50 hover:shadow-md transition-all">
-              <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                <CreditCard className="h-5 w-5" />
-              </div>
-              <h3 className="font-semibold text-base text-foreground">Divisão Justa de Custos</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Cadastre itens, acompanhe compras e descubra o valor exato por pessoa sem necessidade de cálculos manuais.
-              </p>
-            </Card>
-
-            <Card className="p-6 bg-card border-border shadow-sm space-y-4 hover:border-primary/50 hover:shadow-md transition-all">
-              <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center">
-                <CheckCircle2 className="h-5 w-5" />
-              </div>
-              <h3 className="font-semibold text-base text-foreground">Controle de Tarefas</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Distribua responsabilidades e visualize exatamente o que já foi providenciado antes do início do evento.
-              </p>
-            </Card>
+          <div className="mt-16 grid gap-4 md:grid-cols-12">
+            {audiences.map((a, i) => {
+              const Icon = a.icon
+              return (
+                <Reveal key={a.tag} delay={i * 100} className={i === 0 ? "md:col-span-7" : "md:col-span-5"}>
+                  <article className="bezel h-full">
+                    <div className="bezel-core flex h-full flex-col p-7 md:p-9">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                          <Icon className="h-5 w-5" strokeWidth={1.5} />
+                        </span>
+                        <p className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-primary">{a.tag}</p>
+                      </div>
+                      <h3 className="mt-6 text-2xl font-medium tracking-[-0.015em]">{a.title}</h3>
+                      <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">{a.body}</p>
+                      <ul className="mt-7 space-y-3 text-sm">
+                        {a.points.map((p) => (
+                          <li key={p} className="flex items-start gap-3">
+                            <Check className="mt-0.5 h-4 w-4 shrink-0 text-primary" strokeWidth={2} />
+                            <span>{p}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </article>
+                </Reveal>
+              )
+            })}
           </div>
         </div>
       </section>
 
-      {/* 4. Como Funciona em 3 Passos */}
-      <section className="py-20 bg-muted/20 border-b border-border/60">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-primary">Simplicidade Operacional</span>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
-              Como funciona o Planeja+
-            </h2>
-            <p className="text-muted-foreground text-sm md:text-base">
-              Do rascunho inicial até a celebração em três etapas diretas.
-            </p>
+      {/* ───────────── RECURSOS: bento ───────────── */}
+      <section id="recursos" className="scroll-mt-28 border-t border-border/70 px-4 py-24 md:px-6 md:py-36">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-6 md:grid-cols-12 md:items-end">
+            <Reveal className="md:col-span-7">
+              <span className="eyebrow">Recursos</span>
+              <h2 className="display mt-6 text-[clamp(2.5rem,5.5vw,4.25rem)]">
+                Menos planilha. <em className="text-primary">Mais controle.</em>
+              </h2>
+            </Reveal>
+            <Reveal delay={100} className="md:col-span-5">
+              <p className="text-base leading-relaxed text-muted-foreground md:pb-2">
+                O que antes ficava espalhado entre e-mails, planilhas e grupos de mensagens passa a ter um lugar só —
+                visível para a equipe organizadora e simples para o convidado.
+              </p>
+            </Reveal>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="p-6 rounded-2xl bg-card border border-border shadow-xs space-y-4 text-left">
-              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold flex items-center justify-center text-sm">
-                1
-              </div>
-              <h3 className="text-lg font-bold text-foreground">Crie seu evento em minutos</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Insira título, data, local e defina se haverá controle de capacidade ou rateio colaborativo de despesas.
-              </p>
-            </div>
+          <div className="mt-16 grid gap-4 md:grid-cols-12">
+            {/* Lista de presença */}
+            <Reveal className="md:col-span-7 md:row-span-2">
+              <article className="bezel h-full">
+                <div className="bezel-core flex h-full flex-col p-7 md:p-9">
+                  <p className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-primary">Lista de presença</p>
+                  <h3 className="mt-3 max-w-md text-2xl font-medium tracking-[-0.015em]">
+                    Confirmações, acompanhantes e aprovações em uma lista viva.
+                  </h3>
+                  <p className="mt-3 max-w-md text-[15px] leading-relaxed text-muted-foreground">
+                    Aprove o convidado e decida acompanhante por acompanhante. Nada de gente a mais na porta — nem no
+                    buffet.
+                  </p>
+                  <ul className="mt-8 divide-y divide-border/80 rounded-2xl bg-secondary/60 px-4">
+                    {guests.map((g) => (
+                      <li key={g.name} className="flex items-center justify-between py-3.5">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-card font-mono text-[11px]">
+                            {g.name
+                              .split(" ")
+                              .map((p) => p[0])
+                              .join("")}
+                          </span>
+                          <div>
+                            <p className="text-sm">{g.name}</p>
+                            <p className="text-xs text-muted-foreground">{g.note}</p>
+                          </div>
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.14em] ${
+                            g.status === "Confirmado"
+                              ? "bg-primary text-primary-foreground"
+                              : "bg-card text-muted-foreground"
+                          }`}
+                        >
+                          {g.status}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
+            </Reveal>
 
-            <div className="p-6 rounded-2xl bg-card border border-border shadow-xs space-y-4 text-left">
-              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold flex items-center justify-center text-sm">
-                2
-              </div>
-              <h3 className="text-lg font-bold text-foreground">Compartilhe o link protegido</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Envie o link público ou convites individuais pelo WhatsApp. Os convidados confirmam presença sem complicação.
-              </p>
-            </div>
+            {/* Orçamento */}
+            <Reveal delay={80} className="md:col-span-5">
+              <article className="bezel h-full">
+                <div className="bezel-core h-full p-7">
+                  <p className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-primary">Orçamento</p>
+                  <h3 className="mt-3 text-xl font-medium tracking-[-0.015em]">Previsto × realizado, sem surpresa.</h3>
+                  <div className="mt-6 flex items-end gap-3">
+                    <span className="num text-5xl tracking-tight">87%</span>
+                    <span className="pb-1.5 text-sm text-muted-foreground">do orçamento comprometido</span>
+                  </div>
+                  <div className="mt-5 flex h-2 overflow-hidden rounded-full bg-secondary">
+                    <div className="w-[57%] bg-primary" />
+                    <div className="w-[24%] bg-primary/50" />
+                    <div className="w-[6%] bg-lime" />
+                  </div>
+                  <p className="mt-3 font-mono text-[10.5px] uppercase tracking-[0.14em] text-muted-foreground">
+                    Buffet · Espaço · Bebidas
+                  </p>
+                </div>
+              </article>
+            </Reveal>
 
-            <div className="p-6 rounded-2xl bg-card border border-border shadow-xs space-y-4 text-left">
-              <div className="w-10 h-10 rounded-full bg-primary text-primary-foreground font-bold flex items-center justify-center text-sm">
-                3
-              </div>
-              <h3 className="text-lg font-bold text-foreground">Acompanhe e aproveite</h3>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Visualize quem confirmou, quem pediu acompanhante e o custo por pessoa atualizado em tempo real.
-              </p>
+            {/* Fornecedores */}
+            <Reveal delay={160} className="md:col-span-5">
+              <article className="bezel h-full">
+                <div className="bezel-core h-full p-7">
+                  <p className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-primary">Fornecedores</p>
+                  <h3 className="mt-3 text-xl font-medium tracking-[-0.015em]">Cada entrega com responsável.</h3>
+                  <ul className="mt-5 space-y-2.5 text-sm">
+                    {[
+                      ["Buffet contratado", "Carla", true],
+                      ["Som e iluminação", "Pedro", true],
+                      ["Brindes personalizados", "RH", false],
+                    ].map(([t, who, done]) => (
+                      <li key={t as string} className="flex items-center gap-3">
+                        <span
+                          className={`flex h-5 w-5 items-center justify-center rounded-md ${
+                            done ? "bg-primary text-primary-foreground" : "ring-1 ring-border"
+                          }`}
+                        >
+                          {done && <Check className="h-3 w-3" strokeWidth={2.5} />}
+                        </span>
+                        <span className={done ? "text-muted-foreground line-through" : ""}>{t}</span>
+                        <span className="ml-auto font-mono text-[11px] text-muted-foreground">{who}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
+            </Reveal>
+
+            {/* Análises — faixa escura */}
+            <Reveal className="md:col-span-12">
+              <article className="overflow-hidden rounded-[2rem] bg-espresso p-1.5">
+                <div className="grid items-center gap-8 rounded-[calc(2rem-0.375rem)] px-7 py-9 text-[#F2EDE3] md:grid-cols-12 md:px-10">
+                  <div className="md:col-span-5">
+                    <p className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-lime">Análises</p>
+                    <h3 className="display mt-3 text-4xl md:text-5xl">
+                      Números para a <em>reunião de segunda</em>.
+                    </h3>
+                    <p className="mt-4 max-w-sm text-[15px] leading-relaxed text-[#F2EDE3]/65">
+                      Taxa de confirmação, presença provável, pendências e custo por convidado — por evento ou da
+                      carteira inteira.
+                    </p>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-3 md:col-span-7">
+                    {[
+                      ["Taxa de confirmação", "78%", true],
+                      ["Presença provável", "212", false],
+                      ["Pendências", "31", false],
+                      ["Custo por convidado", "R$ 208", false],
+                    ].map(([label, value, highlight]) => (
+                      <div key={label as string} className="rounded-2xl bg-white/[0.06] p-5">
+                        <dt className="font-mono text-[10px] uppercase tracking-[0.18em] text-[#F2EDE3]/55">{label}</dt>
+                        <dd className={`num mt-2 text-3xl ${highlight ? "text-lime" : ""}`}>{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              </article>
+            </Reveal>
+          </div>
+        </div>
+      </section>
+
+      {/* ───────────── COMO FUNCIONA ───────────── */}
+      <section id="como-funciona" className="scroll-mt-28 border-t border-border/70 px-4 py-24 md:px-6 md:py-36">
+        <div className="mx-auto grid max-w-6xl gap-14 md:grid-cols-12">
+          <Reveal className="md:col-span-4">
+            <div className="md:sticky md:top-32">
+              <span className="eyebrow">Como funciona</span>
+              <h2 className="display mt-6 text-[clamp(2.5rem,5vw,3.75rem)]">
+                Três passos. <em className="text-primary">Nenhum improviso.</em>
+              </h2>
+            </div>
+          </Reveal>
+
+          <ol className="md:col-span-8">
+            {steps.map((s, i) => (
+              <Reveal as="li" key={s.n} delay={i * 90} className="group border-t border-border py-10 first:border-t-0 first:pt-0 md:py-12">
+                <div className="grid gap-4 md:grid-cols-[120px_1fr]">
+                  <span className="num text-sm text-muted-foreground transition-colors duration-500 ease-fluid group-hover:text-primary">
+                    {s.n} / 03
+                  </span>
+                  <div>
+                    <h3 className="display text-4xl md:text-[2.75rem]">{s.title}</h3>
+                    <p className="mt-4 max-w-xl text-[15.5px] leading-relaxed text-muted-foreground">{s.body}</p>
+                  </div>
+                </div>
+              </Reveal>
+            ))}
+          </ol>
+        </div>
+      </section>
+
+      {/* ───────────── DEPOIMENTOS ───────────── */}
+      <section className="px-3 md:px-6">
+        <div className="mx-auto max-w-[88rem] overflow-hidden rounded-[2.5rem] bg-espresso px-6 py-24 text-[#F2EDE3] md:px-16 md:py-32">
+          <div className="mx-auto max-w-6xl">
+            <Reveal>
+              <span className="inline-flex items-center rounded-full bg-white/[0.07] px-3 py-1.5 font-mono text-[10.5px] uppercase tracking-[0.2em] text-[#F2EDE3]/70">
+                Quem organiza
+              </span>
+            </Reveal>
+            <Reveal delay={80}>
+              <blockquote className="mt-10">
+                <p className="display max-w-4xl text-[clamp(2rem,4.6vw,3.75rem)] leading-[1.05]">
+                  “Nossa confraternização tinha 240 colaboradores e três planilhas diferentes. Este ano o buffet recebeu
+                  o <em className="text-lime">número exato</em> uma semana antes.”
+                </p>
+                <footer className="mt-8 flex items-center gap-3 text-sm text-[#F2EDE3]/60">
+                  <span className="h-px w-8 bg-[#F2EDE3]/30" />
+                  Coordenação de RH · empresa de tecnologia, 240 convidados
+                </footer>
+              </blockquote>
+            </Reveal>
+
+            <div className="mt-20 grid gap-10 border-t border-white/10 pt-12 md:grid-cols-2 md:gap-16">
+              <Reveal as="blockquote">
+                <p className="text-lg leading-relaxed text-[#F2EDE3]/85">
+                  “Acompanho vários casamentos ao mesmo tempo. Ter a lista de cada noivo atualizada sozinha, com
+                  acompanhantes aprovados, mudou minha rotina.”
+                </p>
+                <footer className="mt-5 font-mono text-[11px] uppercase tracking-[0.16em] text-[#F2EDE3]/50">
+                  Cerimonialista · casamentos e eventos sociais
+                </footer>
+              </Reveal>
+              <Reveal as="blockquote" delay={100}>
+                <p className="text-lg leading-relaxed text-[#F2EDE3]/85">
+                  “No lançamento do produto, o link público com aprovação garantiu que só clientes convidados
+                  entrassem na lista.”
+                </p>
+                <footer className="mt-5 font-mono text-[11px] uppercase tracking-[0.16em] text-[#F2EDE3]/50">
+                  Produtora de eventos · lançamento corporativo, 150 pessoas
+                </footer>
+              </Reveal>
             </div>
           </div>
         </div>
       </section>
 
-      {/* 5. Depoimentos e Casos de Uso */}
-      <section className="py-20 bg-background border-b border-border/60">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="text-center max-w-2xl mx-auto mb-16 space-y-3">
-            <span className="text-xs font-semibold uppercase tracking-wider text-primary">Casos Reais</span>
-            <h2 className="text-3xl md:text-4xl font-bold tracking-tight text-foreground">
-              Projetado para todos os formatos de encontro
-            </h2>
-            <p className="text-muted-foreground text-sm md:text-base">
-              Veja como organizadores usam o Planeja+ no dia a dia.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-6">
-            <Card className="p-6 bg-card border-border shadow-xs space-y-4">
-              <div className="flex items-center gap-2 text-primary">
-                <HeartHandshake className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Viagens & Amigos</span>
-              </div>
-              <p className="text-sm text-foreground/90 italic leading-relaxed">
-                &ldquo;Organizar a casa de praia para 14 amigos sempre gerava cobranças chatas de PIX. Com o Planeja+, todo mundo viu os gastos e o valor exato por pessoa.&rdquo;
-              </p>
-              <div className="pt-2 border-t border-border/60 text-xs">
-                <p className="font-semibold text-foreground">Mariana Costa</p>
-                <p className="text-muted-foreground">Viagem de Fim de Ano • 14 pessoas</p>
-              </div>
-            </Card>
-
-            <Card className="p-6 bg-card border-border shadow-xs space-y-4">
-              <div className="flex items-center gap-2 text-primary">
-                <Users className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Família & Aniversários</span>
-              </div>
-              <p className="text-sm text-foreground/90 italic leading-relaxed">
-                &ldquo;O link público de RSVP evitou que pessoas chegassem sem avisar no almoço de 60 anos da minha mãe. O controle de acompanhantes foi perfeito.&rdquo;
-              </p>
-              <div className="pt-2 border-t border-border/60 text-xs">
-                <p className="font-semibold text-foreground">Rafael Almeida</p>
-                <p className="text-muted-foreground">Aniversário em Família • 45 convidados</p>
-              </div>
-            </Card>
-
-            <Card className="p-6 bg-card border-border shadow-xs space-y-4">
-              <div className="flex items-center gap-2 text-primary">
-                <Layers className="h-5 w-5" />
-                <span className="text-xs font-semibold uppercase tracking-wide">Eventos Acadêmicos & Grupos</span>
-              </div>
-              <p className="text-sm text-foreground/90 italic leading-relaxed">
-                &ldquo;Usamos para o churrasco dos formandos. A aprovação de solicitações públicas garantiu que apenas os estudantes autorizados confirmassem.&rdquo;
-              </p>
-              <div className="pt-2 border-t border-border/60 text-xs">
-                <p className="font-semibold text-foreground">Lucas Mendes</p>
-                <p className="text-muted-foreground">Comissão de Formatura • 80 participantes</p>
-              </div>
-            </Card>
-          </div>
-        </div>
-      </section>
-
-      {/* 6. CTA Final de Alto Impacto e Alto Contraste */}
-      <section className="py-20 bg-primary text-primary-foreground">
-        <div className="container mx-auto px-4 text-center max-w-3xl space-y-6">
-          <h2 className="text-3xl md:text-4xl font-bold tracking-tight">
-            Pronto para transformar sua próxima celebração?
+      {/* ───────────── CTA FINAL ───────────── */}
+      <section className="px-4 py-28 md:px-6 md:py-40">
+        <Reveal className="mx-auto max-w-4xl text-center">
+          <h2 className="display text-[clamp(2.75rem,7vw,5.5rem)]">
+            Qual é o <em className="text-primary">próximo</em> evento?
           </h2>
-          <p className="text-primary-foreground/90 text-sm md:text-base max-w-xl mx-auto leading-relaxed">
-            Crie sua conta gratuitamente em menos de um minuto e experimente como organizar eventos pode ser simples, transparente e prazeroso.
+          <p className="mx-auto mt-6 max-w-md text-lg text-muted-foreground">
+            Cadastre o primeiro evento em poucos minutos ou fale com a equipe para organizar a sua carteira.
           </p>
-          <div className="flex flex-col sm:flex-row gap-4 justify-center pt-2">
-            <Link href="/register">
-              <Button
-                size="lg"
-                className="bg-white text-emerald-950 hover:bg-white/90 font-bold px-8 shadow-lg active:scale-[0.98] w-full sm:w-auto text-base"
-              >
-                Começar gratuitamente
-              </Button>
-            </Link>
-            <Link href="/login">
-              <Button
-                size="lg"
-                variant="outline"
-                className="border-2 border-white bg-transparent text-white hover:bg-white/10 hover:text-white font-semibold px-8 w-full sm:w-auto text-base"
-              >
-                Acessar minha conta
-              </Button>
+          <div className="mt-10 flex flex-wrap justify-center gap-3">
+            <PillLink href="/register">Começar agora</PillLink>
+            <Link href="/pricing" className="btn-pill btn-ghost btn-plain">
+              Ver planos
             </Link>
           </div>
-        </div>
+        </Reveal>
       </section>
 
-      {/* 7. Footer Institucional Semântico */}
-      <footer className="bg-muted/40 text-muted-foreground py-14 border-t border-border">
-        <div className="container mx-auto px-4 max-w-6xl">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
-            <div className="space-y-4 md:col-span-1">
-              <Logo size="md" animated={false} />
-              <p className="text-xs leading-relaxed max-w-xs">
-                Simplifique o planejamento, organize convidados e divida custos com total transparência.
+      {/* ───────────── RODAPÉ ───────────── */}
+      <footer className="border-t border-border/70 px-4 pb-10 pt-16 md:px-6">
+        <div className="mx-auto max-w-6xl">
+          <div className="grid gap-12 md:grid-cols-12">
+            <div className="md:col-span-5">
+              <Logo size="md" />
+              <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
+                Gestão de eventos corporativos e sociais — convidados, confirmações, fornecedores e orçamento em um só
+                lugar.
               </p>
             </div>
-            <div>
-              <h3 className="text-sm font-semibold text-foreground mb-4">Produto</h3>
-              <ul className="space-y-2 text-xs">
-                <li>
-                  <Link href="/#features" className="hover:text-foreground transition-colors">
-                    Funcionalidades
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/pricing" className="hover:text-foreground transition-colors">
-                    Preços
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/dashboard/analytics" className="hover:text-foreground transition-colors">
-                    Analytics
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-foreground mb-4">Suporte</h3>
-              <ul className="space-y-2 text-xs">
-                <li>
-                  <Link href="/about" className="hover:text-foreground transition-colors">
-                    Sobre nós
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/contact" className="hover:text-foreground transition-colors">
-                    Contato
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
-              <h3 className="text-sm font-semibold text-foreground mb-4">Legal</h3>
-              <ul className="space-y-2 text-xs">
-                <li>
-                  <Link href="/terms" className="hover:text-foreground transition-colors">
-                    Termos de uso
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/privacy" className="hover:text-foreground transition-colors">
-                    Privacidade
-                  </Link>
-                </li>
-              </ul>
-            </div>
+            {[
+              {
+                title: "Produto",
+                links: [
+                  ["Para quem é", "/#para-quem"],
+                  ["Recursos", "/#recursos"],
+                  ["Como funciona", "/#como-funciona"],
+                  ["Preços", "/pricing"],
+                ],
+              },
+              {
+                title: "Empresa",
+                links: [
+                  ["Sobre", "/about"],
+                  ["Contato", "/contact"],
+                ],
+              },
+              {
+                title: "Legal",
+                links: [
+                  ["Termos de uso", "/terms"],
+                  ["Privacidade", "/privacy"],
+                ],
+              },
+            ].map((col) => (
+              <nav key={col.title} aria-label={col.title} className="md:col-span-2">
+                <h3 className="font-mono text-[10.5px] uppercase tracking-[0.2em] text-muted-foreground">{col.title}</h3>
+                <ul className="mt-4 space-y-2.5 text-sm">
+                  {col.links.map(([label, href]) => (
+                    <li key={href}>
+                      <Link href={href} className="link-underline text-foreground/85 hover:text-foreground">
+                        {label}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </nav>
+            ))}
           </div>
-          <div className="border-t border-border mt-12 pt-8 text-center text-xs">
-            <p>&copy; {new Date().getFullYear()} Planeja+. Todos os direitos reservados.</p>
+
+          <p
+            aria-hidden="true"
+            className="display mt-20 select-none text-center text-[clamp(4.5rem,19vw,15rem)] leading-[0.8] text-foreground/[0.06]"
+          >
+            Planeja<em>+</em>
+          </p>
+
+          <div className="mt-8 flex flex-col items-center justify-between gap-3 border-t border-border/70 pt-6 font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground md:flex-row">
+            <p>© {new Date().getFullYear()} Planeja+</p>
+            <a href="#main-content" className="inline-flex items-center gap-1.5 hover:text-foreground">
+              Voltar ao topo <Plus className="h-3 w-3 rotate-45" strokeWidth={1.5} />
+            </a>
           </div>
         </div>
       </footer>

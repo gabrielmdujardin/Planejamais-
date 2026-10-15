@@ -55,6 +55,7 @@ interface Event {
   category?: string
   status?: "draft" | "active" | "completed" | "canceled" | string
   visibility?: "private" | "public" | string
+  financialMode?: "corporate_budget" | "collaborative_split"
   date: string
   time: string
   fullDate?: string
