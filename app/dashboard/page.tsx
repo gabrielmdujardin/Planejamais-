@@ -2,14 +2,36 @@
 
 import { useEffect, useState, useMemo } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { Skeleton, SkeletonCard } from "@/components/ui/skeleton-loader"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { EmptyState } from "@/components/ui/empty-state"
-import { Plus, CalendarDays, Grid3X3, MapPin, Clock, Filter, Users, Sparkles, CheckCircle2, TrendingUp } from "lucide-react"
+import {
+  Plus,
+  CalendarDays,
+  Grid3X3,
+  MapPin,
+  Clock,
+  Filter,
+  Users,
+  Sparkles,
+  CheckCircle2,
+  TrendingUp,
+  DollarSign,
+  Wallet,
+  PiggyBank,
+  Receipt,
+  BarChart3,
+  ArrowRight,
+  ArrowUpRight,
+  AlertTriangle,
+  AlertCircle,
+  ShieldAlert,
+} from "lucide-react"
 import EventCard from "@/components/event-card"
 import Link from "next/link"
 import { useAuth } from "@/context/auth-context"
@@ -127,9 +149,6 @@ export default function Dashboard() {
 
       try {
         setCalendarLoading(true)
-
-        // Simular delay de rede
-        await new Promise((resolve) => setTimeout(resolve, 800))
 
         const data: DatabaseEvent[] = events.map((event) => ({
           id: event.id,
@@ -304,7 +323,7 @@ export default function Dashboard() {
     return { total, confirmed, pending, cancelled }
   }, [filteredEvents])
 
-  // Indicadores consolidados com dados reais
+  // Indicadores consolidados com dados reais de presença
   const eventMetrics = useMemo(() => {
     const totalEvents = events.length
     const totalConfirmedGuests = events.reduce((acc, ev) => acc + (ev.confirmedGuests || 0), 0)
@@ -321,6 +340,164 @@ export default function Dashboard() {
     }
   }, [events])
 
+  // Consolidação Financeira Executiva (PLAN-003: Saldo vs. Orçamento vs. Rateio em <3s)
+  const financialOverview = useMemo(() => {
+    let totalBudgetAllocated = 0
+    let totalExpenses = 0
+    let totalPaid = 0
+    let totalPendingPayment = 0
+    let collaborativeExpenses = 0
+    let collaborativeConfirmedGuests = 0
+    let corporateExpenses = 0
+    let corporateConfirmedGuests = 0
+    let eventsWithBudgetCount = 0
+
+    interface DivergenceItem {
+      id: string
+      eventId: string
+      eventTitle: string
+      type: "budget_exceeded" | "unallocated_budget" | "pending_invoices"
+      severity: "high" | "medium" | "low"
+      title: string
+      description: string
+      impact: string
+      actionLabel: string
+      actionHref: string
+    }
+
+    const divergences: DivergenceItem[] = []
+
+    events.forEach((ev) => {
+      const budget = Number(ev.budgetEstimated || 0)
+      if (budget > 0) {
+        totalBudgetAllocated += budget
+        eventsWithBudgetCount++
+      }
+
+      let eventExpense = 0
+      let eventPaid = 0
+      let eventPending = 0
+
+      if (Array.isArray(ev.items)) {
+        ev.items.forEach((item) => {
+          const price = Number(item.price || item.actualCost || item.estimatedCost || 0)
+          eventExpense += price
+          if (item.paymentStatus === "paid") {
+            eventPaid += price
+          } else {
+            eventPending += price
+          }
+        })
+      }
+
+      totalExpenses += eventExpense
+      totalPaid += eventPaid
+      totalPendingPayment += eventPending
+
+      const isCorporate = ev.financialMode === "corporate_budget" || ev.type !== "Colaborativo"
+      const confirmed = Number(ev.confirmedGuests || 0)
+
+      if (isCorporate) {
+        corporateExpenses += eventExpense
+        corporateConfirmedGuests += confirmed
+      } else {
+        collaborativeExpenses += eventExpense
+        collaborativeConfirmedGuests += confirmed
+      }
+
+      // Detecção de divergências orçamentárias e financeiras
+      if (budget > 0 && eventExpense > budget) {
+        divergences.push({
+          id: `overbudget-${ev.id}`,
+          eventId: ev.id,
+          eventTitle: ev.title,
+          type: "budget_exceeded",
+          severity: "high",
+          title: "Estouro de Verba Orçamentária",
+          description: `Gastos de R$ ${eventExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} ultrapassam o teto aprovado de R$ ${budget.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`,
+          impact: `Déficit de R$ ${(eventExpense - budget).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
+          actionLabel: "Revisar itens e teto",
+          actionHref: `/event/${ev.id}`,
+        })
+      } else if (isCorporate && budget === 0 && eventExpense > 0) {
+        divergences.push({
+          id: `unallocated-${ev.id}`,
+          eventId: ev.id,
+          eventTitle: ev.title,
+          type: "unallocated_budget",
+          severity: "medium",
+          title: "Evento sem Teto Formal",
+          description: `Evento corporativo possui R$ ${eventExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} em gastos sem limite de verba definido.`,
+          impact: "Ausência de teto orçamentário aprovado",
+          actionLabel: "Definir orçamento",
+          actionHref: `/event/${ev.id}`,
+        })
+      }
+
+      if (eventPending > 0 && eventExpense > 0 && eventPending / eventExpense > 0.6) {
+        divergences.push({
+          id: `pending-${ev.id}`,
+          eventId: ev.id,
+          eventTitle: ev.title,
+          type: "pending_invoices",
+          severity: "medium",
+          title: "Volume Alto de Pagamentos Pendentes",
+          description: `${Math.round((eventPending / eventExpense) * 100)}% das despesas contratadas ainda estão pendentes de liquidação com fornecedores.`,
+          impact: `R$ ${eventPending.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} a pagar`,
+          actionLabel: "Ver pagamentos",
+          actionHref: `/event/${ev.id}`,
+        })
+      }
+    })
+
+    const availableBudget = totalBudgetAllocated - totalExpenses
+    const isOverBudget = availableBudget < 0
+    const overBudgetAmount = isOverBudget ? Math.abs(availableBudget) : 0
+    const budgetExecutionRate =
+      totalBudgetAllocated > 0
+        ? Math.round((totalExpenses / totalBudgetAllocated) * 100)
+        : 0
+
+    const paidPercentage =
+      totalExpenses > 0 ? Math.round((totalPaid / totalExpenses) * 100) : 0
+    const pendingPercentage =
+      totalExpenses > 0 ? Math.round((totalPendingPayment / totalExpenses) * 100) : 0
+
+    const averageCollaborativeSplit =
+      collaborativeConfirmedGuests > 0
+        ? collaborativeExpenses / collaborativeConfirmedGuests
+        : 0
+
+    const averageCorporateCostPerAttendee =
+      corporateConfirmedGuests > 0
+        ? corporateExpenses / corporateConfirmedGuests
+        : 0
+
+    return {
+      totalBudgetAllocated,
+      totalExpenses,
+      totalPaid,
+      totalPendingPayment,
+      availableBudget,
+      isOverBudget,
+      overBudgetAmount,
+      budgetExecutionRate,
+      paidPercentage,
+      pendingPercentage,
+      averageCollaborativeSplit,
+      averageCorporateCostPerAttendee,
+      eventsWithBudgetCount,
+      divergences,
+    }
+  }, [events])
+
+  const formatBRL = (val: number) => {
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+    }).format(val)
+  }
+
   // Variantes para animações
   const containerVariants = {
     hidden: { opacity: 0 },
@@ -334,28 +511,356 @@ export default function Dashboard() {
 
   return (
     <div className="container mx-auto max-w-6xl py-8 px-4 space-y-8">
-      {/* Cabeçalho Editorial com Ação Primária */}
+      {/* Cabeçalho Editorial com Ações Primárias e SLA Ativo */}
       <motion.div
         initial={{ opacity: 0, y: -8 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-border/60"
+        className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-border/60"
       >
-        <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-primary">Painel de Controle</span>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground mt-0.5">Seus eventos</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Acompanhe confirmações de convidados, datas importantes e custos dos seus eventos.
+        <div className="space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="border-primary/30 text-primary bg-primary/5 text-xs font-semibold px-2.5 py-0.5">
+              <Sparkles className="h-3 w-3 mr-1" />
+              M2.1 · Dashboard Vivo
+            </Badge>
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 shadow-xs">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              Conciliação em tempo real (&lt;100ms)
+            </span>
+          </div>
+          <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            Painel Executivo &amp; Orçamentos
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Controle integrado de Saldo Disponível, Orçamento Aprovado e Rateio por participante com conciliação contínua.
           </p>
         </div>
-        <Link href="/create-event">
-          <Button size="default" className="shadow-sm font-medium gap-2">
-            <Plus className="h-4 w-4" /> Criar novo evento
-          </Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <Link href="/dashboard/analytics" className="w-full sm:w-auto">
+            <Button variant="outline" size="default" className="w-full sm:w-auto gap-2 font-medium">
+              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+              Relatórios &amp; BI
+            </Button>
+          </Link>
+          <Link href="/create-event" className="w-full sm:w-auto">
+            <Button size="default" className="w-full sm:w-auto shadow-sm font-medium gap-2">
+              <Plus className="h-4 w-4" /> Novo Evento
+            </Button>
+          </Link>
+        </div>
       </motion.div>
 
-      {/* Indicadores Compactos (KPIs) com Dados Reais */}
+      {/* SEÇÃO PRINCIPAL (PLAN-003): Painel de Saldo vs Orçamento vs Rateio (<3s) */}
+      <section aria-label="Painel Financeiro Executivo" className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Wallet className="h-4 w-4 text-primary" />
+            <h2 className="text-xs font-bold tracking-wider uppercase text-muted-foreground">
+              Conciliação Financeira Executiva
+            </h2>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {financialOverview.eventsWithBudgetCount} evento(s) com teto formal
+          </span>
+        </div>
+
+        {/* Os 4 Cards Executivos Consolidados */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* Card 1: Saldo Disponível (Verba Livre) */}
+          <Card
+            className={`p-4 border transition-all ${
+              financialOverview.isOverBudget
+                ? "bg-red-500/5 border-red-500/30 hover:border-red-500/50"
+                : "bg-emerald-500/5 border-emerald-500/30 hover:border-emerald-500/50"
+            }`}
+          >
+            <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Saldo Disponível
+              </span>
+              <div
+                className={`p-1.5 rounded-md ${
+                  financialOverview.isOverBudget
+                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
+                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                }`}
+              >
+                <Wallet className="h-4 w-4" />
+              </div>
+            </div>
+            <div
+              className={`text-2xl font-bold tracking-tight ${
+                financialOverview.isOverBudget
+                  ? "text-red-600 dark:text-red-400"
+                  : "text-emerald-600 dark:text-emerald-400"
+              }`}
+            >
+              {financialOverview.isOverBudget
+                ? `- ${formatBRL(financialOverview.overBudgetAmount)}`
+                : formatBRL(financialOverview.availableBudget)}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">
+                {financialOverview.isOverBudget ? "Estouro de verba" : "Verba livre restante"}
+              </span>
+              <Badge
+                variant="outline"
+                className={`text-[10px] px-1.5 py-0 h-4 ${
+                  financialOverview.isOverBudget
+                    ? "border-red-500/40 text-red-600 dark:text-red-400 bg-red-500/10"
+                    : "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
+                }`}
+              >
+                {financialOverview.isOverBudget ? "Déficit" : "Dentro da Meta"}
+              </Badge>
+            </div>
+          </Card>
+
+          {/* Card 2: Orçamento Aprovado (Teto Global) */}
+          <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80 hover:border-border transition-all">
+            <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Orçamento Aprovado
+              </span>
+              <div className="p-1.5 rounded-md bg-primary/10 text-primary">
+                <PiggyBank className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-foreground">
+              {formatBRL(financialOverview.totalBudgetAllocated)}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Execução orçamentária</span>
+              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
+                {financialOverview.budgetExecutionRate}% empenhado
+              </Badge>
+            </div>
+          </Card>
+
+          {/* Card 3: Gastos Comprometidos (Realizados) */}
+          <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80 hover:border-border transition-all">
+            <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Gastos Comprometidos
+              </span>
+              <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                <Receipt className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-foreground">
+              {formatBRL(financialOverview.totalExpenses)}
+            </div>
+            <div className="mt-2 flex items-center gap-1.5 text-xs">
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                {formatBRL(financialOverview.totalPaid)} pago
+              </span>
+              <span className="text-muted-foreground">·</span>
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                {formatBRL(financialOverview.totalPendingPayment)} a pagar
+              </span>
+            </div>
+          </Card>
+
+          {/* Card 4: Rateio & Custo Médio por Convidado */}
+          <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80 hover:border-border transition-all">
+            <div className="flex items-center justify-between text-muted-foreground mb-1.5">
+              <span className="text-xs font-semibold uppercase tracking-wider">
+                Custo / Rateio Médio
+              </span>
+              <div className="p-1.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <Users className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-2xl font-bold tracking-tight text-foreground">
+              {financialOverview.averageCorporateCostPerAttendee > 0
+                ? `${formatBRL(financialOverview.averageCorporateCostPerAttendee)}/pax`
+                : financialOverview.averageCollaborativeSplit > 0
+                  ? `${formatBRL(financialOverview.averageCollaborativeSplit)}/pax`
+                  : "R$ 0,00"}
+            </div>
+            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
+              <span>Por participante confirmado</span>
+              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
+                {eventMetrics.totalConfirmedGuests} confirmados
+              </Badge>
+            </div>
+          </Card>
+        </div>
+
+        {/* Régua de Conciliação Financeira Viva (Visual Balance Gauge) */}
+        <Card className="p-4 bg-card/70 backdrop-blur-sm border-border/80">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Régua de Conciliação Orçamentária
+              </div>
+              <div className="text-sm font-medium text-foreground">
+                Distribuição de Pagamentos e Saldo sobre o Teto Aprovado
+              </div>
+            </div>
+            <div className="flex items-center gap-3 text-xs">
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
+                Pago: <strong>{formatBRL(financialOverview.totalPaid)}</strong>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
+                Pendente: <strong>{formatBRL(financialOverview.totalPendingPayment)}</strong>
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
+                Saldo Livre: <strong>{formatBRL(Math.max(0, financialOverview.availableBudget))}</strong>
+              </span>
+            </div>
+          </div>
+
+          {/* Barra proporcional segmentada */}
+          <div className="w-full h-3 rounded-full bg-muted overflow-hidden flex shadow-inner">
+            {financialOverview.totalBudgetAllocated > 0 ? (
+              <>
+                <div
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      (financialOverview.totalPaid / financialOverview.totalBudgetAllocated) * 100
+                    )}%`,
+                  }}
+                  className="bg-emerald-500 transition-all duration-500"
+                  title={`Pago: ${formatBRL(financialOverview.totalPaid)}`}
+                />
+                <div
+                  style={{
+                    width: `${Math.min(
+                      100 - Math.min(100, (financialOverview.totalPaid / financialOverview.totalBudgetAllocated) * 100),
+                      (financialOverview.totalPendingPayment / financialOverview.totalBudgetAllocated) * 100
+                    )}%`,
+                  }}
+                  className="bg-amber-500 transition-all duration-500"
+                  title={`Pendente: ${formatBRL(financialOverview.totalPendingPayment)}`}
+                />
+                {!financialOverview.isOverBudget && (
+                  <div
+                    style={{
+                      width: `${Math.max(
+                        0,
+                        100 -
+                          ((financialOverview.totalExpenses / financialOverview.totalBudgetAllocated) * 100)
+                      )}%`,
+                    }}
+                    className="bg-blue-400/60 dark:bg-blue-500/50 transition-all duration-500"
+                    title={`Saldo Disponível: ${formatBRL(financialOverview.availableBudget)}`}
+                  />
+                )}
+                {financialOverview.isOverBudget && (
+                  <div
+                    style={{ width: "100%" }}
+                    className="bg-red-500/80 transition-all duration-500"
+                    title={`Estouro de Orçamento: ${formatBRL(financialOverview.overBudgetAmount)}`}
+                  />
+                )}
+              </>
+            ) : (
+              <div
+                style={{
+                  width: financialOverview.totalExpenses > 0 ? "100%" : "0%",
+                }}
+                className="bg-muted-foreground/30"
+              />
+            )}
+          </div>
+
+          <div className="mt-2 flex justify-between items-center text-[11px] text-muted-foreground">
+            <span>R$ 0,00</span>
+            <span>
+              {financialOverview.totalBudgetAllocated > 0
+                ? `Teto: ${formatBRL(financialOverview.totalBudgetAllocated)}`
+                : "Sem teto orçamentário global configurado"}
+            </span>
+          </div>
+        </Card>
+
+        {/* Central de Divergências & Decisão Rápida (Smart Decision Center) */}
+        {financialOverview.divergences.length > 0 ? (
+          <Card className="p-4 border-amber-500/30 bg-amber-500/5">
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 mt-0.5">
+                <AlertTriangle className="h-5 w-5" />
+              </div>
+              <div className="flex-1 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    Divergências Orçamentárias que Requerem Atenção
+                    <Badge variant="secondary" className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300">
+                      {financialOverview.divergences.length} alerta(s)
+                    </Badge>
+                  </h3>
+                  <span className="text-xs text-muted-foreground">
+                    Ação recomendada para manter conformidade contábil
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
+                  {financialOverview.divergences.map((div) => (
+                    <div
+                      key={div.id}
+                      className="p-3 rounded-md bg-card/80 border border-border flex flex-col justify-between gap-2"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 mb-1">
+                          <span className="font-semibold text-xs text-foreground truncate">
+                            {div.eventTitle}
+                          </span>
+                          <Badge
+                            variant={div.severity === "high" ? "destructive" : "outline"}
+                            className="text-[10px] px-1.5 py-0"
+                          >
+                            {div.title}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground leading-relaxed">
+                          {div.description}
+                        </p>
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-border/50 text-xs">
+                        <span className="font-medium text-amber-700 dark:text-amber-400">
+                          {div.impact}
+                        </span>
+                        <Link href={div.actionHref}>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs gap-1 text-primary hover:text-primary font-medium"
+                          >
+                            {div.actionLabel}
+                            <ArrowRight className="h-3 w-3" />
+                          </Button>
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Card>
+        ) : events.length > 0 ? (
+          <Card className="p-3 border-emerald-500/20 bg-emerald-500/5">
+            <div className="flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-300">
+              <span className="flex items-center gap-2 font-medium">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                Saúde Orçamentária Excelente: Nenhuma divergência crítica identificada entre saldo, orçamento e rateio.
+              </span>
+              <Link href="/dashboard/analytics">
+                <span className="hover:underline font-semibold flex items-center gap-1 cursor-pointer">
+                  Ver auditoria contábil completa <ArrowRight className="h-3 w-3" />
+                </span>
+              </Link>
+            </div>
+          </Card>
+        ) : null}
+      </section>
+
+      {/* Indicadores Compactos de Participação & Eventos */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
