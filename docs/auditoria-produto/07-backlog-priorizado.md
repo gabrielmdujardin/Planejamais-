@@ -10,20 +10,21 @@
 
 ---
 
-## 1. Tabela Geral de Problemas Classificados
+## 1. Tabela Geral de Problemas Classificados e Status de Resolução
 
-| ID | Título do Problema | Prioridade | Fluxo Afetado | Personas Afetadas | Complexidade |
-|---|---|---|---|---|---|
-| **ISSUE-01** | Vocabulário de "Rateio Colaborativo" em Eventos Corporativos e Cerimoniais | **P0** | FL-17 (Módulo Financeiro) | Todas as personas de RH e Eventos | Baixa |
-| **ISSUE-02** | Botão "Enviar convites" não dispara e-mails reais (Fluxo Fictício) | **P1** | FL-11 (Mensageria) | Personas 1, 3, 5, 7, 8 | Média |
-| **ISSUE-03** | Impossibilidade de Importar Convidados em Lote (CSV/Planilha) | **P1** | FL-10 (Gestão de Convidados) | Personas 3, 4, 5, 6, 8 | Baixa-Média |
-| **ISSUE-04** | Risco de Silenciamento de Erro ao Criar Evento com Sessão Expirada | **P1** | FL-04 (Criação de Evento) | Todas as personas | Média |
-| **ISSUE-05** | Ausência de Proteção de Rotas Privadas no Middleware (`middleware.ts`) | **P1** | FL-01 (Autenticação/Sessão) | Governança e Segurança | Baixa |
-| **ISSUE-06** | Falta de Exportação de Relatórios em PDF/CSV no Painel Analítico | **P2** | FL-18 (Analytics e BI) | Personas 2, 4, 6, 8 | Baixa-Média |
-| **ISSUE-07** | Ausência de Modo "Somente Leitura" para Clientes Contratantes (Noivos/Diretoria) | **P2** | FL-08 (Painel do Evento) | Persona 10, Persona 8 | Média |
-| **ISSUE-08** | Campos de Restrição Alimentar e Acessibilidade Ocultos no RSVP Público | **P2** | FL-12, FL-13 (RSVP) | Personas 1, 3, 8, Convidado | Baixa |
-| **ISSUE-09** | Falta de Bloqueio com Confirmação Nominal para Exclusão de Eventos | **P2** | FL-06 (Exclusão de Evento) | Todas as personas | Baixa |
-| **ISSUE-10** | Contatos Salvos Apenas em LocalStorage sem Sincronização no Banco | **P3** | FL-20 (CRM de Contatos) | Personas 1, 7 | Baixa-Média |
+| ID | Título do Problema | Prioridade | Fluxo Afetado | Complexidade | Status de Resolução |
+|---|---|---|---|---|:---:|
+| **ISSUE-01** | Vocabulário de "Rateio Colaborativo" em Eventos Corporativos | **P0** | FL-17 (Módulo Financeiro) | Baixa | ✅ **Resolvido (Fase 1/3)** |
+| **ISSUE-02** | Botão "Enviar convites" e Links Nominais de RSVP para WhatsApp | **P1** | FL-11 (Mensageria) | Média | ✅ **Resolvido (Fase 2)** |
+| **ISSUE-03** | Impossibilidade de Importar Convidados em Lote (CSV/Planilha) | **P1** | FL-10 (Gestão de Convidados) | Média | ✅ **Resolvido (Fase 2)** |
+| **ISSUE-04** | Risco de Silenciamento de Erro ao Criar Evento com Sessão Expirada | **P1** | FL-04 (Criação de Evento) | Média | ✅ **Resolvido (Fase 1/4)** |
+| **ISSUE-05** | Ausência de Proteção de Rotas Privadas no Middleware (`middleware.ts`) | **P1** | FL-01 (Autenticação/Sessão) | Baixa | ✅ **Resolvido (Fase 1)** |
+| **ISSUE-06** | Falta de Exportação de Relatórios em PDF/CSV no Painel Analítico | **P2** | FL-18 (Analytics e BI) | Média | ✅ **Resolvido (Fase 4)** |
+| **ISSUE-07** | Ausência de Modo "Somente Leitura" para Clientes (Portal Anfitrião) | **P2** | FL-08 (Painel do Evento) | Média | ✅ **Resolvido (Fase 3)** |
+| **ISSUE-08** | Campos de Restrição Alimentar e Acessibilidade no RSVP | **P2** | FL-12, FL-13 (RSVP) | Baixa | ✅ **Resolvido (Fase 3/4)** |
+| **ISSUE-09** | Falta de Bloqueio com Confirmação Nominal para Exclusão de Eventos | **P2** | FL-06 (Exclusão de Evento) | Baixa | ✅ **Resolvido (Fase 4)** |
+| **ISSUE-10** | Contatos Salvos Apenas em LocalStorage sem Sincronização no Banco | **P3** | FL-20 (CRM de Contatos) | Média | ⏳ Backlog Futuro |
+| **TESTS** | Suíte Automatizada de Testes de Regressão das Novas Funcionalidades | **P1** | QA / Regressão | Baixa | ✅ **Resolvido (Fase 4)** |
 
 ---
 
