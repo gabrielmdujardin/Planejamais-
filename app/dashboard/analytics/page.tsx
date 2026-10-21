@@ -25,9 +25,11 @@ import {
   CheckCircle2,
   ClipboardList,
   DollarSign,
+  FileSpreadsheet,
   FilterX,
   Lightbulb,
   Loader2,
+  Printer,
   Target,
   Users,
 } from "lucide-react"
@@ -39,6 +41,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
 
 type ChartItem = {
@@ -688,6 +691,62 @@ export default function AnalyticsPage() {
     setEndDate("")
   }
 
+  const { toast } = useToast()
+
+  const handleExportCSV = () => {
+    if (!data) return
+
+    const dateStr = new Date().toLocaleDateString("pt-BR")
+    const lines: string[] = [
+      `"RELATÓRIO EXECUTIVO DE EVENTOS - PLANEJA+"`,
+      `"Data de Emissão";"${dateStr}"`,
+      `"Recorte / Filtro";"${selectedEventId === "all" ? "Todos os Eventos" : (data.filters.events.find((e) => e.id === selectedEventId)?.title || selectedEventId)}"`,
+      `"Período";"${period}"`,
+      `""`,
+      `"INDICADORES PRINCIPAIS"`,
+      `"Total de Eventos";"${data.metrics.totalEvents}"`,
+      `"Total de Convidados";"${data.metrics.totalGuests}"`,
+      `"Presenças Confirmadas";"${data.metrics.confirmedGuests}"`,
+      `"Pendentes de Resposta";"${data.metrics.pendingGuests}"`,
+      `"Recusas";"${data.metrics.declinedGuests}"`,
+      `"Taxa de Confirmação";"${data.metrics.confirmationRate.toFixed(1)}%"`,
+      `"Custo Estimado Total";"R$ ${data.metrics.estimatedCost.toFixed(2)}"`,
+      `"Custo Médio por Convidado";"R$ ${data.metrics.averageCostPerGuest.toFixed(2)}"`,
+      `""`,
+      `"DETALHAMENTO POR EVENTO"`,
+      `"Evento";"Data";"Convidados";"Confirmados";"Taxa Confirmação";"Custo Total"`,
+    ]
+
+    const eventsList = data.charts.confirmationsByEvent || []
+    eventsList.forEach((ev) => {
+      const costItem = data.charts.costByEvent.find((c) => c.name === ev.name)
+      const costVal = costItem?.value || 0
+      lines.push(
+        `"${(ev.name || "").replace(/"/g, '""')}";"${ev.detail || ""}";"${ev.totalGuests || 0}";"${ev.confirmed || 0}";"${ev.confirmationRate ? ev.confirmationRate.toFixed(1) + "%" : "0%"}";"R$ ${costVal.toFixed(2)}"`
+      )
+    })
+
+    const csvContent = "\uFEFF" + lines.join("\n")
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.setAttribute("download", `relatorio-analytics-planejamais-${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: "Relatório CSV exportado",
+      description: "Arquivo compatível com Excel e Google Sheets baixado com sucesso.",
+    })
+  }
+
+  const handlePrintReport = () => {
+    window.print()
+  }
+
   const metricTone = data?.metrics.confirmationRate
     ? data.metrics.confirmationRate >= 70
       ? "positive"
@@ -699,7 +758,22 @@ export default function AnalyticsPage() {
   return (
     <div className="min-h-screen bg-background p-4 pt-16 text-foreground md:p-8 md:pt-20">
       <div className="mx-auto max-w-7xl space-y-8">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        {/* Cabeçalho de Impressão Exclusivo */}
+        <div className="hidden print:block border-b pb-4 mb-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Planeja+ · Relatório Executivo de Eventos</h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Emitido em: {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+              </p>
+            </div>
+            <div className="text-right text-xs text-muted-foreground">
+              Filtro: {selectedEventId === "all" ? "Consolidado Geral" : "Evento Específico"}
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between print:hidden">
           <div>
             <p className="text-sm font-medium text-emerald-600 dark:text-emerald-400">Planeja+ Analytics</p>
             <h1 className="text-3xl font-bold tracking-tight">Análises</h1>
@@ -707,10 +781,32 @@ export default function AnalyticsPage() {
               Painel de decisão com dados reais dos seus eventos, convidados, aprovações e custos.
             </p>
           </div>
-          <BackButton />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCSV}
+              disabled={!data}
+              className="gap-2 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+            >
+              <FileSpreadsheet className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              Exportar CSV
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePrintReport}
+              disabled={!data}
+              className="gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              <Printer className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+              Imprimir / PDF
+            </Button>
+            <BackButton />
+          </div>
         </div>
 
-        <section className="space-y-4">
+        <section className="space-y-4 print:hidden">
           <SectionHeader
             eyebrow="Filtros e visão geral"
             title="Contexto da análise"

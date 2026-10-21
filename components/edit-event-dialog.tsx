@@ -1,8 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { AlertTriangle, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -11,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/hooks/use-toast"
-import { updateEventDetails } from "@/app/actions/events"
+import { updateEventDetails, deleteEventAction } from "@/app/actions/events"
 import { useAuth } from "@/context/auth-context"
 import { useEventStore } from "@/stores/event-store"
 
@@ -38,11 +40,53 @@ const toInputDate = (event: any) => {
 }
 
 export default function EditEventDialog({ open, onOpenChange, eventId }: EditEventDialogProps) {
+  const router = useRouter()
   const { toast } = useToast()
   const { isDemoMode } = useAuth()
-  const { getEventById, updateEvent } = useEventStore()
+  const { getEventById, updateEvent, removeEvent } = useEventStore()
   const event = getEventById(eventId)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [confirmTitle, setConfirmTitle] = useState("")
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const isTitleMatching = Boolean(
+    event?.title &&
+    confirmTitle.trim().toLowerCase() === event.title.trim().toLowerCase()
+  )
+
+  const handleDeleteEvent = async () => {
+    if (!event) return
+    if (!isTitleMatching) {
+      toast({
+        title: "Nome não confere",
+        description: "Digite exatamente o título do evento para confirmar a exclusão.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsDeleting(true)
+    try {
+      await deleteEventAction(eventId)
+      removeEvent(eventId)
+      toast({
+        title: "Evento excluído",
+        description: `O evento "${event.title}" foi excluído com sucesso.`,
+      })
+      setIsDeleteDialogOpen(false)
+      onOpenChange(false)
+      router.push("/dashboard")
+    } catch {
+      toast({
+        title: "Erro ao excluir",
+        description: "Não foi possível excluir o evento. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsDeleting(false)
+    }
+  }
   const [form, setForm] = useState({
     title: "",
     description: "",
@@ -307,6 +351,34 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
               <Textarea value={form.financialNotes} onChange={(e) => setField("financialNotes", e.target.value)} />
             </div>
           </section>
+
+          {/* Zona de Perigo para Exclusão de Evento */}
+          <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4 space-y-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <h4 className="text-sm font-semibold text-destructive flex items-center gap-1.5">
+                  <AlertTriangle className="h-4 w-4" />
+                  Zona de Perigo
+                </h4>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  A exclusão definitiva apagará todos os convidados, finanças e presenças deste evento.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                onClick={() => {
+                  setConfirmTitle("")
+                  setIsDeleteDialogOpen(true)
+                }}
+                className="gap-1.5 shrink-0"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Excluir Evento
+              </Button>
+            </div>
+          </div>
         </div>
 
         <DialogFooter>
@@ -316,6 +388,64 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* Modal de Confirmação Nominal contra Exclusão Acidental */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5" />
+              Exclusão Definitiva do Evento
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <span>
+                Esta ação não pode ser desfeita. Todos os convidados cadastrados, confirmações de RSVP e lançamentos financeiros serão apagados.
+              </span>
+              <span className="block font-medium text-foreground">
+                Para confirmar, digite exatamente o título do evento abaixo:
+              </span>
+              <span className="block p-2 rounded bg-muted font-mono text-xs text-foreground font-semibold select-all break-all border border-border">
+                {event?.title}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-2 py-2">
+            <Label htmlFor="confirm-title-input" className="text-xs font-semibold text-foreground">
+              Título do evento:
+            </Label>
+            <Input
+              id="confirm-title-input"
+              value={confirmTitle}
+              onChange={(e) => setConfirmTitle(e.target.value)}
+              placeholder="Digite o título exato para liberar o botão"
+              className="text-sm"
+              autoFocus
+            />
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsDeleteDialogOpen(false)}
+              disabled={isDeleting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteEvent}
+              disabled={!isTitleMatching || isDeleting}
+              className="gap-1.5"
+            >
+              <Trash2 className="h-4 w-4" />
+              {isDeleting ? "Excluindo..." : "Confirmar Exclusão"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   )
 }

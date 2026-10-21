@@ -394,3 +394,27 @@ export async function createEvent(eventData: any) {
   revalidatePath(`/event/${data.id}`)
   return { data: toDisplayEvent(data, insertedGuests), error: null }
 }
+
+export async function deleteEventAction(id: string) {
+  if (!isSupabaseConfigured()) {
+    return { success: true, localOnly: true }
+  }
+
+  const supabase = await createClient()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { success: false, error: "Usuário não autenticado." }
+  }
+
+  const { error } = await supabase.from("events").delete().eq("id", id).eq("user_id", user.id)
+
+  if (error) {
+    return { success: false, error: error.message }
+  }
+
+  revalidatePath("/dashboard")
+  return { success: true }
+}
