@@ -7,6 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { Input } from "@/components/ui/input"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton, SkeletonCard } from "@/components/ui/skeleton-loader"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { EmptyState } from "@/components/ui/empty-state"
@@ -18,19 +20,19 @@ import {
   Clock,
   Filter,
   Users,
-  Sparkles,
   CheckCircle2,
   TrendingUp,
-  DollarSign,
   Wallet,
   PiggyBank,
   Receipt,
   BarChart3,
   ArrowRight,
-  ArrowUpRight,
   AlertTriangle,
   AlertCircle,
-  ShieldAlert,
+  Search,
+  LayoutGrid,
+  List,
+  ChevronRight,
 } from "lucide-react"
 import EventCard from "@/components/event-card"
 import Link from "next/link"
@@ -110,6 +112,11 @@ export default function Dashboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [activeTab, setActiveTab] = useState("events")
 
+  // Estados da lista de eventos
+  const [eventsSearch, setEventsSearch] = useState("")
+  const [eventsTypeFilter, setEventsTypeFilter] = useState("all")
+  const [eventsViewMode, setEventsViewMode] = useState<"table" | "grid">("table")
+
   // Estados do calendário
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([])
   const [filteredEvents, setFilteredEvents] = useState<CalendarEvent[]>([])
@@ -119,12 +126,12 @@ export default function Dashboard() {
   const [selectedEventType, setSelectedEventType] = useState<string>("all")
   const [eventTypes, setEventTypes] = useState<string[]>([])
 
-  // Simular carregamento de eventos do usuário
+  // Carregamento de eventos do usuário com preservação do store local
   useEffect(() => {
     const loadEvents = async () => {
       try {
         const result = await getEvents()
-        if (!result.error) {
+        if (!result.error && result.data && result.data.length > 0) {
           setEvents(result.data)
         }
       } catch (error) {
@@ -340,156 +347,162 @@ export default function Dashboard() {
     }
   }, [events])
 
-  // Consolidação Financeira Executiva (PLAN-003: Saldo vs. Orçamento vs. Rateio em <3s)
+  // Consolidação Financeira Rigorosa (Sem misturar corporativo com colaborativo)
   const financialOverview = useMemo(() => {
-    let totalBudgetAllocated = 0
-    let totalExpenses = 0
-    let totalPaid = 0
-    let totalPendingPayment = 0
-    let collaborativeExpenses = 0
-    let collaborativeConfirmedGuests = 0
+    let corporateBudgetAllocated = 0
     let corporateExpenses = 0
-    let corporateConfirmedGuests = 0
-    let eventsWithBudgetCount = 0
+    let corporatePaid = 0
+    let corporatePending = 0
+    let corporateEventsCount = 0
 
-    interface DivergenceItem {
+    let collaborativeExpenses = 0
+    let collaborativeEventsCount = 0
+    const collaborativeEventsList: Array<{
       id: string
-      eventId: string
-      eventTitle: string
-      type: "budget_exceeded" | "unallocated_budget" | "pending_invoices"
-      severity: "high" | "medium" | "low"
       title: string
-      description: string
-      impact: string
-      actionLabel: string
-      actionHref: string
-    }
+      totalCost: number
+      confirmedGuests: number
+      costPerPerson: number
+    }> = []
 
-    const divergences: DivergenceItem[] = []
+    // Ocorrências agrupadas por categoria e severidade
+    const budgetOverruns: Array<{ id: string; title: string; budget: number; expenses: number; overrun: number }> = []
+    const unallocatedCorporate: Array<{ id: string; title: string; expenses: number }> = []
+    let totalPendingInvoices = 0
+    let pendingEventsCount = 0
 
     events.forEach((ev) => {
+      const isCollab = ev.financialMode === "collaborative_split" || ev.type === "Colaborativo"
       const budget = Number(ev.budgetEstimated || 0)
-      if (budget > 0) {
-        totalBudgetAllocated += budget
-        eventsWithBudgetCount++
-      }
 
-      let eventExpense = 0
-      let eventPaid = 0
-      let eventPending = 0
+      let evExpense = 0
+      let evPaid = 0
+      let evPending = 0
 
       if (Array.isArray(ev.items)) {
         ev.items.forEach((item) => {
           const price = Number(item.price || item.actualCost || item.estimatedCost || 0)
-          eventExpense += price
+          evExpense += price
           if (item.paymentStatus === "paid") {
-            eventPaid += price
+            evPaid += price
           } else {
-            eventPending += price
+            evPending += price
           }
         })
       }
 
-      totalExpenses += eventExpense
-      totalPaid += eventPaid
-      totalPendingPayment += eventPending
+      if (evPending > 0) {
+        totalPendingInvoices += evPending
+        pendingEventsCount++
+      }
 
-      const isCorporate = ev.financialMode === "corporate_budget" || ev.type !== "Colaborativo"
-      const confirmed = Number(ev.confirmedGuests || 0)
-
-      if (isCorporate) {
-        corporateExpenses += eventExpense
-        corporateConfirmedGuests += confirmed
+      if (isCollab) {
+        collaborativeExpenses += evExpense
+        collaborativeEventsCount++
+        const confirmed = Number(ev.confirmedGuests || 0)
+        const total = Number(ev.totalGuests || 0)
+        const divisor = confirmed > 0 ? confirmed : total > 0 ? total : 1
+        collaborativeEventsList.push({
+          id: ev.id,
+          title: ev.title,
+          totalCost: evExpense,
+          confirmedGuests: confirmed,
+          costPerPerson: evExpense / divisor,
+        })
       } else {
-        collaborativeExpenses += eventExpense
-        collaborativeConfirmedGuests += confirmed
-      }
+        // Evento corporativo ou com orçamento formal
+        if (budget > 0) {
+          corporateBudgetAllocated += budget
+          corporateEventsCount++
+        } else if (evExpense > 0) {
+          unallocatedCorporate.push({
+            id: ev.id,
+            title: ev.title,
+            expenses: evExpense,
+          })
+        }
 
-      // Detecção de divergências orçamentárias e financeiras
-      if (budget > 0 && eventExpense > budget) {
-        divergences.push({
-          id: `overbudget-${ev.id}`,
-          eventId: ev.id,
-          eventTitle: ev.title,
-          type: "budget_exceeded",
-          severity: "high",
-          title: "Estouro de Verba Orçamentária",
-          description: `Gastos de R$ ${eventExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} ultrapassam o teto aprovado de R$ ${budget.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`,
-          impact: `Déficit de R$ ${(eventExpense - budget).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}`,
-          actionLabel: "Revisar itens e teto",
-          actionHref: `/event/${ev.id}`,
-        })
-      } else if (isCorporate && budget === 0 && eventExpense > 0) {
-        divergences.push({
-          id: `unallocated-${ev.id}`,
-          eventId: ev.id,
-          eventTitle: ev.title,
-          type: "unallocated_budget",
-          severity: "medium",
-          title: "Evento sem Teto Formal",
-          description: `Evento corporativo possui R$ ${eventExpense.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} em gastos sem limite de verba definido.`,
-          impact: "Ausência de teto orçamentário aprovado",
-          actionLabel: "Definir orçamento",
-          actionHref: `/event/${ev.id}`,
-        })
-      }
+        corporateExpenses += evExpense
+        corporatePaid += evPaid
+        corporatePending += evPending
 
-      if (eventPending > 0 && eventExpense > 0 && eventPending / eventExpense > 0.6) {
-        divergences.push({
-          id: `pending-${ev.id}`,
-          eventId: ev.id,
-          eventTitle: ev.title,
-          type: "pending_invoices",
-          severity: "medium",
-          title: "Volume Alto de Pagamentos Pendentes",
-          description: `${Math.round((eventPending / eventExpense) * 100)}% das despesas contratadas ainda estão pendentes de liquidação com fornecedores.`,
-          impact: `R$ ${eventPending.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} a pagar`,
-          actionLabel: "Ver pagamentos",
-          actionHref: `/event/${ev.id}`,
-        })
+        if (budget > 0 && evExpense > budget) {
+          budgetOverruns.push({
+            id: ev.id,
+            title: ev.title,
+            budget,
+            expenses: evExpense,
+            overrun: evExpense - budget,
+          })
+        }
       }
     })
 
-    const availableBudget = totalBudgetAllocated - totalExpenses
+    const availableBudget = corporateBudgetAllocated - corporateExpenses
     const isOverBudget = availableBudget < 0
     const overBudgetAmount = isOverBudget ? Math.abs(availableBudget) : 0
-    const budgetExecutionRate =
-      totalBudgetAllocated > 0
-        ? Math.round((totalExpenses / totalBudgetAllocated) * 100)
+    const executionRate =
+      corporateBudgetAllocated > 0
+        ? Math.round((corporateExpenses / corporateBudgetAllocated) * 100)
         : 0
 
-    const paidPercentage =
-      totalExpenses > 0 ? Math.round((totalPaid / totalExpenses) * 100) : 0
-    const pendingPercentage =
-      totalExpenses > 0 ? Math.round((totalPendingPayment / totalExpenses) * 100) : 0
-
-    const averageCollaborativeSplit =
-      collaborativeConfirmedGuests > 0
-        ? collaborativeExpenses / collaborativeConfirmedGuests
+    const paidRate =
+      corporateBudgetAllocated > 0
+        ? Math.min(100, Math.round((corporatePaid / corporateBudgetAllocated) * 100))
         : 0
-
-    const averageCorporateCostPerAttendee =
-      corporateConfirmedGuests > 0
-        ? corporateExpenses / corporateConfirmedGuests
+    const pendingRate =
+      corporateBudgetAllocated > 0
+        ? Math.min(100 - paidRate, Math.round((corporatePending / corporateBudgetAllocated) * 100))
         : 0
+    const freeRate = Math.max(0, 100 - (paidRate + pendingRate))
 
     return {
-      totalBudgetAllocated,
-      totalExpenses,
-      totalPaid,
-      totalPendingPayment,
+      corporateBudgetAllocated,
+      corporateExpenses,
+      corporatePaid,
+      corporatePending,
+      corporateEventsCount,
       availableBudget,
       isOverBudget,
       overBudgetAmount,
-      budgetExecutionRate,
-      paidPercentage,
-      pendingPercentage,
-      averageCollaborativeSplit,
-      averageCorporateCostPerAttendee,
-      eventsWithBudgetCount,
-      divergences,
+      executionRate,
+      paidRate,
+      pendingRate,
+      freeRate,
+      collaborativeExpenses,
+      collaborativeEventsCount,
+      collaborativeEventsList,
+      // Ocorrências consolidadas
+      budgetOverruns,
+      unallocatedCorporate,
+      totalPendingInvoices,
+      pendingEventsCount,
+      totalIssuesCount:
+        budgetOverruns.length +
+        (unallocatedCorporate.length > 0 ? 1 : 0) +
+        (totalPendingInvoices > 0 ? 1 : 0),
     }
   }, [events])
+
+  // Lista filtrada para a tabela e grade de eventos
+  const filteredTableEvents = useMemo(() => {
+    return events.filter((event) => {
+      const matchesSearch =
+        eventsSearch.trim() === "" ||
+        event.title.toLowerCase().includes(eventsSearch.toLowerCase()) ||
+        (event.location && event.location.toLowerCase().includes(eventsSearch.toLowerCase()))
+
+      const matchesType =
+        eventsTypeFilter === "all" ||
+        event.type === eventsTypeFilter ||
+        (eventsTypeFilter === "Corporativo" &&
+          (event.financialMode === "corporate_budget" || event.type === "Corporativo")) ||
+        (eventsTypeFilter === "Colaborativo" &&
+          (event.financialMode === "collaborative_split" || event.type === "Colaborativo"))
+
+      return matchesSearch && matchesType
+    })
+  }, [events, eventsSearch, eventsTypeFilter])
 
   const formatBRL = (val: number) => {
     return new Intl.NumberFormat("pt-BR", {
@@ -504,93 +517,85 @@ export default function Dashboard() {
     visible: {
       opacity: 1,
       transition: {
-        staggerChildren: 0.1,
+        staggerChildren: 0.05,
       },
     },
   }
 
   return (
-    <div className="container mx-auto max-w-6xl py-8 px-4 space-y-8">
-      {/* Cabeçalho Editorial com Ações Primárias e SLA Ativo */}
-      <motion.div
-        initial={{ opacity: 0, y: -8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
-        className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 pb-4 border-b border-border/60"
-      >
-        <div className="space-y-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="outline" className="border-primary/30 text-primary bg-primary/5 text-xs font-semibold px-2.5 py-0.5">
-              <Sparkles className="h-3 w-3 mr-1" />
-              M2.1 · Dashboard Vivo
-            </Badge>
-            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800/60 shadow-xs">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Conciliação em tempo real (&lt;100ms)
-            </span>
-          </div>
-          <h1 className="text-3xl font-bold tracking-tight text-foreground">
-            Painel Executivo &amp; Orçamentos
-          </h1>
-          <p className="text-sm text-muted-foreground">
-            Controle integrado de Saldo Disponível, Orçamento Aprovado e Rateio por participante com conciliação contínua.
+    <div className="container mx-auto max-w-6xl py-6 px-4 space-y-6">
+      {/* 1. Cabeçalho Compacto */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 pb-3 border-b border-border/60">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-foreground">Dashboard Executivo</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Visão financeira consolidada · {events.length} eventos cadastrados
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
-          <Link href="/dashboard/analytics" className="w-full sm:w-auto">
-            <Button variant="outline" size="default" className="w-full sm:w-auto gap-2 font-medium">
-              <BarChart3 className="h-4 w-4 text-muted-foreground" />
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <Link href="/dashboard/analytics">
+            <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs font-medium">
+              <BarChart3 className="h-3.5 w-3.5 text-muted-foreground" />
               Relatórios &amp; BI
             </Button>
           </Link>
-          <Link href="/create-event" className="w-full sm:w-auto">
-            <Button size="default" className="w-full sm:w-auto shadow-sm font-medium gap-2">
-              <Plus className="h-4 w-4" /> Novo Evento
+          <Link href="/create-event">
+            <Button size="sm" className="h-8 gap-1.5 text-xs font-medium shadow-xs">
+              <Plus className="h-3.5 w-3.5" />
+              Novo Evento
             </Button>
           </Link>
         </div>
-      </motion.div>
+      </div>
 
-      {/* SEÇÃO PRINCIPAL (PLAN-003): Painel de Saldo vs Orçamento vs Rateio (<3s) */}
-      <section aria-label="Painel Financeiro Executivo" className="space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Wallet className="h-4 w-4 text-primary" />
-            <h2 className="text-xs font-bold tracking-wider uppercase text-muted-foreground">
-              Conciliação Financeira Executiva
-            </h2>
+      {/* 2 & 3. Resumo Financeiro Integrado & Visualização Única de Conciliação */}
+      <Card className="p-5 border-border/80 bg-card/60 backdrop-blur-sm space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 border-b border-border/40 pb-2.5">
+          <div>
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Resumo Financeiro &amp; Conciliação
+            </span>
+            <div className="text-xs text-muted-foreground">
+              Orçamento corporativo e conciliação de faturas
+            </div>
           </div>
           <span className="text-xs text-muted-foreground">
-            {financialOverview.eventsWithBudgetCount} evento(s) com teto formal
+            {financialOverview.corporateEventsCount} evento(s) com teto formal
           </span>
         </div>
 
-        {/* Os 4 Cards Executivos Consolidados */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Card 1: Saldo Disponível (Verba Livre) */}
-          <Card
-            className={`p-4 border transition-all ${
-              financialOverview.isOverBudget
-                ? "bg-red-500/5 border-red-500/30 hover:border-red-500/50"
-                : "bg-emerald-500/5 border-emerald-500/30 hover:border-emerald-500/50"
-            }`}
-          >
-            <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wider">
-                Saldo Disponível
-              </span>
-              <div
-                className={`p-1.5 rounded-md ${
-                  financialOverview.isOverBudget
-                    ? "bg-red-500/10 text-red-600 dark:text-red-400"
-                    : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                }`}
-              >
-                <Wallet className="h-4 w-4" />
-              </div>
+        {/* 3 Valores Essenciais Lado a Lado (Sem caixas redundantes) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 pt-1">
+          <div>
+            <span className="text-xs text-muted-foreground font-medium">Orçamento Aprovado</span>
+            <div className="text-2xl font-bold tracking-tight text-foreground mt-0.5">
+              {formatBRL(financialOverview.corporateBudgetAllocated)}
             </div>
+            <span className="text-[11px] text-muted-foreground">
+              Teto global aprovado
+            </span>
+          </div>
+
+          <div>
+            <span className="text-xs text-muted-foreground font-medium">Gastos Comprometidos</span>
+            <div className="text-2xl font-bold tracking-tight text-foreground mt-0.5">
+              {formatBRL(financialOverview.corporateExpenses)}
+            </div>
+            <div className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
+              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
+                {formatBRL(financialOverview.corporatePaid)} pagos
+              </span>
+              <span>·</span>
+              <span className="text-amber-600 dark:text-amber-400 font-medium">
+                {formatBRL(financialOverview.corporatePending)} a faturar
+              </span>
+            </div>
+          </div>
+
+          <div>
+            <span className="text-xs text-muted-foreground font-medium">Saldo Disponível</span>
             <div
-              className={`text-2xl font-bold tracking-tight ${
+              className={`text-2xl font-bold tracking-tight mt-0.5 ${
                 financialOverview.isOverBudget
                   ? "text-red-600 dark:text-red-400"
                   : "text-emerald-600 dark:text-emerald-400"
@@ -600,317 +605,201 @@ export default function Dashboard() {
                 ? `- ${formatBRL(financialOverview.overBudgetAmount)}`
                 : formatBRL(financialOverview.availableBudget)}
             </div>
-            <div className="mt-2 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">
-                {financialOverview.isOverBudget ? "Estouro de verba" : "Verba livre restante"}
-              </span>
-              <Badge
-                variant="outline"
-                className={`text-[10px] px-1.5 py-0 h-4 ${
-                  financialOverview.isOverBudget
-                    ? "border-red-500/40 text-red-600 dark:text-red-400 bg-red-500/10"
-                    : "border-emerald-500/40 text-emerald-600 dark:text-emerald-400 bg-emerald-500/10"
-                }`}
-              >
-                {financialOverview.isOverBudget ? "Déficit" : "Dentro da Meta"}
-              </Badge>
-            </div>
-          </Card>
-
-          {/* Card 2: Orçamento Aprovado (Teto Global) */}
-          <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80 hover:border-border transition-all">
-            <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wider">
-                Orçamento Aprovado
-              </span>
-              <div className="p-1.5 rounded-md bg-primary/10 text-primary">
-                <PiggyBank className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="text-2xl font-bold tracking-tight text-foreground">
-              {formatBRL(financialOverview.totalBudgetAllocated)}
-            </div>
-            <div className="mt-2 flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Execução orçamentária</span>
-              <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4">
-                {financialOverview.budgetExecutionRate}% empenhado
-              </Badge>
-            </div>
-          </Card>
-
-          {/* Card 3: Gastos Comprometidos (Realizados) */}
-          <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80 hover:border-border transition-all">
-            <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wider">
-                Gastos Comprometidos
-              </span>
-              <div className="p-1.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                <Receipt className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="text-2xl font-bold tracking-tight text-foreground">
-              {formatBRL(financialOverview.totalExpenses)}
-            </div>
-            <div className="mt-2 flex items-center gap-1.5 text-xs">
-              <span className="text-emerald-600 dark:text-emerald-400 font-medium">
-                {formatBRL(financialOverview.totalPaid)} pago
-              </span>
-              <span className="text-muted-foreground">·</span>
-              <span className="text-amber-600 dark:text-amber-400 font-medium">
-                {formatBRL(financialOverview.totalPendingPayment)} a pagar
-              </span>
-            </div>
-          </Card>
-
-          {/* Card 4: Rateio & Custo Médio por Convidado */}
-          <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80 hover:border-border transition-all">
-            <div className="flex items-center justify-between text-muted-foreground mb-1.5">
-              <span className="text-xs font-semibold uppercase tracking-wider">
-                Custo / Rateio Médio
-              </span>
-              <div className="p-1.5 rounded-md bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                <Users className="h-4 w-4" />
-              </div>
-            </div>
-            <div className="text-2xl font-bold tracking-tight text-foreground">
-              {financialOverview.averageCorporateCostPerAttendee > 0
-                ? `${formatBRL(financialOverview.averageCorporateCostPerAttendee)}/pax`
-                : financialOverview.averageCollaborativeSplit > 0
-                  ? `${formatBRL(financialOverview.averageCollaborativeSplit)}/pax`
-                  : "R$ 0,00"}
-            </div>
-            <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground">
-              <span>Por participante confirmado</span>
-              <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4">
-                {eventMetrics.totalConfirmedGuests} confirmados
-              </Badge>
-            </div>
-          </Card>
+            <span className="text-[11px] text-muted-foreground">
+              {financialOverview.isOverBudget
+                ? "Déficit sobre o teto aprovado"
+                : `${financialOverview.freeRate}% de verba livre restante`}
+            </span>
+          </div>
         </div>
 
-        {/* Régua de Conciliação Financeira Viva (Visual Balance Gauge) */}
-        <Card className="p-4 bg-card/70 backdrop-blur-sm border-border/80">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Régua de Conciliação Orçamentária
-              </div>
-              <div className="text-sm font-medium text-foreground">
-                Distribuição de Pagamentos e Saldo sobre o Teto Aprovado
-              </div>
-            </div>
-            <div className="flex items-center gap-3 text-xs">
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                Pago: <strong>{formatBRL(financialOverview.totalPaid)}</strong>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-amber-500" />
-                Pendente: <strong>{formatBRL(financialOverview.totalPendingPayment)}</strong>
-              </span>
-              <span className="flex items-center gap-1.5">
-                <span className="h-2.5 w-2.5 rounded-full bg-blue-500" />
-                Saldo Livre: <strong>{formatBRL(Math.max(0, financialOverview.availableBudget))}</strong>
-              </span>
-            </div>
-          </div>
-
-          {/* Barra proporcional segmentada */}
-          <div className="w-full h-3 rounded-full bg-muted overflow-hidden flex shadow-inner">
-            {financialOverview.totalBudgetAllocated > 0 ? (
+        {/* Barra Proporcional de Conciliação Integrada */}
+        <div className="space-y-1.5 pt-2">
+          <div className="w-full h-2 rounded-full bg-muted overflow-hidden flex">
+            {financialOverview.corporateBudgetAllocated > 0 ? (
               <>
                 <div
-                  style={{
-                    width: `${Math.min(
-                      100,
-                      (financialOverview.totalPaid / financialOverview.totalBudgetAllocated) * 100
-                    )}%`,
-                  }}
-                  className="bg-emerald-500 transition-all duration-500"
-                  title={`Pago: ${formatBRL(financialOverview.totalPaid)}`}
+                  style={{ width: `${financialOverview.paidRate}%` }}
+                  className="bg-emerald-500 transition-all duration-300"
+                  title={`Pago: ${formatBRL(financialOverview.corporatePaid)}`}
                 />
                 <div
-                  style={{
-                    width: `${Math.min(
-                      100 - Math.min(100, (financialOverview.totalPaid / financialOverview.totalBudgetAllocated) * 100),
-                      (financialOverview.totalPendingPayment / financialOverview.totalBudgetAllocated) * 100
-                    )}%`,
-                  }}
-                  className="bg-amber-500 transition-all duration-500"
-                  title={`Pendente: ${formatBRL(financialOverview.totalPendingPayment)}`}
+                  style={{ width: `${financialOverview.pendingRate}%` }}
+                  className="bg-amber-500 transition-all duration-300"
+                  title={`A Faturar: ${formatBRL(financialOverview.corporatePending)}`}
                 />
                 {!financialOverview.isOverBudget && (
                   <div
-                    style={{
-                      width: `${Math.max(
-                        0,
-                        100 -
-                          ((financialOverview.totalExpenses / financialOverview.totalBudgetAllocated) * 100)
-                      )}%`,
-                    }}
-                    className="bg-blue-400/60 dark:bg-blue-500/50 transition-all duration-500"
-                    title={`Saldo Disponível: ${formatBRL(financialOverview.availableBudget)}`}
+                    style={{ width: `${financialOverview.freeRate}%` }}
+                    className="bg-blue-400/50 dark:bg-blue-500/40 transition-all duration-300"
+                    title={`Saldo Livre: ${formatBRL(financialOverview.availableBudget)}`}
                   />
                 )}
                 {financialOverview.isOverBudget && (
                   <div
                     style={{ width: "100%" }}
-                    className="bg-red-500/80 transition-all duration-500"
-                    title={`Estouro de Orçamento: ${formatBRL(financialOverview.overBudgetAmount)}`}
+                    className="bg-red-500 transition-all duration-300"
+                    title={`Estouro: ${formatBRL(financialOverview.overBudgetAmount)}`}
                   />
                 )}
               </>
             ) : (
-              <div
-                style={{
-                  width: financialOverview.totalExpenses > 0 ? "100%" : "0%",
-                }}
-                className="bg-muted-foreground/30"
-              />
+              <div className="w-full bg-muted-foreground/20" />
             )}
           </div>
 
-          <div className="mt-2 flex justify-between items-center text-[11px] text-muted-foreground">
-            <span>R$ 0,00</span>
-            <span>
-              {financialOverview.totalBudgetAllocated > 0
-                ? `Teto: ${formatBRL(financialOverview.totalBudgetAllocated)}`
-                : "Sem teto orçamentário global configurado"}
-            </span>
+          <div className="flex items-center justify-between text-[11px] text-muted-foreground pt-0.5">
+            <div className="flex items-center gap-3">
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Pago ({financialOverview.paidRate}%)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                A Pagar ({financialOverview.pendingRate}%)
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-400" />
+                Livre ({financialOverview.freeRate}%)
+              </span>
+            </div>
+            <span>Teto: {formatBRL(financialOverview.corporateBudgetAllocated)}</span>
           </div>
-        </Card>
+        </div>
 
-        {/* Central de Divergências & Decisão Rápida (Smart Decision Center) */}
-        {financialOverview.divergences.length > 0 ? (
-          <Card className="p-4 border-amber-500/30 bg-amber-500/5">
-            <div className="flex items-start gap-3">
-              <div className="p-2 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 mt-0.5">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <div className="flex-1 space-y-2">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    Divergências Orçamentárias que Requerem Atenção
-                    <Badge variant="secondary" className="text-[10px] bg-amber-500/20 text-amber-700 dark:text-amber-300">
-                      {financialOverview.divergences.length} alerta(s)
-                    </Badge>
-                  </h3>
-                  <span className="text-xs text-muted-foreground">
-                    Ação recomendada para manter conformidade contábil
+        {/* Detalhe de Rateio Colaborativo (SEPARADO DO ORÇAMENTO CORPORATIVO) */}
+        {financialOverview.collaborativeEventsList.length > 0 && (
+          <div className="border-t border-border/40 pt-3 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-muted-foreground gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 font-medium text-foreground">
+              <Users className="h-3.5 w-3.5 text-primary" />
+              <span>Rateio Colaborativo:</span>
+              <span className="text-muted-foreground font-normal">
+                {financialOverview.collaborativeEventsList.map((collab, i) => (
+                  <span key={collab.id}>
+                    {i > 0 && " · "}
+                    {collab.title}: <strong>{formatBRL(collab.costPerPerson)}/pessoa</strong> (
+                    {collab.confirmedGuests} confirmados)
+                  </span>
+                ))}
+              </span>
+            </div>
+            <span className="text-[11px]">Custos divididos entre convidados (sem teto corporativo)</span>
+          </div>
+        )}
+      </Card>
+
+      {/* 4. Área Compacta de Ocorrências Prioritárias (Agrupadas por Categoria e Gravidade) */}
+      <Card className="p-3.5 border-border/70 bg-card/40">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 text-amber-500" />
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-foreground">
+              Ocorrências Prioritárias
+            </h2>
+            <Badge variant="secondary" className="text-[10px] h-4 px-1.5 py-0">
+              {financialOverview.totalIssuesCount} pendência(s)
+            </Badge>
+          </div>
+          <span className="text-[11px] text-muted-foreground">
+            Ações recomendadas para conformidade
+          </span>
+        </div>
+
+        {financialOverview.totalIssuesCount > 0 ? (
+          <div className="space-y-1.5 text-xs">
+            {/* Alta gravidade: Estouro */}
+            {financialOverview.budgetOverruns.map((bo) => (
+              <div
+                key={bo.id}
+                className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-300 gap-2"
+              >
+                <div className="flex items-center gap-2">
+                  <Badge variant="destructive" className="text-[10px] px-1.5 py-0">
+                    Alta
+                  </Badge>
+                  <span>
+                    <strong>Estouro de Verba:</strong> &quot;{bo.title}&quot; ultrapassou o teto em{" "}
+                    {formatBRL(bo.overrun)}.
                   </span>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1">
-                  {financialOverview.divergences.map((div) => (
-                    <div
-                      key={div.id}
-                      className="p-3 rounded-md bg-card/80 border border-border flex flex-col justify-between gap-2"
-                    >
-                      <div>
-                        <div className="flex items-center justify-between gap-2 mb-1">
-                          <span className="font-semibold text-xs text-foreground truncate">
-                            {div.eventTitle}
-                          </span>
-                          <Badge
-                            variant={div.severity === "high" ? "destructive" : "outline"}
-                            className="text-[10px] px-1.5 py-0"
-                          >
-                            {div.title}
-                          </Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground leading-relaxed">
-                          {div.description}
-                        </p>
-                      </div>
-                      <div className="flex items-center justify-between pt-1 border-t border-border/50 text-xs">
-                        <span className="font-medium text-amber-700 dark:text-amber-400">
-                          {div.impact}
-                        </span>
-                        <Link href={div.actionHref}>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs gap-1 text-primary hover:text-primary font-medium"
-                          >
-                            {div.actionLabel}
-                            <ArrowRight className="h-3 w-3" />
-                          </Button>
-                        </Link>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <Link href={`/event/${bo.id}`} className="shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-red-700 dark:text-red-300 hover:bg-red-500/20 px-2"
+                  >
+                    Revisar evento →
+                  </Button>
+                </Link>
               </div>
-            </div>
-          </Card>
-        ) : events.length > 0 ? (
-          <Card className="p-3 border-emerald-500/20 bg-emerald-500/5">
-            <div className="flex items-center justify-between text-xs text-emerald-700 dark:text-emerald-300">
-              <span className="flex items-center gap-2 font-medium">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                Saúde Orçamentária Excelente: Nenhuma divergência crítica identificada entre saldo, orçamento e rateio.
-              </span>
-              <Link href="/dashboard/analytics">
-                <span className="hover:underline font-semibold flex items-center gap-1 cursor-pointer">
-                  Ver auditoria contábil completa <ArrowRight className="h-3 w-3" />
-                </span>
-              </Link>
-            </div>
-          </Card>
-        ) : null}
-      </section>
+            ))}
 
-      {/* Indicadores Compactos de Participação & Eventos */}
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, delay: 0.1 }}
-        className="grid grid-cols-2 lg:grid-cols-4 gap-4"
-      >
-        <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Total de Eventos</span>
-            <CalendarDays className="h-4 w-4 text-primary" />
+            {/* Média gravidade: Faturas pendentes consolidado em uma única linha */}
+            {financialOverview.totalPendingInvoices > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-800 dark:text-amber-200 gap-2">
+                <div className="flex items-center gap-2">
+                  <Badge
+                    variant="outline"
+                    className="border-amber-500/40 text-amber-700 dark:text-amber-300 text-[10px] px-1.5 py-0 bg-amber-500/10"
+                  >
+                    Atenção
+                  </Badge>
+                  <span>
+                    <strong>Pagamentos a Liquidar:</strong>{" "}
+                    {formatBRL(financialOverview.totalPendingInvoices)} em faturas pendentes
+                    distribuídas em {financialOverview.pendingEventsCount} evento(s).
+                  </span>
+                </div>
+                <Link href="/dashboard/analytics" className="shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-amber-800 dark:text-amber-200 hover:bg-amber-500/20 px-2"
+                  >
+                    Ver no BI →
+                  </Button>
+                </Link>
+              </div>
+            )}
+
+            {/* Governança: Eventos corporativos sem teto */}
+            {financialOverview.unallocatedCorporate.length > 0 && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between p-2 rounded bg-muted/60 border border-border text-muted-foreground gap-2">
+                <div className="flex items-center gap-2">
+                  <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                    Governança
+                  </Badge>
+                  <span>
+                    <strong>Sem Teto Formal:</strong>{" "}
+                    {financialOverview.unallocatedCorporate.length} evento(s) corporativo(s) com
+                    despesas sem teto cadastrado (
+                    {financialOverview.unallocatedCorporate.map((e) => e.title).join(", ")}).
+                  </span>
+                </div>
+                <Link href={`/event/${financialOverview.unallocatedCorporate[0].id}`} className="shrink-0">
+                  <Button variant="ghost" size="sm" className="h-6 text-xs px-2">
+                    Definir teto →
+                  </Button>
+                </Link>
+              </div>
+            )}
           </div>
-          <div className="text-2xl font-bold tracking-tight text-foreground">{eventMetrics.totalEvents}</div>
-          <p className="text-xs text-muted-foreground mt-1">cadastrados no sistema</p>
-        </Card>
-
-        <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Confirmados</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 py-0.5">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            <span>
+              Conformidade orçamentária plena: todos os eventos estão dentro do teto e compromissos em dia.
+            </span>
           </div>
-          <div className="text-2xl font-bold tracking-tight text-foreground">{eventMetrics.totalConfirmedGuests}</div>
-          <p className="text-xs text-muted-foreground mt-1">
-            de {eventMetrics.totalGuests} convidados ({eventMetrics.confirmationRate}%)
-          </p>
-        </Card>
+        )}
+      </Card>
 
-        <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Colaborativos</span>
-            <Sparkles className="h-4 w-4 text-amber-500" />
-          </div>
-          <div className="text-2xl font-bold tracking-tight text-foreground">{eventMetrics.collaborativeEvents}</div>
-          <p className="text-xs text-muted-foreground mt-1">com divisão de tarefas e itens</p>
-        </Card>
-
-        <Card className="p-4 bg-card/60 backdrop-blur-sm border-border/80">
-          <div className="flex items-center justify-between text-muted-foreground mb-2">
-            <span className="text-xs font-medium uppercase tracking-wider">Taxa de Adesão</span>
-            <TrendingUp className="h-4 w-4 text-primary" />
-          </div>
-          <div className="text-2xl font-bold tracking-tight text-foreground">{eventMetrics.confirmationRate}%</div>
-          <p className="text-xs text-muted-foreground mt-1">média geral de presença</p>
-        </Card>
-      </motion.div>
-
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-6">
-        <TabsList className="grid w-full sm:w-80 grid-cols-2 p-1 bg-muted/60 rounded-lg">
+      {/* 5 & 6. Lista / Tabela Compacta de Eventos e Abas */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full space-y-4">
+        <TabsList className="grid w-full sm:w-64 grid-cols-2 p-1 bg-muted/60 rounded-lg">
           <TabsTrigger value="events" className="flex items-center gap-2 text-xs font-medium">
             <Grid3X3 className="h-3.5 w-3.5" />
-            Meus Eventos ({events.length})
+            Eventos ({events.length})
           </TabsTrigger>
           <TabsTrigger value="calendar" className="flex items-center gap-2 text-xs font-medium">
             <CalendarDays className="h-3.5 w-3.5" />
@@ -918,64 +807,210 @@ export default function Dashboard() {
           </TabsTrigger>
         </TabsList>
 
-        {/* Aba de Eventos */}
-        <TabsContent value="events" className="space-y-6 outline-none">
+        {/* Aba de Eventos com Tabela Compacta de Alta Densidade */}
+        <TabsContent value="events" className="space-y-3 outline-none">
+          {/* Barra de Filtros e Alternador de Exibição */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold text-foreground">
+                Lista de Eventos ({filteredTableEvents.length})
+              </span>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Campo de Busca Rápida */}
+              <div className="relative w-44 sm:w-56">
+                <Search className="absolute left-2.5 top-2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar evento..."
+                  value={eventsSearch}
+                  onChange={(e) => setEventsSearch(e.target.value)}
+                  className="h-7 pl-7 text-xs"
+                />
+              </div>
+
+              {/* Filtro por Tipo */}
+              <Select value={eventsTypeFilter} onValueChange={setEventsTypeFilter}>
+                <SelectTrigger className="h-7 w-32 text-xs">
+                  <SelectValue placeholder="Tipo" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os tipos</SelectItem>
+                  <SelectItem value="Corporativo">Corporativo</SelectItem>
+                  <SelectItem value="Colaborativo">Colaborativo</SelectItem>
+                  <SelectItem value="Casamento">Casamento</SelectItem>
+                  <SelectItem value="Festa">Festa</SelectItem>
+                  <SelectItem value="Formatura">Formatura</SelectItem>
+                  <SelectItem value="Online">Online</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Alternador Tabela / Grade */}
+              <div className="flex items-center border border-border rounded-md p-0.5 bg-muted/40">
+                <Button
+                  variant={eventsViewMode === "table" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setEventsViewMode("table")}
+                  className="h-6 w-6 p-0"
+                  title="Visualização em Tabela Compacta"
+                >
+                  <List className="h-3 w-3" />
+                </Button>
+                <Button
+                  variant={eventsViewMode === "grid" ? "secondary" : "ghost"}
+                  size="sm"
+                  onClick={() => setEventsViewMode("grid")}
+                  className="h-6 w-6 p-0"
+                  title="Visualização em Grade de Cards"
+                >
+                  <LayoutGrid className="h-3 w-3" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
           {isLoading ? (
-            <motion.div
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ duration: 0.4 }}
-            >
-              {[1, 2, 3].map((i) => (
-                <SkeletonCard key={i} />
-              ))}
-            </motion.div>
-          ) : events.length > 0 ? (
-            <motion.div
-              className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5"
-              variants={containerVariants}
-              initial="hidden"
-              animate="visible"
-            >
-              {events.map((event, index) => (
-                <AnimatedCard key={event.id} delay={index * 0.05}>
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          ) : eventsViewMode === "table" ? (
+            <Card className="border-border/80 overflow-hidden shadow-xs">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent bg-muted/30">
+                    <TableHead className="text-xs font-semibold py-2">Evento</TableHead>
+                    <TableHead className="text-xs font-semibold py-2">Tipo</TableHead>
+                    <TableHead className="text-xs font-semibold py-2">Presença</TableHead>
+                    <TableHead className="text-xs font-semibold text-right py-2">Teto Aprovado</TableHead>
+                    <TableHead className="text-xs font-semibold text-right py-2">Comprometido</TableHead>
+                    <TableHead className="text-xs font-semibold text-right py-2">Saldo / Rateio</TableHead>
+                    <TableHead className="text-xs font-semibold text-right w-20 py-2">Ação</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredTableEvents.length > 0 ? (
+                    filteredTableEvents.map((ev) => {
+                      const isCollab =
+                        ev.financialMode === "collaborative_split" || ev.type === "Colaborativo"
+                      const totalExpense = Array.isArray(ev.items)
+                        ? ev.items.reduce(
+                            (acc, item) =>
+                              acc + Number(item.price || item.actualCost || item.estimatedCost || 0),
+                            0,
+                          )
+                        : 0
+                      const budget = Number(ev.budgetEstimated || 0)
+                      const balance = budget > 0 ? budget - totalExpense : null
+                      const isOver = balance !== null && balance < 0
+                      const confirmed = Number(ev.confirmedGuests || 0)
+                      const totalGuests = Number(ev.totalGuests || 0)
+                      const rateioPax =
+                        isCollab && totalExpense > 0
+                          ? totalExpense / (confirmed > 0 ? confirmed : totalGuests > 0 ? totalGuests : 1)
+                          : 0
+
+                      return (
+                        <TableRow key={ev.id} className="hover:bg-muted/40 transition-colors">
+                          <TableCell className="py-2.5">
+                            <Link
+                              href={`/event/${ev.id}`}
+                              className="font-medium text-xs text-foreground hover:underline block truncate max-w-xs"
+                            >
+                              {ev.title}
+                            </Link>
+                            <span className="text-[11px] text-muted-foreground block">
+                              {ev.fullDate || ev.date} {ev.time && `· ${ev.time}`}
+                            </span>
+                          </TableCell>
+
+                          <TableCell className="py-2.5">
+                            <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
+                              {ev.type}
+                            </Badge>
+                          </TableCell>
+
+                          <TableCell className="py-2.5 text-xs text-muted-foreground">
+                            <span>{confirmed}/{totalGuests}</span>
+                            {totalGuests > 0 && (
+                              <span className="text-[10px] ml-1 text-muted-foreground/70">
+                                ({Math.round((confirmed / totalGuests) * 100)}%)
+                              </span>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="py-2.5 text-xs text-right font-medium">
+                            {budget > 0 ? (
+                              formatBRL(budget)
+                            ) : (
+                              <span className="text-muted-foreground/50">—</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="py-2.5 text-xs text-right font-medium">
+                            {totalExpense > 0 ? (
+                              formatBRL(totalExpense)
+                            ) : (
+                              <span className="text-muted-foreground/50">R$ 0,00</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="py-2.5 text-xs text-right">
+                            {isCollab ? (
+                              <span className="text-primary font-medium">
+                                {rateioPax > 0 ? `${formatBRL(rateioPax)}/pax` : "—"}
+                              </span>
+                            ) : balance !== null ? (
+                              <span
+                                className={`font-semibold ${
+                                  isOver
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-emerald-600 dark:text-emerald-400"
+                                }`}
+                              >
+                                {isOver ? `- ${formatBRL(Math.abs(balance))}` : `+ ${formatBRL(balance)}`}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground text-[11px]">Sem teto</span>
+                            )}
+                          </TableCell>
+
+                          <TableCell className="py-2.5 text-right">
+                            <Link href={`/event/${ev.id}`}>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 text-xs px-2 text-primary hover:text-primary gap-0.5"
+                              >
+                                Abrir <ChevronRight className="h-3 w-3" />
+                              </Button>
+                            </Link>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center py-8 text-xs text-muted-foreground">
+                        Nenhum evento encontrado com os filtros selecionados.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </Card>
+          ) : (
+            /* Visualização Opcional em Grade */
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredTableEvents.map((event, index) => (
+                <AnimatedCard key={event.id} delay={index * 0.03}>
                   <Link href={`/event/${event.id}`} className="block h-full">
                     <EventCard event={event} />
                   </Link>
                 </AnimatedCard>
               ))}
-
-              {/* Card Compacto para Adicionar Novo Evento */}
-              <AnimatedCard delay={events.length * 0.05}>
-                <Link href="/create-event" className="block h-full">
-                  <Card
-                    variant="interactive"
-                    className="border-dashed border-2 border-border/80 hover:border-primary/50 bg-muted/20 hover:bg-muted/40 transition-all p-6 flex flex-col items-center justify-center text-center h-full min-h-[220px]"
-                  >
-                    <div className="w-12 h-12 rounded-full bg-primary/10 text-primary flex items-center justify-center mb-3">
-                      <Plus className="h-6 w-6" />
-                    </div>
-                    <h3 className="font-semibold text-foreground text-base mb-1">Criar novo evento</h3>
-                    <p className="text-xs text-muted-foreground max-w-xs mb-3">
-                      Defina local, convidados e tarefas em poucos minutos.
-                    </p>
-                    <Button variant="outline" size="sm" className="pointer-events-none">
-                      Começar agora
-                    </Button>
-                  </Card>
-                </Link>
-              </AnimatedCard>
-            </motion.div>
-          ) : (
-            <EmptyState
-              icon={CalendarDays}
-              title="Nenhum evento criado ainda"
-              description="Você ainda não possui eventos planejados. Crie seu primeiro evento e comece a convidar seus amigos e gerenciar tarefas."
-              actionLabel="Criar meu primeiro evento"
-              actionHref="/create-event"
-              className="my-8"
-            />
+            </div>
           )}
         </TabsContent>
 

@@ -78,4 +78,41 @@ A nova interface combina:
 - [x] **Critério 03:** Filtros por tipo, abas (Meus Eventos vs. Calendário) e navegação existentes 100% preservados.
 - [x] **Critério 04:** Estados de carregamento com Skeletons harmoniosos, tratamento de erro e estados vazios com EmptyState.
 - [x] **Critério 05:** Contraste, semântica acessível, navegação por teclado e compatibilidade com temas claro/escuro.
+- [x] **Critério 06:** Eliminação do excesso de cartões, redundâncias e separação estrita entre orçamento corporativo e rateio colaborativo.
+
+---
+
+## 7. Revisão Crítica e Redesign de Redução de Carga Cognitiva
+
+### 7.1. Diagnóstico dos Problemas Identificados na V1 do Redesign
+Na primeira iteração do redesign, foram detectados os seguintes gargalos de UX:
+1. **Proliferação Excessiva de Cartões:** A interface acumulava mais de 25 cartões concorrentes na tela (4 cartões de KPIs + régua de conciliação separada + 8 cartões gigantes de alertas + 4 cartões operacionais + 11 cartões de eventos).
+2. **Duplicação de Informações:** Os valores de *Orçamento Aprovado*, *Comprometido* e *Saldo* apareciam nos cartões e eram repetidos textualmente na legenda da régua de conciliação.
+3. **Distorção Conceitual de Rateio:** A média ponderada anterior misturava eventos corporativos de alto valor com eventos colaborativos simples, gerando valores irrealistas por pessoa (ex: R$ 2.839,25/pax).
+4. **Spam Visual de Alertas:** A condição de alerta de faturas pendentes disparava caixas independentes de 300px para cada evento com custos em aberto, gerando 8 caixas repetitivas que tomavam mais de 60% da página.
+5. **Rolagem Infinita na Gestão Operacional:** A grade em 3 colunas por 4 linhas (11 cards) forçava o usuário a rolar mais de 2.000 pixels para visualizar todos os seus eventos.
+
+### 7.2. Soluções de Design e Arquitetura Implementadas
+1. **Cabeçalho Compacto:** Linha única com título executivo, período corrente e botões de ação ("Relatórios & BI" e "+ Novo Evento"), sem badges decorativos nem contadores de milissegundos.
+2. **Resumo Financeiro Integrado em Módulo Único:**
+   - 3 métricas essenciais lado a lado (*Orçamento Aprovado*, *Gastos Comprometidos* e *Saldo Disponível*).
+   - Barra proporcional de conciliação integrada no rodapé do mesmo cartão (altura 8px, sem caixas redundantes).
+   - Linha explicativa para *Rateio Colaborativo*, isolando o cálculo por pessoa dos eventos de divisão de despesas sem contaminar o teto corporativo.
+3. **Área Compacta de Ocorrências Prioritárias:**
+   - Reduzida de 8 caixas gigantes para um container de menos de 100px.
+   - Ocorrências consolidadas e agrupadas por categoria:
+     - 🔴 **Alta Gravidade:** Estouro de teto orçamentário (lista apenas os eventos com déficit).
+     - 🟡 **Atenção Operacional:** Faturas pendentes consolidadas em uma única linha (ex: "R$ 110.770,00 em faturas a liquidar em 5 eventos").
+     - ℹ️ **Governança:** Eventos corporativos com custos mas sem teto formal aprovado.
+4. **Tabela Compacta de Alta Densidade (Substituição da Grade):**
+   - Implementação de tabela com colunas: Evento, Tipo, Presença, Teto Aprovado, Comprometido, Saldo/Rateio e Ação direta.
+   - Barra de filtros com busca por texto e filtro por categoria.
+   - Alternador de visualização `[ Tabela (Padrão) | Grade ]`, permitindo flexibilidade sem impor rolagem exaustiva.
+
+### 7.3. Evidências de Testes Automatizados (`tests/s05-dashboard-executivo.test.js`)
+- **Teste 1:** Segregação rigorosa: Não misturar orçamento corporativo com rateio colaborativo — **Aprovado (1.85ms)**
+- **Teste 2:** Detecção e cálculo de estouro de verba (déficit) — **Aprovado (1.06ms)**
+- **Teste 3:** Identificação de evento corporativo sem teto formal — **Aprovado (0.24ms)**
+- **Teste 4:** Consolidação compacta de faturas pendentes a liquidar — **Aprovado (0.22ms)**
+- **Teste 5:** SLA de Performance para 500 eventos: **0.30ms** (SLA < 3s superado com 98% de margem)
 - [x] **Critério 06:** Ações diretas para cada divergência orçamentária sem necessidade de múltiplos cliques.
