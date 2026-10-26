@@ -3,22 +3,14 @@
 import { useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  ComposedChart,
-  Legend,
-  Line,
-  LineChart,
-  Pie,
-  PieChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts"
+  EDonutChart,
+  EFunnelChart,
+  EHorizontalBarChart,
+  EParetoChart,
+  EScenarioBarChart,
+  EStackedBarChart,
+  ETimelineChart,
+} from "@/components/charts"
 import {
   AlertTriangle,
   Calendar,
@@ -587,30 +579,6 @@ function ChartCard({
   )
 }
 
-function CustomTooltip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null
-
-  return (
-    <div className="rounded-lg border border-border bg-card p-3 text-sm shadow-lg text-card-foreground">
-      <p className="mb-2 font-medium text-foreground">{label || payload[0]?.name}</p>
-      <div className="space-y-1">
-        {payload.map((entry: any) => (
-          <div key={`${entry.dataKey}-${entry.name}`} className="flex items-center gap-2">
-            <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
-            <span className="text-muted-foreground">{entry.name}:</span>
-            <span className="font-medium text-foreground">
-              {String(entry.dataKey || "").toLowerCase().includes("cost") || entry.name?.toLowerCase().includes("custo")
-                ? formatCurrency(Number(entry.value))
-                : entry.value}
-            </span>
-          </div>
-        ))}
-      </div>
-      {payload[0]?.payload?.detail && <p className="mt-2 max-w-xs text-xs text-muted-foreground">{payload[0].payload.detail}</p>}
-      {payload[0]?.payload?.reason && <p className="mt-2 max-w-xs text-xs text-muted-foreground">{payload[0].payload.reason}</p>}
-    </div>
-  )
-}
 
 export default function AnalyticsPage() {
   const [selectedEventId, setSelectedEventId] = useState("all")
@@ -1011,15 +979,7 @@ export default function AnalyticsPage() {
               <div className="grid gap-6 lg:grid-cols-2">
                 <ChartCard title="Funil de confirmação" description="Mostra os gargalos entre convidados, respostas, aprovações e acompanhantes.">
                   {data.charts.confirmationFunnel.some((item) => (item.value || 0) > 0) ? (
-                    <ResponsiveContainer width="100%" height={320}>
-                      <BarChart data={data.charts.confirmationFunnel} layout="vertical" margin={{ left: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis type="number" allowDecimals={false} />
-                        <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar dataKey="value" name="Quantidade" radius={[0, 8, 8, 0]} fill="#0f766e" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <EFunnelChart data={data.charts.confirmationFunnel} height={320} />
                   ) : (
                     <EmptyChart label="Este evento ainda não possui convidados suficientes para gerar um funil." />
                   )}
@@ -1027,19 +987,13 @@ export default function AnalyticsPage() {
 
                 <ChartCard title="Projeção de presença" description="Cenários de mínima, provável e máxima para planejamento de espaço e recursos.">
                   {data.charts.attendanceProjection.some((item) => (item.value || 0) > 0) ? (
-                    <ResponsiveContainer width="100%" height={320}>
-                      <BarChart data={data.charts.attendanceProjection}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="name" />
-                        <YAxis allowDecimals={false} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar dataKey="value" name="Pessoas" radius={[8, 8, 0, 0]}>
-                          {data.charts.attendanceProjection.map((entry, index) => (
-                            <Cell key={entry.name} fill={["#059669", "#2563eb", "#d97706"][index]} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <EScenarioBarChart
+                      data={data.charts.attendanceProjection}
+                      height={320}
+                      colors={["#059669", "#2563eb", "#d97706"]}
+                      seriesName="Pessoas"
+                      valueType="number"
+                    />
                   ) : (
                     <EmptyChart label="Adicione convidados ou aprovações para projetar presença." />
                   )}
@@ -1047,17 +1001,7 @@ export default function AnalyticsPage() {
 
                 <ChartCard title="Status de RSVP" description="Distribuição atual dos convidados por confirmação, pendência, recusa e aprovação.">
                   {data.charts.rsvpStatus.some((item) => (item.value || 0) > 0) ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <PieChart>
-                        <Pie data={data.charts.rsvpStatus} dataKey="value" nameKey="name" outerRadius={100} label>
-                          {data.charts.rsvpStatus.map((entry, index) => (
-                            <Cell key={entry.name} fill={RSVP_COLORS[index % RSVP_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                      </PieChart>
-                    </ResponsiveContainer>
+                    <EDonutChart data={data.charts.rsvpStatus} colors={RSVP_COLORS} height={300} centerLabel="Respostas" />
                   ) : (
                     <EmptyChart label="Nenhum status de RSVP encontrado para o filtro atual." />
                   )}
@@ -1065,15 +1009,7 @@ export default function AnalyticsPage() {
 
                 <ChartCard title="Linha do tempo de confirmações" description="Evolução diária usando confirmed_at, responded_at ou created_at quando necessário.">
                   {data.charts.confirmationsOverTime.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={300}>
-                      <LineChart data={data.charts.confirmationsOverTime}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="name" />
-                        <YAxis allowDecimals={false} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Line type="monotone" dataKey="value" name="Confirmações" stroke="#059669" strokeWidth={3} dot={{ r: 4 }} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <ETimelineChart data={data.charts.confirmationsOverTime} height={300} />
                   ) : (
                     <EmptyChart label="Este evento ainda não possui confirmações suficientes para gerar uma linha do tempo." />
                   )}
@@ -1090,15 +1026,13 @@ export default function AnalyticsPage() {
               <div className="grid gap-6 lg:grid-cols-2">
                 <ChartCard title="Projeção de custo por cenário" description="Estimativa de custo conforme mínima, provável e máxima presença possível.">
                   {data.charts.costProjection.some((item) => (item.value || 0) > 0) ? (
-                    <ResponsiveContainer width="100%" height={310}>
-                      <BarChart data={data.charts.costProjection}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                        <YAxis tickFormatter={(value) => formatCurrency(Number(value))} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar dataKey="value" name="Custo" fill="#2563eb" radius={[8, 8, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <EScenarioBarChart
+                      data={data.charts.costProjection}
+                      height={310}
+                      colors={["#059669", "#2563eb", "#d97706"]}
+                      seriesName="Custo estimado"
+                      valueType="currency"
+                    />
                   ) : (
                     <EmptyChart label="Cadastre custos e convidados para calcular cenários financeiros." />
                   )}
@@ -1162,19 +1096,7 @@ export default function AnalyticsPage() {
               <div className="grid gap-6 lg:grid-cols-2">
                 <ChartCard title="Pareto de custos" description="Itens ordenados por impacto, com linha de participação acumulada.">
                   {data.charts.paretoCosts.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={330}>
-                      <ComposedChart data={data.charts.paretoCosts}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                        <YAxis yAxisId="left" tickFormatter={(value) => formatCurrency(Number(value))} />
-                        <YAxis yAxisId="right" orientation="right" tickFormatter={(value) => `${value}%`} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                        <Bar yAxisId="left" dataKey="value" name="Custo" fill="#0f766e" radius={[8, 8, 0, 0]} />
-                        <Line yAxisId="right" type="monotone" dataKey="cumulative" name="% acumulado" stroke="#dc2626" strokeWidth={2} />
-                        <ReferenceLine yAxisId="right" y={80} stroke="#d97706" strokeDasharray="4 4" />
-                      </ComposedChart>
-                    </ResponsiveContainer>
+                    <EParetoChart data={data.charts.paretoCosts} height={330} />
                   ) : (
                     <EmptyChart label="Nenhum item de custo cadastrado para gerar Pareto." />
                   )}
@@ -1182,15 +1104,7 @@ export default function AnalyticsPage() {
 
                 <ChartCard title="Custo total por evento" description="Ranking dos eventos com maior custo estimado.">
                   {data.charts.costByEvent.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={330}>
-                      <BarChart data={data.charts.costByEvent} layout="vertical" margin={{ left: 20 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis type="number" tickFormatter={(value) => formatCurrency(Number(value))} />
-                        <YAxis dataKey="name" type="category" width={150} tick={{ fontSize: 12 }} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Bar dataKey="value" name="Custo" fill="#2563eb" radius={[0, 8, 8, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <EHorizontalBarChart data={data.charts.costByEvent} height={330} seriesName="Custo" />
                   ) : (
                     <EmptyChart label="Nenhum custo cadastrado nos eventos filtrados." />
                   )}
@@ -1207,18 +1121,7 @@ export default function AnalyticsPage() {
               <div className="grid gap-6">
                 <ChartCard title="Comparativo de confirmações" description="Total de convidados por status em cada evento.">
                   {data.charts.confirmationsByEvent.length > 0 ? (
-                    <ResponsiveContainer width="100%" height={320}>
-                      <BarChart data={data.charts.confirmationsByEvent}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
-                        <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                        <YAxis allowDecimals={false} />
-                        <Tooltip content={<CustomTooltip />} />
-                        <Legend />
-                        <Bar dataKey="confirmed" name="Confirmados" stackId="a" fill="#059669" />
-                        <Bar dataKey="pending" name="Pendentes" stackId="a" fill="#d97706" />
-                        <Bar dataKey="declined" name="Recusados" stackId="a" fill="#dc2626" />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <EStackedBarChart data={data.charts.confirmationsByEvent} height={320} />
                   ) : (
                     <EmptyChart />
                   )}
