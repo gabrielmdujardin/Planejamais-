@@ -21,10 +21,12 @@ import {
   Mail,
   MapPin,
   Plus,
+  Printer,
   Send,
   Users,
   XCircle,
 } from "lucide-react"
+import { ReportExportModal } from "@/components/reports"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -76,6 +78,7 @@ export default function EventPage() {
   const [isAddGuestOpen, setIsAddGuestOpen] = useState(false)
   const [isEditEventOpen, setIsEditEventOpen] = useState(false)
   const [isSendingInvites, setIsSendingInvites] = useState(false)
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
   const { toast } = useToast()
 
   useEffect(() => {
@@ -265,6 +268,15 @@ export default function EventPage() {
                 Analises globais
               </Button>
             </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setIsReportModalOpen(true)}
+              className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+            >
+              <Printer className="mr-2 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              Relatório PDF
+            </Button>
           </div>
         </div>
 
@@ -524,6 +536,13 @@ export default function EventPage() {
         <AddItemDialog open={isAddItemOpen} onOpenChange={setIsAddItemOpen} eventId={event.id} />
         <AddGuestDialog open={isAddGuestOpen} onOpenChange={setIsAddGuestOpen} eventId={event.id} />
         <EditEventDialog open={isEditEventOpen} onOpenChange={setIsEditEventOpen} eventId={event.id} />
+        <ReportExportModal
+          isOpen={isReportModalOpen}
+          onClose={() => setIsReportModalOpen(false)}
+          initialEventId={event.id}
+          initialReportType="full-event"
+          event={event}
+        />
       </div>
     </div>
   )

@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { EmptyState } from "@/components/ui/empty-state"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
+import { ReportExportModal } from "@/components/reports"
 
 type GuestStatus = "pending" | "confirmed" | "declined" | "awaiting_approval" | "pending_approval" | "rejected"
 
@@ -21,6 +22,8 @@ interface Guest {
   email: string
   phone: string
   status: GuestStatus
+  dietaryRestrictions?: string
+  tableNumber?: string
 }
 
 interface GuestListProps {
@@ -43,6 +46,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
   const [filter, setFilter] = useState<"all" | "confirmed" | "pending" | "declined" | "approval">("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null)
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
   const { toast } = useToast()
   const { updateGuest, updateGuestStatus, removeGuest } = useEventStore()
 
@@ -257,7 +261,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
   }
 
   const handlePrintList = () => {
-    window.print()
+    setIsReportModalOpen(true)
   }
 
   if (guests.length === 0) {
@@ -272,13 +276,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
 
   return (
     <div className="space-y-4">
-      {/* Cabeçalho exclusivo para impressão em papel */}
-      <div className="hidden print:block mb-4 border-b pb-2">
-        <h1 className="text-xl font-bold">Planeja+ · Lista de Credenciamento e Presença</h1>
-        <p className="text-sm text-gray-500">
-          Total de convidados: {guests.length} | Confirmados: {counts.confirmed} | Impresso em: {new Date().toLocaleDateString("pt-BR")}
-        </p>
-      </div>
+
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between print:hidden">
         <div className="flex flex-wrap gap-2">
@@ -406,6 +404,14 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ReportExportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        initialEventId={eventId}
+        initialReportType="full-event"
+        event={{ id: eventId, title: "Lista de Convidados", guests }}
+      />
     </div>
   )
 }

@@ -11,6 +11,7 @@ import {
   EStackedBarChart,
   ETimelineChart,
 } from "@/components/charts"
+import { ReportExportModal } from "@/components/reports"
 import {
   AlertTriangle,
   Calendar,
@@ -590,6 +591,7 @@ export default function AnalyticsPage() {
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false)
   const { events: localEvents } = useEventStore()
 
   useEffect(() => {
@@ -712,7 +714,7 @@ export default function AnalyticsPage() {
   }
 
   const handlePrintReport = () => {
-    window.print()
+    setIsReportModalOpen(true)
   }
 
   const metricTone = data?.metrics.confirmationRate
@@ -726,20 +728,7 @@ export default function AnalyticsPage() {
   return (
     <div className="min-h-screen bg-background p-4 pt-16 text-foreground md:p-8 md:pt-20">
       <div className="mx-auto max-w-7xl space-y-8">
-        {/* Cabeçalho de Impressão Exclusivo */}
-        <div className="hidden print:block border-b pb-4 mb-4">
-          <div className="flex justify-between items-center">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">Planeja+ · Relatório Executivo de Eventos</h1>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Emitido em: {new Date().toLocaleDateString("pt-BR")} às {new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
-              </p>
-            </div>
-            <div className="text-right text-xs text-muted-foreground">
-              Filtro: {selectedEventId === "all" ? "Consolidado Geral" : "Evento Específico"}
-            </div>
-          </div>
-        </div>
+
 
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between print:hidden">
           <div>
@@ -765,10 +754,10 @@ export default function AnalyticsPage() {
               size="sm"
               onClick={handlePrintReport}
               disabled={!data}
-              className="gap-2 hover:bg-slate-100 dark:hover:bg-slate-800"
+              className="gap-2 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
             >
-              <Printer className="h-4 w-4 text-slate-600 dark:text-slate-300" />
-              Imprimir / PDF
+              <Printer className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              Relatório PDF / Imprimir
             </Button>
             <BackButton />
           </div>
@@ -1207,6 +1196,14 @@ export default function AnalyticsPage() {
           </>
         )}
       </div>
+
+      <ReportExportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        initialEventId={selectedEventId}
+        initialReportType={selectedEventId === "all" ? "executive-summary" : "full-event"}
+        events={localEvents}
+      />
     </div>
   )
 }
