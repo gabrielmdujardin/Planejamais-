@@ -1,15 +1,15 @@
 "use client"
 
-import { useState } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { BackButton } from "@/components/back-button"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { useAuth } from "@/context/auth-context"
 import { useToast } from "@/hooks/use-toast"
-import { User, Mail, Phone, MapPin, Save } from "lucide-react"
-import { BackButton } from "@/components/back-button"
+import { Mail, MapPin, Phone, Save, User } from "lucide-react"
+import { useEffect, useState } from "react"
 
 export default function ProfilePage() {
   const { user, updateUser } = useAuth()
@@ -21,17 +21,33 @@ export default function ProfilePage() {
   const [location, setLocation] = useState(user?.location || "")
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  useEffect(() => {
+    if (user) {
+      setName(user.name || "")
+      setEmail(user.email || "")
+      setPhone(user.phone || "")
+      setLocation(user.location || "")
+    }
+  }, [user])
+
   const handleSave = async () => {
+    if (!name.trim() || name.trim().length < 2) {
+      toast({
+        title: "Nome inválido",
+        description: "Informe um nome com pelo menos 2 caracteres.",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsSubmitting(true)
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 1000))
-
-      updateUser({
-        name,
-        email,
-        phone,
-        location,
+      await updateUser({
+        name: name.trim(),
+        email: email.trim(),
+        phone: phone.trim(),
+        location: location.trim(),
       })
 
       toast({
@@ -41,7 +57,7 @@ export default function ProfilePage() {
     } catch (error) {
       toast({
         title: "Erro ao atualizar",
-        description: "Ocorreu um erro ao salvar suas informações.",
+        description: error instanceof Error ? error.message : "Ocorreu um erro ao salvar suas informações.",
         variant: "destructive",
       })
     } finally {
@@ -49,8 +65,9 @@ export default function ProfilePage() {
     }
   }
 
-  const initials = name
+  const initials = (name || "U")
     .split(" ")
+    .filter(Boolean)
     .map((word) => word[0])
     .join("")
     .toUpperCase()
@@ -74,7 +91,7 @@ export default function ProfilePage() {
             </Avatar>
             <div>
               <CardTitle>{name || "Usuário"}</CardTitle>
-              <p className="text-sm text-gray-600 dark:text-gray-400">Membro desde {new Date().toLocaleDateString()}</p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">{email}</p>
             </div>
           </div>
         </CardHeader>

@@ -41,6 +41,13 @@ import ItemsList from "@/components/items-list"
 import PendingRequestsList from "@/components/pending-requests-list"
 import PublicInviteShare from "@/components/public-invite-share"
 import { getEventById as fetchEventById } from "@/app/actions/events"
+import { useAuth } from "@/context/auth-context"
+import {
+  calculateAttendanceSummary,
+  calculateBudgetComparison,
+  calculateCollaborativeSplit,
+  calculateEventTotalCost,
+} from "@/lib/domain/business-rules"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
 import { getEventTerminology } from "@/lib/terminology"
@@ -66,6 +73,7 @@ const requestStatuses = new Set(["awaiting_approval", "pending_approval"])
 
 export default function EventPage() {
   const { addEvent, getEventById, updateEvent } = useEventStore()
+  const { isDemoMode } = useAuth()
   const params = useParams()
   const router = useRouter()
   const id = params.id as string
@@ -87,7 +95,7 @@ export default function EventPage() {
     async function loadEvent() {
       if (storedEvent) {
         setIsLoading(false)
-        return
+        if (isDemoMode) return
       }
 
       const result = await fetchEventById(id)
@@ -105,7 +113,7 @@ export default function EventPage() {
     return () => {
       cancelled = true
     }
-  }, [addEvent, getEventById, id, storedEvent, updateEvent])
+  }, [addEvent, getEventById, id, isDemoMode, storedEvent, updateEvent])
 
   useEffect(() => {
     if (!isLoading && !event) {
@@ -119,32 +127,32 @@ export default function EventPage() {
   }, [event, isLoading, router, toast])
 
   const stats = useMemo(() => {
-    const guests = event?.guests || []
+    const rawGuests = event?.guests || []
     const items = event?.items || []
     const photos = event?.photos || []
-    const confirmed = guests.filter((guest: any) => guest.status === "confirmed").length
-    const declined = guests.filter((guest: any) => guest.status === "declined" || guest.status === "rejected").length
-    const requests = guests.filter((guest: any) => requestStatuses.has(guest.status)).length
-    const pending = guests.filter((guest: any) => guest.status === "pending").length
-    const pendingCompanions = guests.reduce((total: number, guest: any) => {
-      return total + (guest.companions || []).filter((companion: any) => companion.status === "pending").length
-    }, 0)
-    const totalCost = items.reduce((sum: number, item: any) => sum + Number(item.price || item.estimatedCost || item.estimated_cost || 0), 0)
-    const initialCost = Number(event?.initialEstimatedCost || 0)
-    const effectiveCost = totalCost + initialCost
+    const attendance = calculateAttendanceSummary(rawGuests)
+    const effectiveCost = calculateEventTotalCost(items, event?.initialEstimatedCost)
+    const splitPerConfirmed = calculateCollaborativeSplit(effectiveCost, attendance.confirmedParticipants)
+    const budgetComparison = calculateBudgetComparison(event?.budgetEstimated, effectiveCost)
 
     return {
-      totalGuests: guests.length || event?.totalGuests || 0,
-      confirmed,
-      pending,
-      declined,
-      requests,
-      pendingCompanions,
+      totalGuests: attendance.totalEffectiveGuests || event?.totalGuests || 0,
+      confirmed: attendance.confirmedParticipants,
+      confirmedDirect: attendance.confirmedGuests,
+      pending: attendance.pendingGuests,
+      declined: attendance.declinedGuests,
+      requests: attendance.pendingRequests,
+      pendingCompanions: attendance.pendingCompanions,
       itemCount: items.length,
       photoCount: photos.length,
       totalCost: effectiveCost,
-      confirmationRate: guests.length > 0 ? Math.round((confirmed / guests.length) * 100) : 0,
-      costPerConfirmed: confirmed > 0 ? effectiveCost / confirmed : 0,
+      confirmationRate:
+        attendance.totalEffectiveGuests > 0
+          ? Math.min(100, Math.round((attendance.confirmedGuests / attendance.totalEffectiveGuests) * 100))
+          : 0,
+      costPerConfirmed: splitPerConfirmed ?? 0,
+      hasCollaborativeSplit: splitPerConfirmed !== null,
+      budgetComparison,
     }
   }, [event])
 
@@ -169,12 +177,46 @@ export default function EventPage() {
 
   const publicUrl =
     typeof window !== "undefined" && event?.publicInviteEnabled && event?.publicInviteToken
-      ? `${window.location.origin}/convite/${event.publicInviteToken}`
+      ? `${window.location.origin}/evento/${event.publicInviteToken}`
       : ""
 
   const copyText = async (text: string, title: string, description: string) => {
     await navigator.clipboard.writeText(text)
     toast({ title, description })
+  }
+
+  const resolveHostViewUrl = async (): Promise<string> => {
+    const origin = typeof window !== "undefined" ? window.location.origin : ""
+    if (event?.hostViewToken) {
+      return `${origin}/event/${event.id}/host-view?token=${encodeURIComponent(event.hostViewToken)}`
+    }
+    if (!isDemoMode && event?.id) {
+      try {
+        const res = await fetch(`/api/events/${event.id}/host-view`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: true }),
+        })
+        const payload = await res.json().catch(() => null)
+        if (res.ok && payload?.token) {
+          updateEvent(event.id, { hostViewToken: payload.token })
+          return `${origin}/event/${event.id}/host-view?token=${encodeURIComponent(payload.token)}`
+        }
+      } catch {
+        // fallback abaixo
+      }
+    }
+    return `${origin}/event/${event.id}/host-view`
+  }
+
+  const handleOpenHostView = async () => {
+    const url = await resolveHostViewUrl()
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+
+  const handleCopyHostView = async () => {
+    const url = await resolveHostViewUrl()
+    await copyText(url, "Link do Anfitrião copiado", "Link somente leitura com token seguro pronto para enviar ao cliente.")
   }
 
   const handleShare = async () => {
@@ -256,12 +298,15 @@ export default function EventPage() {
             </Button>
           </Link>
           <div className="flex gap-2">
-            <Link href={`/event/${event.id}/host-view`} target="_blank">
-              <Button variant="outline" size="sm" className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10">
-                <Eye className="mr-2 h-4 w-4" />
-                Painel do Anfitrião (Leitura)
-              </Button>
-            </Link>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleOpenHostView}
+              className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              Painel do Anfitrião (Leitura)
+            </Button>
             <Link href="/dashboard/analytics">
               <Button variant="outline" size="sm">
                 <BarChart3 className="mr-2 h-4 w-4" />
@@ -350,7 +395,7 @@ export default function EventPage() {
             <Button
               size="sm"
               variant="outline"
-              onClick={() => copyText(`${window.location.origin}/event/${event.id}/host-view`, "Link do Anfitrião copiado", "Link somente leitura pronto para enviar ao cliente.")}
+              onClick={handleCopyHostView}
               className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10"
             >
               <Copy className="mr-2 h-4 w-4" /> Link do Anfitrião (Leitura)
@@ -394,7 +439,9 @@ export default function EventPage() {
                       label={event.financialMode === "collaborative_split" || event.type === "Colaborativo" ? "Rateio por confirmado" : "Orcamento previsto"}
                       value={
                         event.financialMode === "collaborative_split" || event.type === "Colaborativo"
-                          ? currency.format(stats.costPerConfirmed)
+                          ? stats.hasCollaborativeSplit
+                            ? currency.format(stats.costPerConfirmed)
+                            : "Aguardando confirmados"
                           : event.budgetEstimated
                             ? currency.format(Number(event.budgetEstimated))
                             : "Nao definido"
@@ -488,7 +535,7 @@ export default function EventPage() {
                   {event.financialMode === "collaborative_split" || event.type === "Colaborativo" ? (
                     <div className="flex justify-between items-center text-emerald-700 dark:text-emerald-300">
                       <span>Rateio estimado por confirmado</span>
-                      <strong>{currency.format(stats.costPerConfirmed)}</strong>
+                      <strong>{stats.hasCollaborativeSplit ? currency.format(stats.costPerConfirmed) : "Aguardando confirmados"}</strong>
                     </div>
                   ) : event.budgetEstimated ? (
                     <>

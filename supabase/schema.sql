@@ -1,4 +1,4 @@
--- Planeja+ Supabase schema
+-- Planeja+ Supabase schema (Consolidado TCC 2026)
 -- Execute este arquivo no SQL Editor de um projeto Supabase novo.
 
 create extension if not exists "pgcrypto";
@@ -15,9 +15,12 @@ $$;
 
 create table if not exists public.users (
   id uuid primary key references auth.users(id) on delete cascade,
-  email text not null,
+  email text not null unique,
   name text,
+  phone text,
+  location text,
   avatar text,
+  calendar_feed_token text unique default encode(gen_random_bytes(16), 'hex'),
   metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -30,17 +33,21 @@ security definer
 set search_path = public
 as $$
 begin
-  insert into public.users (id, email, name, avatar, metadata)
+  insert into public.users (id, email, name, phone, location, avatar, metadata)
   values (
     new.id,
     coalesce(new.email, ''),
     coalesce(new.raw_user_meta_data->>'name', new.raw_user_meta_data->>'full_name'),
+    new.raw_user_meta_data->>'phone',
+    new.raw_user_meta_data->>'location',
     new.raw_user_meta_data->>'avatar_url',
     coalesce(new.raw_user_meta_data, '{}'::jsonb)
   )
   on conflict (id) do update
     set email = excluded.email,
         name = coalesce(public.users.name, excluded.name),
+        phone = coalesce(public.users.phone, excluded.phone),
+        location = coalesce(public.users.location, excluded.location),
         avatar = coalesce(public.users.avatar, excluded.avatar),
         metadata = public.users.metadata || excluded.metadata,
         updated_at = now();
@@ -67,6 +74,8 @@ create table if not exists public.events (
   description text not null default '',
   status text not null default 'active'
     check (status in ('draft', 'active', 'completed', 'canceled', 'confirmed', 'pending', 'cancelled')),
+  financial_mode text not null default 'corporate_budget'
+    check (financial_mode in ('corporate_budget', 'collaborative_split')),
   image text,
   start_date date,
   start_time time,
@@ -83,6 +92,8 @@ create table if not exists public.events (
   total_guests integer not null default 0 check (total_guests >= 0),
   public_invite_token text unique,
   public_invite_enabled boolean not null default false,
+  host_view_token text unique,
+  host_view_enabled boolean not null default false,
   auto_approve_public_guests boolean not null default false,
   rsvp_deadline timestamptz,
   allow_companions boolean not null default true,
@@ -163,8 +174,17 @@ create table if not exists public.items (
   id uuid primary key default gen_random_uuid(),
   event_id uuid not null references public.events(id) on delete cascade,
   name text not null,
+  category text not null default 'Geral',
+  supplier text,
   price numeric(10,2) not null default 0 check (price >= 0),
+  unit_price numeric(10,2) not null default 0 check (unit_price >= 0),
   estimated_cost numeric(10,2) not null default 0 check (estimated_cost >= 0),
+  payment_status text not null default 'pending'
+    check (payment_status in ('pending', 'partial', 'paid', 'estimated', 'cancelled')),
+  due_date date,
+  invoice_number text,
+  description text,
+  notes text,
   image text,
   assigned_to jsonb,
   quantity integer not null default 1 check (quantity > 0),
@@ -184,6 +204,9 @@ begin
       new.estimated_cost = new.price;
     elsif new.price = 0 and new.estimated_cost <> 0 then
       new.price = new.estimated_cost;
+    end if;
+    if new.unit_price = 0 and new.price <> 0 and new.quantity > 0 then
+      new.unit_price = round(new.price / new.quantity, 2);
     end if;
   elsif tg_op = 'UPDATE' then
     if new.price is distinct from old.price and new.estimated_cost is not distinct from old.estimated_cost then
@@ -207,6 +230,30 @@ create table if not exists public.event_photos (
   description text,
   tags text[],
   metadata jsonb not null default '{}'::jsonb
+);
+
+create table if not exists public.contacts (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  email text not null default '',
+  phone text not null default '',
+  tags text[] not null default '{}',
+  lists text[] not null default '{}',
+  notes text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.contact_lists (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  name text not null,
+  description text not null default '',
+  color text not null default '#3b82f6',
+  contacts text[] not null default '{}',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
 
 create table if not exists public.job_runs (
@@ -280,6 +327,16 @@ create trigger set_items_updated_at
   before update on public.items
   for each row execute function public.set_updated_at();
 
+drop trigger if exists set_contacts_updated_at on public.contacts;
+create trigger set_contacts_updated_at
+  before update on public.contacts
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists set_contact_lists_updated_at on public.contact_lists;
+create trigger set_contact_lists_updated_at
+  before update on public.contact_lists
+  for each row execute function public.set_updated_at();
+
 drop trigger if exists sync_item_costs_trigger on public.items;
 create trigger sync_item_costs_trigger
   before insert or update on public.items
@@ -338,10 +395,14 @@ create trigger sync_guest_tokens_trigger
 create index if not exists idx_users_email on public.users(email);
 create index if not exists idx_events_user_id on public.events(user_id);
 create index if not exists idx_events_date on public.events(date);
+create index if not exists idx_events_start_date on public.events(start_date);
 create index if not exists idx_events_status on public.events(status);
 create unique index if not exists idx_events_public_invite_token
   on public.events(public_invite_token)
   where public_invite_token is not null;
+create unique index if not exists idx_events_host_view_token
+  on public.events(host_view_token)
+  where host_view_token is not null;
 create index if not exists idx_guests_event_id on public.guests(event_id);
 create index if not exists idx_guests_email on public.guests(email);
 create index if not exists idx_guests_token on public.guests(token);
@@ -355,6 +416,8 @@ create index if not exists idx_guest_companions_guest_id on public.guest_compani
 create index if not exists idx_guest_companions_status on public.guest_companions(status);
 create index if not exists idx_items_event_id on public.items(event_id);
 create index if not exists idx_event_photos_event_id on public.event_photos(event_id);
+create index if not exists idx_contacts_user_id on public.contacts(user_id);
+create index if not exists idx_contact_lists_user_id on public.contact_lists(user_id);
 create index if not exists idx_job_runs_status on public.job_runs(status);
 create index if not exists idx_job_runs_job_name on public.job_runs(job_name);
 create index if not exists idx_job_logs_job_run_id on public.job_logs(job_run_id);
@@ -368,8 +431,16 @@ select
   e.id,
   e.title,
   e.date,
-  coalesce(sum(coalesce(i.estimated_cost, i.price, 0)), 0)::numeric(10,2) as total_cost,
-  count(i.id)::integer as items_count
+  coalesce(
+    sum(
+      case
+        when coalesce(i.payment_status, 'pending') = 'cancelled' then 0
+        else coalesce(i.price, i.estimated_cost, 0)
+      end
+    ),
+    0
+  )::numeric(10,2) as total_cost,
+  count(i.id) filter (where coalesce(i.payment_status, 'pending') <> 'cancelled')::integer as items_count
 from public.events e
 left join public.items i on i.event_id = e.id
 group by e.id, e.title, e.date;
@@ -382,12 +453,16 @@ select
   e.id,
   e.title,
   e.date,
-  count(*) filter (where g.status = 'confirmed')::integer as confirmed_count,
-  count(*) filter (where g.status = 'pending')::integer as pending_count,
-  count(*) filter (where g.status = 'declined')::integer as declined_count,
-  count(g.id)::integer as total_guests
+  (
+    count(distinct g.id) filter (where g.status = 'confirmed')
+    + count(gc.id) filter (where g.status = 'confirmed' and gc.status = 'approved')
+  )::integer as confirmed_count,
+  count(distinct g.id) filter (where g.status = 'pending')::integer as pending_count,
+  count(distinct g.id) filter (where g.status = 'declined')::integer as declined_count,
+  count(distinct g.id) filter (where not (g.source <> 'manual' and g.status = 'cancelled'))::integer as total_guests
 from public.events e
 left join public.guests g on g.event_id = e.id
+left join public.guest_companions gc on gc.guest_id = g.id
 group by e.id, e.title, e.date;
 
 create unique index if not exists idx_mv_rsvp_stats_id on public.mv_rsvp_stats(id);
@@ -418,6 +493,8 @@ alter table public.guests enable row level security;
 alter table public.guest_companions enable row level security;
 alter table public.items enable row level security;
 alter table public.event_photos enable row level security;
+alter table public.contacts enable row level security;
+alter table public.contact_lists enable row level security;
 alter table public.job_runs enable row level security;
 alter table public.job_logs enable row level security;
 alter table public.stg_event_costs enable row level security;
@@ -439,6 +516,11 @@ drop policy if exists "Users can insert own profile" on public.users;
 create policy "Users can insert own profile" on public.users
   for insert to authenticated
   with check (auth.uid() = id);
+
+drop policy if exists "Users can delete own profile" on public.users;
+create policy "Users can delete own profile" on public.users
+  for delete to authenticated
+  using (auth.uid() = id);
 
 drop policy if exists "Users can view their own events" on public.events;
 create policy "Users can view their own events" on public.events
@@ -605,6 +687,48 @@ create policy "Users can delete photos from their events" on public.event_photos
   for delete to authenticated
   using (exists (select 1 from public.events e where e.id = event_photos.event_id and e.user_id = auth.uid()));
 
+drop policy if exists "Users can view own contacts" on public.contacts;
+create policy "Users can view own contacts" on public.contacts
+  for select to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can insert own contacts" on public.contacts;
+create policy "Users can insert own contacts" on public.contacts
+  for insert to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update own contacts" on public.contacts;
+create policy "Users can update own contacts" on public.contacts
+  for update to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete own contacts" on public.contacts;
+create policy "Users can delete own contacts" on public.contacts
+  for delete to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can view own contact_lists" on public.contact_lists;
+create policy "Users can view own contact_lists" on public.contact_lists
+  for select to authenticated
+  using (auth.uid() = user_id);
+
+drop policy if exists "Users can insert own contact_lists" on public.contact_lists;
+create policy "Users can insert own contact_lists" on public.contact_lists
+  for insert to authenticated
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can update own contact_lists" on public.contact_lists;
+create policy "Users can update own contact_lists" on public.contact_lists
+  for update to authenticated
+  using (auth.uid() = user_id)
+  with check (auth.uid() = user_id);
+
+drop policy if exists "Users can delete own contact_lists" on public.contact_lists;
+create policy "Users can delete own contact_lists" on public.contact_lists
+  for delete to authenticated
+  using (auth.uid() = user_id);
+
 drop policy if exists "Service role can manage job_runs" on public.job_runs;
 create policy "Service role can manage job_runs" on public.job_runs
   for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
@@ -625,6 +749,26 @@ drop policy if exists "Service role can manage facts_daily_events" on public.fac
 create policy "Service role can manage facts_daily_events" on public.facts_daily_events
   for all using (auth.role() = 'service_role') with check (auth.role() = 'service_role');
 
+-- Storage bucket e políticas para fotos do evento (RF-028, RN-018)
+insert into storage.buckets (id, name, public)
+values ('event-photos', 'event-photos', true)
+on conflict (id) do nothing;
+
+drop policy if exists "Public can read event photos" on storage.objects;
+create policy "Public can read event photos" on storage.objects
+  for select
+  using (bucket_id = 'event-photos');
+
+drop policy if exists "Authenticated users can upload event photos" on storage.objects;
+create policy "Authenticated users can upload event photos" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'event-photos');
+
+drop policy if exists "Authenticated users can delete own event photos" on storage.objects;
+create policy "Authenticated users can delete own event photos" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'event-photos' and auth.uid() = owner);
+
 revoke all on all tables in schema public from public, anon, authenticated;
 revoke all on all routines in schema public from public, anon, authenticated;
 
@@ -635,7 +779,9 @@ grant select, insert, update, delete on
   public.guests,
   public.guest_companions,
   public.items,
-  public.event_photos
+  public.event_photos,
+  public.contacts,
+  public.contact_lists
 to authenticated;
 
 grant all privileges on all tables in schema public to service_role;

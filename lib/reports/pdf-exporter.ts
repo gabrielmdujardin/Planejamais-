@@ -5,6 +5,8 @@
  * nome de arquivo sugerido padronizado.
  */
 
+import { escapeHtml } from "../domain/business-rules.ts"
+
 export function generatePdfFileName(reportType: string, eventTitle?: string): string {
   const dateStr = new Date().toISOString().slice(0, 10)
   const cleanType = reportType
@@ -165,7 +167,7 @@ export async function printIsolatedDocument(
           <head>
             <meta charset="utf-8" />
             <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-            <title>${documentTitle}</title>
+            <title>${escapeHtml(documentTitle)}</title>
             <style>
               ${aggregatedStyles}
               ${pagedMediaCss}

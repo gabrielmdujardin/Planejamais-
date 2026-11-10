@@ -1,15 +1,23 @@
+import { buildPublicEventPayload, isSafeToken } from "@/lib/domain/business-rules"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { NextRequest, NextResponse } from "next/server"
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const supabaseAdmin = createAdminClient()
     const { token } = await params
+    if (!isSafeToken(token)) {
+      return NextResponse.json(
+        { error: "Este convite não é mais válido" },
+        { status: 404 }
+      )
+    }
 
-    // Buscar o convidado pelo token
+    const cleanToken = token.trim()
+    const supabaseAdmin = createAdminClient()
+
     const { data: guest, error: guestError } = await supabaseAdmin
       .from("guests")
       .select(
@@ -18,25 +26,45 @@ export async function GET(
         events (
           id,
           title,
+          type,
           date,
           time,
+          start_date,
+          start_time,
+          end_date,
+          end_time,
           location,
-          description
+          address,
+          maps_url,
+          event_mode,
+          meeting_url,
+          description,
+          allow_companions,
+          max_companions,
+          rsvp_enabled,
+          rsvp_deadline
         )
       `
       )
-      .or(`token.eq.${token},confirmation_token.eq.${token}`)
-      .single()
+      .or(`token.eq.${cleanToken},confirmation_token.eq.${cleanToken}`)
+      .maybeSingle()
 
-    if (guestError || !guest) {
+    // RN-006: Token inexistente ou de evento excluído não aceita respostas
+    const rawEvent = Array.isArray(guest?.events) ? guest?.events[0] : guest?.events
+    if (guestError || !guest || !rawEvent) {
       return NextResponse.json(
-        { error: "Convite não encontrado ou inválido" },
+        { error: "Este convite não é mais válido" },
         { status: 404 }
       )
     }
 
-    // Verificar se já respondeu
-    if (guest.responded_at) {
+    const publicEvent = {
+      ...buildPublicEventPayload(rawEvent),
+      // RN-007: meeting_url só é exibida ao convidado já confirmado
+      ...(guest.status === "confirmed" && rawEvent.meeting_url ? { meetingUrl: rawEvent.meeting_url } : {}),
+    }
+
+    if (guest.responded_at && (guest.status === "confirmed" || guest.status === "declined")) {
       return NextResponse.json({
         guest: {
           id: guest.id,
@@ -44,14 +72,13 @@ export async function GET(
           status: guest.status,
           respondedAt: guest.responded_at,
         },
-        event: guest.events,
+        event: publicEvent,
         alreadyResponded: true,
       })
     }
 
-    // Verificar prazo
-    if (guest.confirmation_deadline && new Date(guest.confirmation_deadline) < new Date()) {
-      // Atualizar status para expirado
+    const deadlineStr = guest.confirmation_deadline || guest.token_expires_at || rawEvent.rsvp_deadline
+    if (deadlineStr && new Date(deadlineStr) < new Date()) {
       await supabaseAdmin
         .from("guests")
         .update({ status: "expired" })
@@ -63,19 +90,15 @@ export async function GET(
           name: guest.name,
           status: "expired",
         },
-        event: guest.events,
+        event: publicEvent,
         expired: true,
       })
     }
 
-    // Buscar acompanhantes aprovados
-    const { data: companions, error: companionsError } = await supabaseAdmin
+    const { data: companions } = await supabaseAdmin
       .from("guest_companions")
-      .select("*")
+      .select("id, name, status")
       .eq("guest_id", guest.id)
-      .eq("status", "approved")
-
-    if (companionsError) throw companionsError
 
     return NextResponse.json({
       guest: {
@@ -83,14 +106,15 @@ export async function GET(
         name: guest.name,
         email: guest.email,
         status: guest.status,
-        confirmationDeadline: guest.confirmation_deadline,
+        confirmationDeadline: guest.confirmation_deadline || rawEvent.rsvp_deadline,
         dietaryRestrictions: guest.dietary_restrictions,
         accessibilityNeeds: guest.accessibility_needs,
       },
-      event: guest.events,
+      event: publicEvent,
       companions: (companions || []).map((c) => ({
         id: c.id,
         name: c.name,
+        status: c.status,
       })),
       alreadyResponded: false,
       expired: false,

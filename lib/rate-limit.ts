@@ -1,6 +1,6 @@
 /**
  * Utility de Rate Limiting por IP para rotas públicas da aplicação.
- * Utiliza janela de tempo deslizante em memória (resiliente e de alta performance).
+ * Utiliza janela de tempo fixa em memória por IP (RNF-004: <= 20 req/min/IP; padrão 10 req/min/IP).
  */
 
 interface RateLimitRecord {
@@ -10,9 +10,9 @@ interface RateLimitRecord {
 
 const ipMap = new Map<string, RateLimitRecord>()
 
-// Limpeza periódica de IPs inativos a cada 5 minutos para evitar vazamento de memória
+// Limpeza periódica de IPs inativos a cada 5 minutos sem bloquear o encerramento do processo Node (unref)
 if (typeof setInterval !== "undefined") {
-  setInterval(() => {
+  const cleanupTimer = setInterval(() => {
     const now = Date.now()
     ipMap.forEach((record, ip) => {
       if (now > record.resetTime) {
@@ -20,6 +20,14 @@ if (typeof setInterval !== "undefined") {
       }
     })
   }, 5 * 60 * 1000)
+
+  if (cleanupTimer && typeof (cleanupTimer as NodeJS.Timeout).unref === "function") {
+    ;(cleanupTimer as NodeJS.Timeout).unref()
+  }
+}
+
+export function resetRateLimiter(): void {
+  ipMap.clear()
 }
 
 export function checkRateLimit(

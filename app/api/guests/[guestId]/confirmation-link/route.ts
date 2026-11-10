@@ -1,5 +1,11 @@
+import { generateSecureToken } from "@/lib/domain/business-rules"
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
+
+const confirmationLinkSchema = z.object({
+  eventId: z.string().trim().min(1, "Evento obrigatório"),
+})
 
 export async function POST(
   request: NextRequest,
@@ -7,12 +13,17 @@ export async function POST(
 ) {
   try {
     const { guestId } = await params
-    const { eventId } = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    const parsed = confirmationLinkSchema.safeParse(rawBody)
 
-    if (!eventId) {
-      return NextResponse.json({ error: "Evento obrigatório" }, { status: 400 })
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Evento obrigatório" },
+        { status: 400 }
+      )
     }
 
+    const { eventId } = parsed.data
     const supabase = await createClient()
     const {
       data: { user },
@@ -44,7 +55,7 @@ export async function POST(
       return NextResponse.json({ error: "Convidado não encontrado" }, { status: 404 })
     }
 
-    const token = guest.token || guest.confirmation_token || crypto.randomUUID()
+    const token = guest.token || guest.confirmation_token || generateSecureToken(16)
     const { error: updateError } = await supabase
       .from("guests")
       .update({ token, confirmation_token: token })

@@ -35,6 +35,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/hooks/use-toast"
+import { calculateEventTotalCost, filterEffectiveGuests } from "@/lib/domain/business-rules"
 import { useEventStore } from "@/stores/event-store"
 
 type ChartItem = {
@@ -171,7 +172,7 @@ function formatPercent(value: number) {
 
 function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): AnalyticsData {
   const filteredEvents = selectedEventId === "all" ? events : events.filter((event) => event.id === selectedEventId)
-  const allGuests = filteredEvents.flatMap((event) => event.guests || [])
+  const allGuests = filteredEvents.flatMap((event) => filterEffectiveGuests(event.guests || []))
   const allCompanions = allGuests.flatMap((guest) => guest.companions || [])
   const allItems = filteredEvents.flatMap((event) => itemEventPairs(event))
   const confirmedGuests = allGuests.filter((guest) => guest.status === "confirmed").length
@@ -182,10 +183,13 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
   const pendingCompanions = allCompanions.filter((companion) => companion.status === "pending").length
   const rejectedCompanions = allCompanions.filter((companion) => companion.status === "rejected").length
   const publicInviteGuests = filteredEvents.reduce(
-    (sum, event) => sum + (event.publicInviteEnabled ? (event.guests || []).length : 0),
+    (sum, event) => sum + (event.publicInviteEnabled ? filterEffectiveGuests(event.guests || []).length : 0),
     0,
   )
-  const estimatedCost = allItems.reduce((sum, item) => sum + item.value, 0)
+  const estimatedCost = filteredEvents.reduce(
+    (sum, event) => sum + calculateEventTotalCost(event.items || [], (event as any).initialEstimatedCost),
+    0
+  )
   const confirmationRate = allGuests.length > 0 ? (confirmedGuests / allGuests.length) * 100 : 0
   const responseRate = allGuests.length > 0 ? ((confirmedGuests + declinedGuests) / allGuests.length) * 100 : 0
   const projectedPeopleLikely = confirmedGuests + approvedCompanions + Math.ceil((pendingGuests + pendingCompanions) * 0.45)
@@ -215,16 +219,19 @@ function buildLocalAnalytics(events: LocalEvent[], selectedEventId: string): Ana
     })
 
   const confirmationsByEvent = filteredEvents.map((event) => {
-    const guests = event.guests || []
+    const guests = filterEffectiveGuests(event.guests || [])
     const confirmed = guests.filter((guest) => guest.status === "confirmed").length
     const pending = guests.filter((guest) => guest.status === "pending").length
     const declined = guests.filter((guest) => guest.status === "declined").length
     return {
       name: event.title,
+      detail: event.date || "",
       total: guests.length,
+      totalGuests: guests.length,
       confirmed,
       pending,
       declined,
+      confirmationRate: guests.length > 0 ? (confirmed / guests.length) * 100 : 0,
       responseRate: guests.length > 0 ? Math.round(((confirmed + declined) / guests.length) * 100) : 0,
     }
   })
@@ -687,12 +694,18 @@ export default function AnalyticsPage() {
       `"Evento";"Data";"Convidados";"Confirmados";"Taxa Confirmação";"Custo Total"`,
     ]
 
-    const eventsList = data.charts.confirmationsByEvent || []
+    const eventsList =
+      data.charts.advancedComparison && data.charts.advancedComparison.length > 0
+        ? data.charts.advancedComparison
+        : data.charts.confirmationsByEvent || []
     eventsList.forEach((ev) => {
       const costItem = data.charts.costByEvent.find((c) => c.name === ev.name)
-      const costVal = costItem?.value || 0
+      const costVal = ev.totalCost ?? costItem?.value ?? 0
+      const guestsTotal = ev.totalGuests ?? ev.total ?? 0
+      const confirmedTotal = ev.confirmed ?? 0
+      const confRate = ev.confirmationRate ?? (guestsTotal > 0 ? (confirmedTotal / guestsTotal) * 100 : 0)
       lines.push(
-        `"${(ev.name || "").replace(/"/g, '""')}";"${ev.detail || ""}";"${ev.totalGuests || 0}";"${ev.confirmed || 0}";"${ev.confirmationRate ? ev.confirmationRate.toFixed(1) + "%" : "0%"}";"R$ ${costVal.toFixed(2)}"`
+        `"${(ev.name || "").replace(/"/g, '""')}";"${ev.detail || ""}";"${guestsTotal}";"${confirmedTotal}";"${confRate.toFixed(1)}%";R$ ${Number(costVal).toFixed(2)}`
       )
     })
 

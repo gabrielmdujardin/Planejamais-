@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { EmptyState } from "@/components/ui/empty-state"
 import { useToast } from "@/hooks/use-toast"
+import { useAuth } from "@/context/auth-context"
 import { useEventStore } from "@/stores/event-store"
 import { ReportExportModal } from "@/components/reports"
 
@@ -22,6 +23,7 @@ interface Guest {
   email: string
   phone: string
   status: GuestStatus
+  department?: string
   dietaryRestrictions?: string
   tableNumber?: string
 }
@@ -48,6 +50,7 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
   const [editingGuest, setEditingGuest] = useState<Guest | null>(null)
   const [isReportModalOpen, setIsReportModalOpen] = useState(false)
   const { toast } = useToast()
+  const { isDemoMode } = useAuth()
   const { updateGuest, updateGuestStatus, removeGuest } = useEventStore()
 
   const filteredGuests = [...guests]
@@ -79,11 +82,25 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
   const handleUpdateStatus = async (guestId: string, status: GuestStatus) => {
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 250))
+      if (!isDemoMode && ["pending", "confirmed", "declined"].includes(status)) {
+        const res = await fetch(`/api/guests/${encodeURIComponent(guestId)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status }),
+        })
+        if (!res.ok) {
+          const payload = await res.json().catch(() => null)
+          throw new Error(payload?.error || "Não foi possível atualizar o status no servidor.")
+        }
+      }
       updateGuestStatus(eventId, guestId, status)
       toast({ title: "Status atualizado", description: `Convidado marcado como ${statusText(status)}.` })
     } catch (error) {
-      toast({ title: "Erro ao atualizar status", description: "Tente novamente em instantes.", variant: "destructive" })
+      toast({
+        title: "Erro ao atualizar status",
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -92,11 +109,23 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
   const handleRemoveGuest = async (guest: Guest) => {
     setIsLoading(true)
     try {
-      await new Promise((resolve) => setTimeout(resolve, 250))
+      if (!isDemoMode) {
+        const res = await fetch(`/api/guests/${encodeURIComponent(guest.id)}`, {
+          method: "DELETE",
+        })
+        if (!res.ok) {
+          const payload = await res.json().catch(() => null)
+          throw new Error(payload?.error || "Não foi possível remover o convidado no servidor.")
+        }
+      }
       removeGuest(eventId, guest.id)
       toast({ title: "Convidado removido", description: `${guest.name} saiu da lista deste evento.` })
     } catch (error) {
-      toast({ title: "Erro ao remover convidado", description: "Tente novamente em instantes.", variant: "destructive" })
+      toast({
+        title: "Erro ao remover convidado",
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+        variant: "destructive",
+      })
     } finally {
       setIsLoading(false)
     }
@@ -171,15 +200,45 @@ export default function GuestList({ guests, eventId }: GuestListProps) {
     }
   }
 
-  const saveGuest = () => {
+  const saveGuest = async () => {
     if (!editingGuest) return
-    if (!editingGuest.name.trim() || !editingGuest.email.trim()) {
-      toast({ title: "Dados incompletos", description: "Nome e e-mail são obrigatórios.", variant: "destructive" })
+    if (!editingGuest.name.trim()) {
+      toast({ title: "Dados incompletos", description: "O nome do convidado é obrigatório.", variant: "destructive" })
       return
     }
-    updateGuest(eventId, editingGuest.id, editingGuest)
-    setEditingGuest(null)
-    toast({ title: "Convidado atualizado", description: "Os dados do convidado foram salvos." })
+
+    setIsLoading(true)
+    try {
+      if (!isDemoMode) {
+        const res = await fetch(`/api/guests/${encodeURIComponent(editingGuest.id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: editingGuest.name.trim(),
+            email: editingGuest.email?.trim() || "",
+            phone: editingGuest.phone?.trim() || "",
+            department: editingGuest.department?.trim() || "",
+            tableNumber: editingGuest.tableNumber?.trim() || "",
+            dietaryRestrictions: editingGuest.dietaryRestrictions?.trim() || "",
+          }),
+        })
+        if (!res.ok) {
+          const payload = await res.json().catch(() => null)
+          throw new Error(payload?.error || "Não foi possível salvar as alterações do convidado.")
+        }
+      }
+      updateGuest(eventId, editingGuest.id, editingGuest)
+      setEditingGuest(null)
+      toast({ title: "Convidado atualizado", description: "Os dados do convidado foram salvos." })
+    } catch (error) {
+      toast({
+        title: "Erro ao atualizar convidado",
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const avatar = (name: string) => {

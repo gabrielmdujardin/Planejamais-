@@ -3,6 +3,12 @@
  * Isola as regras de negócio, consolidação e projeções dos componentes visuais.
  */
 
+import {
+  calculateConfirmedParticipants,
+  calculateEventTotalCost,
+  filterEffectiveGuests,
+  normalizeItemValue,
+} from "../domain/business-rules.ts"
 import type {
   NormalizedReportData,
   NormalizedEvent,
@@ -11,7 +17,7 @@ import type {
   ParetoItem,
   AttendanceScenario,
   ReportFilterOptions,
-} from "./types"
+} from "./types.ts"
 
 export function formatBRL(value: number): string {
   return new Intl.NumberFormat("pt-BR", {
@@ -51,8 +57,7 @@ export function normalizeReportData(
     // Normalizar Itens
     const rawItems: any[] = ev.items || []
     const items: NormalizedItem[] = rawItems.map((item: any) => {
-      const rawPrice = Number(item.price ?? item.estimatedCost ?? item.actualCost ?? 0)
-      const price = Number.isFinite(rawPrice) ? rawPrice : 0
+      const price = normalizeItemValue(item)
       const rawEst = item.estimatedCost ? Number(item.estimatedCost) : undefined
       const estimatedCost = Number.isFinite(rawEst) ? rawEst : undefined
       const paymentStatus = (item.paymentStatus || item.status || "pending").toLowerCase()
@@ -69,10 +74,14 @@ export function normalizeReportData(
       }
     })
 
-    // Normalizar Convidados
-    const rawGuests: any[] = ev.guests || []
-    const guests: NormalizedGuest[] = rawGuests.map((g: any) => {
-      const companions = Array.isArray(g.companions) ? g.companions : []
+    // Normalizar Convidados (RN-008: solicitações externas rejeitadas não geram convidado)
+    const effectiveRawGuests = filterEffectiveGuests(ev.guests || [])
+    const guests: NormalizedGuest[] = effectiveRawGuests.map((g: any) => {
+      const companions = Array.isArray(g.companions)
+        ? g.companions
+        : Array.isArray(g.guest_companions)
+        ? g.guest_companions
+        : []
       return {
         id: String(g.id || Math.random()),
         name: g.name || "Convidado sem nome",
@@ -86,11 +95,11 @@ export function normalizeReportData(
       }
     })
 
-    // Métricas de convidados
+    // Métricas de convidados (RN-005: confirmados + acompanhantes aprovados)
     const totalGuests = guests.length || Number(ev.totalGuests || 0)
     const confirmedGuests =
-      guests.length > 0
-        ? guests.filter((g) => g.status === "confirmed").length
+      effectiveRawGuests.length > 0
+        ? calculateConfirmedParticipants(effectiveRawGuests)
         : Number(ev.confirmedGuests || 0)
     const pendingGuests =
       guests.length > 0
@@ -98,14 +107,16 @@ export function normalizeReportData(
         : Math.max(0, totalGuests - confirmedGuests)
     const declinedGuests =
       guests.length > 0
-        ? guests.filter((g) => g.status === "declined").length
+        ? guests.filter((g) => g.status === "declined" || g.status === "rejected").length
         : 0
 
-    const confirmationRate = totalGuests > 0 ? (confirmedGuests / totalGuests) * 100 : 0
-    const responseRate = totalGuests > 0 ? ((confirmedGuests + declinedGuests) / totalGuests) * 100 : 0
+    const directConfirmedCount =
+      guests.length > 0 ? guests.filter((g) => g.status === "confirmed").length : confirmedGuests
+    const confirmationRate = totalGuests > 0 ? Math.min(100, (directConfirmedCount / totalGuests) * 100) : 0
+    const responseRate = totalGuests > 0 ? Math.min(100, ((directConfirmedCount + declinedGuests) / totalGuests) * 100) : 0
 
-    // Métricas financeiras
-    const totalCost = items.reduce((acc, it) => acc + it.price, 0)
+    // Métricas financeiras (RN-011)
+    const totalCost = calculateEventTotalCost(items, ev.initialEstimatedCost)
     const paidCost = items
       .filter((it) => it.paymentStatus === "paid")
       .reduce((acc, it) => acc + it.price, 0)

@@ -1,26 +1,23 @@
-import { type NextRequest, NextResponse } from "next/server"
 import { PendingInvitesJob } from "@/jobs/pending-invites"
+import { isValidCronAuthorization } from "@/lib/security/cron-auth"
+import { type NextRequest, NextResponse } from "next/server"
 
-export async function POST(request: NextRequest) {
-  // Verify authorization
-  const authHeader = request.headers.get("authorization")
-  const expectedToken = process.env.JOBS_SECRET_TOKEN
-
-  if (!authHeader || authHeader !== `Bearer ${expectedToken}`) {
+async function handlePendingInvites(request: NextRequest) {
+  if (!isValidCronAuthorization(request.headers.get("authorization"))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
   try {
     const job = new PendingInvitesJob()
-    await job.run()
+    const jobRunId = await job.run()
 
     return NextResponse.json({
       success: true,
+      jobRunId,
       message: "Pending invites job completed successfully",
     })
   } catch (error) {
     console.error("Pending invites job failed:", error)
-
     return NextResponse.json(
       {
         success: false,
@@ -29,4 +26,12 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+export async function GET(request: NextRequest) {
+  return handlePendingInvites(request)
+}
+
+export async function POST(request: NextRequest) {
+  return handlePendingInvites(request)
 }

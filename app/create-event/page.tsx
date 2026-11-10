@@ -22,6 +22,8 @@ import {
 
 import { createEvent } from "@/app/actions/events"
 import { BackButton } from "@/components/back-button"
+import ImageUpload from "@/components/image-upload"
+import { cloneContactToGuestSnapshot } from "@/lib/domain/business-rules"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -59,6 +61,7 @@ const statuses = [
 type FormState = {
   title: string
   description: string
+  image: string
   type: string
   status: string
   visibility: string
@@ -93,6 +96,7 @@ type FormState = {
 const initialForm: FormState = {
   title: "",
   description: "",
+  image: "",
   type: "Corporativo",
   status: "active",
   visibility: "private",
@@ -182,7 +186,7 @@ export default function CreateEvent() {
   const progress = ((step + 1) / steps.length) * 100
   const publicUrl =
     createdEvent?.publicInviteEnabled && createdEvent?.publicInviteToken
-      ? `${window.location.origin}/convite/${createdEvent.publicInviteToken}`
+      ? `${window.location.origin}/evento/${createdEvent.publicInviteToken}`
       : ""
 
   const updateForm = <K extends keyof FormState>(field: K, value: FormState[K]) => {
@@ -294,17 +298,21 @@ export default function CreateEvent() {
           currency: form.currency,
           financialNotes: form.financialNotes,
           financialMode: form.financialMode,
+          image: form.image || null,
           confirmedGuests: 0,
           totalGuests: selectedContactsData.length,
           items: [],
-          guests: selectedContactsData.map((contact, index) => ({
-            id: `g-${Date.now()}-${index}`,
-            name: contact.name,
-            email: contact.email,
-            phone: contact.phone,
-            status: "pending" as const,
-            contactId: contact.id,
-          })),
+          guests: selectedContactsData.map((contact, index) => {
+            const snap = cloneContactToGuestSnapshot(contact)
+            return {
+              id: `g-${Date.now()}-${index}`,
+              name: snap.name,
+              email: snap.email,
+              phone: snap.phone,
+              status: "pending" as const,
+              contactId: snap.contactId || undefined,
+            }
+          }),
           photos: [],
           publicInviteEnabled: form.publicInviteEnabled,
           publicInviteToken: token,
@@ -332,12 +340,15 @@ export default function CreateEvent() {
         maxCompanionsPerGuest: toNumberOrNull(form.maxCompanionsPerGuest) || 0,
         budgetEstimated: toNumberOrNull(form.budgetEstimated),
         initialEstimatedCost: toNumberOrNull(form.initialEstimatedCost),
-        guests: selectedContactsData.map((contact) => ({
-          name: contact.name,
-          email: contact.email,
-          phone: contact.phone,
-          contactId: contact.id,
-        })),
+        guests: selectedContactsData.map((contact) => {
+          const snap = cloneContactToGuestSnapshot(contact)
+          return {
+            name: snap.name,
+            email: snap.email,
+            phone: snap.phone,
+            contactId: snap.contactId,
+          }
+        }),
       })
 
       if (result.error || !result.data) {
@@ -488,6 +499,13 @@ export default function CreateEvent() {
                       rows={4}
                       value={form.description}
                       onChange={(event) => updateForm("description", event.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Imagem de capa (opcional)</Label>
+                    <ImageUpload
+                      currentImage={form.image}
+                      onImageSelect={(imageData) => updateForm("image", imageData)}
                     />
                   </div>
                   <div className="grid gap-4 sm:grid-cols-2">

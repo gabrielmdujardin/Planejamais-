@@ -1,13 +1,11 @@
 "use client"
 
-import { useState, useEffect } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Plus, Search, Users, Edit, Trash2, Mail, Phone, ListFilter } from "lucide-react"
-import { useContactStore } from "@/stores/contact-store"
+import { BackButton } from "@/components/back-button"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -17,12 +15,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Checkbox } from "@/components/ui/checkbox"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
-import { BackButton } from "@/components/back-button"
+import { isValidEmail } from "@/lib/validation"
+import { type Contact, type ContactList, useContactStore } from "@/stores/contact-store"
+import { Edit, ListFilter, Mail, Phone, Plus, Search, Trash2, Users } from "lucide-react"
+import { useEffect, useState } from "react"
 
 export default function ContactsPage() {
   const [searchQuery, setSearchQuery] = useState("")
@@ -31,19 +32,16 @@ export default function ContactsPage() {
   const [isEditContactOpen, setIsEditContactOpen] = useState(false)
   const [isEditListOpen, setIsEditListOpen] = useState(false)
 
-  // Estados para novo contato
   const [newContactName, setNewContactName] = useState("")
   const [newContactEmail, setNewContactEmail] = useState("")
   const [newContactPhone, setNewContactPhone] = useState("")
   const [selectedListsForContact, setSelectedListsForContact] = useState<string[]>([])
 
-  // Estados para nova lista
   const [newListName, setNewListName] = useState("")
   const [selectedContactsForList, setSelectedContactsForList] = useState<string[]>([])
 
-  // Estados para edição
-  const [editingContact, setEditingContact] = useState<any>(null)
-  const [editingList, setEditingList] = useState<any>(null)
+  const [editingContact, setEditingContact] = useState<Contact | null>(null)
+  const [editingList, setEditingList] = useState<ContactList | null>(null)
 
   const { toast } = useToast()
   const {
@@ -52,10 +50,10 @@ export default function ContactsPage() {
     searchContacts,
     addContact,
     updateContact,
-    deleteContact,
+    removeContact,
     addContactList,
     updateContactList,
-    deleteContactList,
+    removeContactList,
     getContactsByList,
     initializeData,
   } = useContactStore()
@@ -66,26 +64,35 @@ export default function ContactsPage() {
 
   const filteredContacts = searchQuery ? searchContacts(searchQuery) : contacts
 
-  const handleAddContact = () => {
-    if (!newContactName || !newContactEmail || !newContactPhone) {
+  const handleAddContact = async () => {
+    if (!newContactName.trim()) {
       toast({
-        title: "Campos obrigatórios",
-        description: "Preencha todos os campos do contato.",
+        title: "Nome obrigatório",
+        description: "Informe o nome do contato.",
         variant: "destructive",
       })
       return
     }
 
-    addContact({
-      name: newContactName,
-      email: newContactEmail,
-      phone: newContactPhone,
-      listIds: selectedListsForContact,
+    if (newContactEmail.trim() && !isValidEmail(newContactEmail.trim())) {
+      toast({
+        title: "E-mail inválido",
+        description: "Informe um e-mail válido para o contato.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    await addContact({
+      name: newContactName.trim(),
+      email: newContactEmail.trim(),
+      phone: newContactPhone.trim(),
+      lists: selectedListsForContact,
     })
 
     toast({
       title: "Contato adicionado!",
-      description: `${newContactName} foi adicionado com sucesso.`,
+      description: `${newContactName.trim()} foi adicionado com sucesso.`,
     })
 
     setNewContactName("")
@@ -95,14 +102,14 @@ export default function ContactsPage() {
     setIsAddContactOpen(false)
   }
 
-  const handleEditContact = () => {
-    if (!editingContact) return
+  const handleEditContact = async () => {
+    if (!editingContact || !editingContact.name.trim()) return
 
-    updateContact(editingContact.id, {
-      name: editingContact.name,
-      email: editingContact.email,
-      phone: editingContact.phone,
-      listIds: editingContact.listIds,
+    await updateContact(editingContact.id, {
+      name: editingContact.name.trim(),
+      email: editingContact.email.trim(),
+      phone: editingContact.phone.trim(),
+      lists: editingContact.lists || [],
     })
 
     toast({
@@ -114,16 +121,16 @@ export default function ContactsPage() {
     setIsEditContactOpen(false)
   }
 
-  const handleDeleteContact = (id: string, name: string) => {
-    deleteContact(id)
+  const handleDeleteContact = async (id: string, name: string) => {
+    await removeContact(id)
     toast({
       title: "Contato removido",
       description: `${name} foi removido dos contatos.`,
     })
   }
 
-  const handleAddList = () => {
-    if (!newListName) {
+  const handleAddList = async () => {
+    if (!newListName.trim()) {
       toast({
         title: "Nome obrigatório",
         description: "Digite um nome para a lista.",
@@ -132,14 +139,14 @@ export default function ContactsPage() {
       return
     }
 
-    addContactList({
-      name: newListName,
-      contactIds: selectedContactsForList,
+    await addContactList({
+      name: newListName.trim(),
+      contacts: selectedContactsForList,
     })
 
     toast({
       title: "Lista criada!",
-      description: `A lista "${newListName}" foi criada com sucesso.`,
+      description: `A lista "${newListName.trim()}" foi criada com sucesso.`,
     })
 
     setNewListName("")
@@ -147,12 +154,12 @@ export default function ContactsPage() {
     setIsAddListOpen(false)
   }
 
-  const handleEditList = () => {
-    if (!editingList) return
+  const handleEditList = async () => {
+    if (!editingList || !editingList.name.trim()) return
 
-    updateContactList(editingList.id, {
-      name: editingList.name,
-      contactIds: editingList.contactIds,
+    await updateContactList(editingList.id, {
+      name: editingList.name.trim(),
+      contacts: editingList.contacts || [],
     })
 
     toast({
@@ -164,8 +171,8 @@ export default function ContactsPage() {
     setIsEditListOpen(false)
   }
 
-  const handleDeleteList = (id: string, name: string) => {
-    deleteContactList(id)
+  const handleDeleteList = async (id: string, name: string) => {
+    await removeContactList(id)
     toast({
       title: "Lista removida",
       description: `A lista "${name}" foi removida.`,
@@ -173,8 +180,9 @@ export default function ContactsPage() {
   }
 
   const renderAvatar = (name: string) => {
-    const initials = name
+    const initials = (name || "C")
       .split(" ")
+      .filter(Boolean)
       .map((word) => word[0])
       .join("")
       .toUpperCase()
@@ -194,7 +202,7 @@ export default function ContactsPage() {
           <BackButton />
           <div>
             <h1 className="text-3xl font-bold">Contatos</h1>
-            <p className="text-gray-600 dark:text-gray-400">Gerencie seus contatos e listas</p>
+            <p className="text-gray-600 dark:text-gray-400">Gerencie seus contatos e listas reutilizáveis</p>
           </div>
         </div>
       </div>
@@ -240,7 +248,7 @@ export default function ContactsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="email">E-mail *</Label>
+                    <Label htmlFor="email">E-mail</Label>
                     <Input
                       id="email"
                       type="email"
@@ -250,7 +258,7 @@ export default function ContactsPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="phone">Telefone *</Label>
+                    <Label htmlFor="phone">Telefone</Label>
                     <Input
                       id="phone"
                       type="tel"
@@ -259,29 +267,31 @@ export default function ContactsPage() {
                       onChange={(e) => setNewContactPhone(e.target.value)}
                     />
                   </div>
-                  <div className="space-y-2">
-                    <Label>Adicionar às listas (opcional)</Label>
-                    <ScrollArea className="h-32 rounded-md border p-4">
-                      {contactLists.map((list) => (
-                        <div key={list.id} className="flex items-center space-x-2 mb-2">
-                          <Checkbox
-                            id={`list-${list.id}`}
-                            checked={selectedListsForContact.includes(list.id)}
-                            onCheckedChange={(checked) => {
-                              if (checked) {
-                                setSelectedListsForContact([...selectedListsForContact, list.id])
-                              } else {
-                                setSelectedListsForContact(selectedListsForContact.filter((id) => id !== list.id))
-                              }
-                            }}
-                          />
-                          <Label htmlFor={`list-${list.id}`} className="cursor-pointer">
-                            {list.name}
-                          </Label>
-                        </div>
-                      ))}
-                    </ScrollArea>
-                  </div>
+                  {contactLists.length > 0 && (
+                    <div className="space-y-2">
+                      <Label>Adicionar às listas (opcional)</Label>
+                      <ScrollArea className="h-32 rounded-md border p-4">
+                        {contactLists.map((list) => (
+                          <div key={list.id} className="flex items-center space-x-2 mb-2">
+                            <Checkbox
+                              id={`list-${list.id}`}
+                              checked={selectedListsForContact.includes(list.id)}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedListsForContact([...selectedListsForContact, list.id])
+                                } else {
+                                  setSelectedListsForContact(selectedListsForContact.filter((id) => id !== list.id))
+                                }
+                              }}
+                            />
+                            <Label htmlFor={`list-${list.id}`} className="cursor-pointer">
+                              {list.name}
+                            </Label>
+                          </div>
+                        ))}
+                      </ScrollArea>
+                    </div>
+                  )}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsAddContactOpen(false)}>
@@ -327,16 +337,16 @@ export default function ContactsPage() {
                   <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                     <div className="flex items-center gap-2">
                       <Mail className="h-3 w-3" />
-                      <span className="truncate">{contact.email}</span>
+                      <span className="truncate">{contact.email || "Sem e-mail"}</span>
                     </div>
                     <div className="flex items-center gap-2">
                       <Phone className="h-3 w-3" />
-                      <span>{contact.phone}</span>
+                      <span>{contact.phone || "Sem telefone"}</span>
                     </div>
                   </div>
-                  {contact.listIds && contact.listIds.length > 0 && (
+                  {contact.lists && contact.lists.length > 0 && (
                     <div className="mt-3 flex flex-wrap gap-1">
-                      {contact.listIds.map((listId) => {
+                      {contact.lists.map((listId: string) => {
                         const list = contactLists.find((l) => l.id === listId)
                         return list ? (
                           <Badge key={listId} variant="secondary" className="text-xs">
@@ -493,7 +503,6 @@ export default function ContactsPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog para editar contato */}
       <Dialog open={isEditContactOpen} onOpenChange={setIsEditContactOpen}>
         <DialogContent>
           <DialogHeader>
@@ -536,7 +545,6 @@ export default function ContactsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog para editar lista */}
       <Dialog open={isEditListOpen} onOpenChange={setIsEditListOpen}>
         <DialogContent>
           <DialogHeader>

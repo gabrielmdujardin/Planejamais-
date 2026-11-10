@@ -1,20 +1,28 @@
 "use client"
 
+import { updateUserProfileAction } from "@/app/actions/profile"
+import { createClient } from "@/lib/supabase/client"
+import { useContactStore } from "@/stores/contact-store"
+import { useEventStore } from "@/stores/event-store"
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
+import { useRouter } from "next/navigation"
 import type React from "react"
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
-import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 
-interface User {
+export interface User {
   id: string
   email: string
   name: string
+  phone?: string
+  location?: string
+  avatar?: string
 }
 
-interface AuthContextType {
+export interface AuthContextType {
   user: User | null
   login: (email: string, password: string) => Promise<void>
   register: (email: string, password: string, name: string) => Promise<void>
+  updateUser: (updates: Partial<Omit<User, "id">>) => Promise<void>
   logout: () => Promise<void>
   isAuthenticated: boolean
   isLoading: boolean
@@ -33,20 +41,20 @@ function isSupabaseConfigured() {
       !url.includes("example.supabase.co") &&
       !url.includes("your-project.supabase.co") &&
       !key.includes("dummy") &&
-      !key.includes("your-supabase"),
+      !key.includes("your-supabase")
   )
 }
 
 function supabaseConfigError() {
   return new Error(
-    "Supabase nao esta configurado. Use demo@planeja.app / demo123 para entrar no modo demo local ou configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY reais no .env.local.",
+    "Supabase não está configurado. Use demo@planeja.app / demo123 para entrar no modo demo local ou configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY reais no .env.local."
   )
 }
 
 function normalizeAuthError(error: unknown) {
   if (error instanceof TypeError && error.message === "Failed to fetch") {
     return new Error(
-      "Nao foi possivel conectar ao Supabase. Verifique NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY e reinicie o servidor.",
+      "Não foi possível conectar ao Supabase. Verifique NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY e reinicie o servidor."
     )
   }
 
@@ -57,7 +65,14 @@ function toUser(authUser: any): User {
   return {
     id: authUser.id,
     email: authUser.email || "",
-    name: authUser.user_metadata?.name || authUser.user_metadata?.full_name || authUser.email?.split("@")[0] || "Usuario",
+    name:
+      authUser.user_metadata?.name ||
+      authUser.user_metadata?.full_name ||
+      authUser.email?.split("@")[0] ||
+      "Usuário",
+    phone: authUser.user_metadata?.phone || "",
+    location: authUser.user_metadata?.location || "",
+    avatar: authUser.user_metadata?.avatar_url || undefined,
   }
 }
 
@@ -66,6 +81,8 @@ function demoUser(email = "demo@planeja.app"): User {
     id: "demo",
     email,
     name: email.split("@")[0] || "demo",
+    phone: "",
+    location: "",
   }
 }
 
@@ -87,10 +104,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       try {
         const {
-          data: { user },
+          data: { user: authUser },
         } = await supabase.auth.getUser()
 
-        setUser(user ? toUser(user) : null)
+        setUser(authUser ? toUser(authUser) : null)
       } catch {
         setUser(null)
       } finally {
@@ -104,7 +121,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       const authUser = session?.user
       setUser(authUser ? toUser(authUser) : null)
       setIsLoading(false)
@@ -114,11 +131,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [supabase])
 
   const login = async (email: string, password: string) => {
+    const normalizedEmail = email.trim().toLowerCase()
     if (!isSupabaseConfigured()) {
-      if (email.trim().toLowerCase() === "demo@planeja.app" && password === "demo123") {
-        const user = demoUser(email.trim().toLowerCase())
-        setUser(user)
-        localStorage.setItem("user", JSON.stringify(user))
+      if (normalizedEmail === "demo@planeja.app" && password === "demo123") {
+        const u = demoUser(normalizedEmail)
+        setUser(u)
+        localStorage.setItem("user", JSON.stringify(u))
         if (typeof document !== "undefined") {
           document.cookie = "planeja_demo_user=true; path=/; max-age=604800; SameSite=Lax"
         }
@@ -129,7 +147,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
       if (error) throw error
     } catch (error) {
       throw normalizeAuthError(error)
@@ -137,10 +155,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const register = async (email: string, password: string, name: string) => {
+    const normalizedEmail = email.trim().toLowerCase()
+    if (password.length < 6) {
+      throw new Error("A senha deve ter no mínimo 6 caracteres")
+    }
+
     if (!isSupabaseConfigured()) {
-      const user = { ...demoUser(email.trim().toLowerCase()), name: name.trim() || email.split("@")[0] || "demo" }
-      setUser(user)
-      localStorage.setItem("user", JSON.stringify(user))
+      const u = { ...demoUser(normalizedEmail), name: name.trim() || normalizedEmail.split("@")[0] || "demo" }
+      setUser(u)
+      localStorage.setItem("user", JSON.stringify(u))
       if (typeof document !== "undefined") {
         document.cookie = "planeja_demo_user=true; path=/; max-age=604800; SameSite=Lax"
       }
@@ -149,10 +172,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const { error } = await supabase.auth.signUp({
-        email,
+        email: normalizedEmail,
         password,
         options: {
-          data: { name },
+          data: { name: name.trim() },
         },
       })
       if (error) throw error
@@ -161,13 +184,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
+  const updateUser = async (updates: Partial<Omit<User, "id">>) => {
+    if (!user) return
+
+    if (!isSupabaseConfigured() || user.id === "demo") {
+      const updatedUser: User = { ...user, ...updates }
+      setUser(updatedUser)
+      localStorage.setItem("user", JSON.stringify(updatedUser))
+      return
+    }
+
+    const result = await updateUserProfileAction(updates)
+    if (result.error) {
+      throw new Error(result.error)
+    }
+
+    setUser((prev) => (prev ? { ...prev, ...updates } : prev))
+  }
+
   const logout = async () => {
     if (isSupabaseConfigured()) {
       await supabase.auth.signOut()
     }
 
+    // RF-003 & RNF-005: Limpa integralmente estado e caches locais ao encerrar a sessão
     setUser(null)
-    localStorage.removeItem("user")
+    useEventStore.getState().setEvents([])
+    useContactStore.getState().clearAll()
+
+    if (typeof window !== "undefined") {
+      localStorage.removeItem("user")
+      localStorage.removeItem("event-storage")
+      localStorage.removeItem("contact-storage")
+    }
+
     if (typeof document !== "undefined") {
       document.cookie = "planeja_demo_user=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
     }
@@ -180,6 +230,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         login,
         register,
+        updateUser,
         logout,
         isAuthenticated: !!user,
         isLoading,

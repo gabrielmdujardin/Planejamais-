@@ -1,3 +1,8 @@
+import {
+  calculateConfirmedParticipants,
+  filterEffectiveGuests,
+  normalizeItemValue,
+} from "@/lib/domain/business-rules"
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
@@ -130,12 +135,11 @@ function dayLabel(date: Date) {
 }
 
 function itemCost(item: ItemRow) {
-  const unitCost = toNumber(item.estimated_cost) || toNumber(item.price)
-  return unitCost * (item.quantity || 1)
+  return normalizeItemValue(item)
 }
 
 function eventCost(event: EventRow) {
-  return (event.items || []).reduce((sum, item) => sum + itemCost(item), 0)
+  return Math.round((event.items || []).reduce((sum, item) => sum + itemCost(item), 0) * 100) / 100
 }
 
 function getDaysUntilEvent(event: EventRow) {
@@ -183,13 +187,14 @@ function isEventInPeriod(event: EventRow, period: string, startDate: string | nu
 }
 
 function eventGuestStats(event: EventRow) {
-  const guests = event.guests || []
+  const guests = filterEffectiveGuests(event.guests || [])
   const companions = guests.flatMap((guest) => guest.guest_companions || [])
   const confirmed = guests.filter((guest) => guest.status === "confirmed").length
   const pending = guests.filter((guest) => guest.status === "pending").length
   const declined = guests.filter((guest) => guest.status === "declined").length
   const awaitingApproval = guests.filter((guest) => guest.status === "awaiting_approval").length
-  const approvedCompanions = companions.filter((companion) => companion.status === "approved").length
+  const confirmedParticipants = calculateConfirmedParticipants(guests)
+  const approvedCompanions = Math.max(0, confirmedParticipants - confirmed)
   const pendingCompanions = companions.filter((companion) => companion.status === "awaiting_approval").length
   const confirmationRate = guests.length > 0 ? (confirmed / guests.length) * 100 : 0
   const responseRate = guests.length > 0 ? ((confirmed + declined) / guests.length) * 100 : 0
@@ -488,7 +493,7 @@ export async function GET(request: NextRequest) {
 
     const enrichedEvents = events.map((event) => ({
       ...event,
-      guests: guestsByEventId[event.id] || [],
+      guests: filterEffectiveGuests(guestsByEventId[event.id] || []),
       items: itemsByEventId[event.id] || [],
     }))
 
@@ -503,11 +508,11 @@ export async function GET(request: NextRequest) {
     const publicInviteGuests = allGuests.filter(
       (guest) => guest.source === "public_invite" || guest.source === "public_request"
     ).length
-    const approvedCompanions = allCompanions.filter((companion) => companion.status === "approved").length
+    const totalPeopleConfirmed = calculateConfirmedParticipants(allGuests)
+    const approvedCompanions = Math.max(0, totalPeopleConfirmed - confirmedGuests)
     const pendingCompanions = allCompanions.filter((companion) => companion.status === "awaiting_approval").length
     const rejectedCompanions = allCompanions.filter((companion) => companion.status === "rejected").length
     const estimatedCost = enrichedEvents.reduce((sum, event) => sum + eventCost(event), 0)
-    const totalPeopleConfirmed = confirmedGuests + approvedCompanions
     const projectedPeopleLikely = confirmedGuests + approvedCompanions + Math.ceil(pendingGuests * 0.45) + Math.ceil(pendingCompanions * 0.5)
     const projectedPeopleMax = confirmedGuests + pendingGuests + pendingRequests + approvedCompanions + pendingCompanions
     const totalPeopleEstimated = projectedPeopleMax

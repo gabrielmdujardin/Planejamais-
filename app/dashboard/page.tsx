@@ -39,6 +39,11 @@ import Link from "next/link"
 import { useAuth } from "@/context/auth-context"
 import { useEventStore } from "@/stores/event-store"
 import { getEvents } from "@/app/actions/events"
+import {
+  calculateCollaborativeSplit,
+  calculateEventTotalCost,
+  parseFlexibleEventDate,
+} from "@/lib/domain/business-rules"
 import { motion } from "framer-motion"
 import { AnimatedCard } from "@/components/animated-card"
 import { Calendar, dateFnsLocalizer, type View, Views } from "react-big-calendar"
@@ -106,7 +111,7 @@ interface DatabaseEvent {
 // Dados mockados removidos
 
 export default function Dashboard() {
-  const { user } = useAuth()
+  const { user, isDemoMode } = useAuth()
   const { events, setEvents } = useEventStore()
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
@@ -126,12 +131,16 @@ export default function Dashboard() {
   const [selectedEventType, setSelectedEventType] = useState<string>("all")
   const [eventTypes, setEventTypes] = useState<string[]>([])
 
-  // Carregamento de eventos do usuário com preservação do store local
+  // Carregamento de eventos do usuário sincronizando com Supabase quando fora de modo demo
   useEffect(() => {
     const loadEvents = async () => {
+      if (isDemoMode) {
+        setIsLoading(false)
+        return
+      }
       try {
         const result = await getEvents()
-        if (!result.error && result.data && result.data.length > 0) {
+        if (!result.error && Array.isArray(result.data)) {
           setEvents(result.data)
         }
       } catch (error) {
@@ -147,9 +156,9 @@ export default function Dashboard() {
     }
 
     loadEvents()
-  }, [setEvents, toast])
+  }, [isDemoMode, setEvents, toast])
 
-  // Buscar eventos mockados para o calendário
+  // Converter eventos do organizador para o calendário
   useEffect(() => {
     const fetchCalendarEvents = async () => {
       if (activeTab !== "calendar") return
@@ -160,44 +169,41 @@ export default function Dashboard() {
         const data: DatabaseEvent[] = events.map((event) => ({
           id: event.id,
           title: event.title,
-          date: event.fullDate || event.date,
-          time: event.time,
+          date: event.startDate || event.fullDate || event.date,
+          time: event.startTime || event.time,
           location: event.location,
           description: event.description,
           type: event.type,
-          status: "confirmed",
+          status:
+            event.status === "canceled" || event.status === "cancelled"
+              ? "cancelled"
+              : event.status === "draft"
+                ? "pending"
+                : "confirmed",
         }))
 
-        // Converter eventos do banco para formato do calendário
-        const calendarEventsData: CalendarEvent[] = data.map((event) => {
-          const [day, month, year] = event.date.split("/")
-          const [hours, minutes] = event.time.split(":")
+        const calendarEventsData: CalendarEvent[] = data
+          .map((event) => {
+            const parsedStart = parseFlexibleEventDate(event.date, event.time || "09:00")
+            if (!parsedStart) return null
+            const endDate = addHours(parsedStart, 2)
 
-          const startDate = new Date(
-            Number.parseInt(year),
-            Number.parseInt(month) - 1,
-            Number.parseInt(day),
-            Number.parseInt(hours),
-            Number.parseInt(minutes),
-          )
-
-          const endDate = addHours(startDate, 2)
-
-          return {
-            id: event.id,
-            title: event.title,
-            start: startDate,
-            end: endDate,
-            resource: {
-              location: event.location,
-              description: event.description,
-              type: event.type,
-              status: event.status,
-              originalDate: event.date,
-              originalTime: event.time,
-            },
-          }
-        })
+            return {
+              id: event.id,
+              title: event.title,
+              start: parsedStart,
+              end: endDate,
+              resource: {
+                location: event.location,
+                description: event.description,
+                type: event.type,
+                status: event.status,
+                originalDate: event.date,
+                originalTime: event.time,
+              },
+            }
+          })
+          .filter((ev): ev is CalendarEvent => ev !== null)
 
         setCalendarEvents(calendarEventsData)
 
@@ -503,22 +509,13 @@ export default function Dashboard() {
                     filteredTableEvents.map((ev) => {
                       const isCollab =
                         ev.financialMode === "collaborative_split" || ev.type === "Colaborativo"
-                      const totalExpense = Array.isArray(ev.items)
-                        ? ev.items.reduce(
-                            (acc, item) =>
-                              acc + Number(item.price || item.actualCost || item.estimatedCost || 0),
-                            0,
-                          )
-                        : 0
+                      const totalExpense = calculateEventTotalCost(ev.items || [], ev.initialEstimatedCost)
                       const budget = Number(ev.budgetEstimated || 0)
                       const balance = budget > 0 ? budget - totalExpense : null
                       const isOver = balance !== null && balance < 0
                       const confirmed = Number(ev.confirmedGuests || 0)
                       const totalGuests = Number(ev.totalGuests || 0)
-                      const rateioPax =
-                        isCollab && totalExpense > 0
-                          ? totalExpense / (confirmed > 0 ? confirmed : totalGuests > 0 ? totalGuests : 1)
-                          : 0
+                      const rateioPax = isCollab ? calculateCollaborativeSplit(totalExpense, confirmed) : null
 
                       return (
                         <TableRow key={ev.id} className="hover:bg-muted/40 transition-colors">
@@ -568,7 +565,7 @@ export default function Dashboard() {
                           <TableCell className="py-2.5 text-xs text-right">
                             {isCollab ? (
                               <span className="text-primary font-medium">
-                                {rateioPax > 0 ? `${formatBRL(rateioPax)}/pax` : "—"}
+                                {rateioPax !== null && rateioPax > 0 ? `${formatBRL(rateioPax)}/pax` : "—"}
                               </span>
                             ) : balance !== null ? (
                               <span
@@ -713,13 +710,13 @@ export default function Dashboard() {
                       popup
                       popupOffset={30}
                       formats={{
-                        monthHeaderFormat: (date) => format(date, "MMMM yyyy", { locale: ptBR }),
-                        dayHeaderFormat: (date) => format(date, "EEEE, dd/MM", { locale: ptBR }),
-                        dayRangeHeaderFormat: ({ start, end }) =>
+                        monthHeaderFormat: (date: Date) => format(date, "MMMM yyyy", { locale: ptBR }),
+                        dayHeaderFormat: (date: Date) => format(date, "EEEE, dd/MM", { locale: ptBR }),
+                        dayRangeHeaderFormat: ({ start, end }: { start: Date; end: Date }) =>
                           `${format(start, "dd/MM", { locale: ptBR })} - ${format(end, "dd/MM", { locale: ptBR })}`,
-                        agendaDateFormat: (date) => format(date, "dd/MM/yyyy", { locale: ptBR }),
-                        agendaTimeFormat: (date) => format(date, "HH:mm", { locale: ptBR }),
-                        agendaTimeRangeFormat: ({ start, end }) =>
+                        agendaDateFormat: (date: Date) => format(date, "dd/MM/yyyy", { locale: ptBR }),
+                        agendaTimeFormat: (date: Date) => format(date, "HH:mm", { locale: ptBR }),
+                        agendaTimeRangeFormat: ({ start, end }: { start: Date; end: Date }) =>
                           `${format(start, "HH:mm", { locale: ptBR })} - ${format(end, "HH:mm", { locale: ptBR })}`,
                       }}
                     />

@@ -1,20 +1,21 @@
 "use client"
 
 import type React from "react"
-
-import { useState, useRef } from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { useRef, useState } from "react"
+import Image from "next/image"
+import { Calendar, Download, Edit, Eye, ImageIcon, Plus, Tag, Trash2, Upload, User, X } from "lucide-react"
+import { deleteEventPhotoAction, uploadEventPhotoAction } from "@/app/actions/photos"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
-import { Upload, Download, Eye, Edit, Trash2, Plus, X, Calendar, User, Tag, ImageIcon } from "lucide-react"
-import { useEventStore } from "@/stores/event-store"
+import { Textarea } from "@/components/ui/textarea"
+import { useAuth } from "@/context/auth-context"
 import { useToast } from "@/hooks/use-toast"
-import Image from "next/image"
+import { useEventStore } from "@/stores/event-store"
 
 interface EventPhoto {
   id: string
@@ -33,15 +34,25 @@ interface EventGalleryProps {
   currentUser?: string
 }
 
+function readFileAsDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result || ""))
+    reader.onerror = () => reject(new Error("Falha ao ler imagem"))
+    reader.readAsDataURL(file)
+  })
+}
+
 export default function EventGallery({
   eventId,
   photos,
   canUpload = false,
-  currentUser = "Usuário Atual",
+  currentUser = "Organizador",
 }: EventGalleryProps) {
   const [selectedPhoto, setSelectedPhoto] = useState<EventPhoto | null>(null)
   const [isUploadOpen, setIsUploadOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isUploading, setIsUploading] = useState(false)
   const [editingPhoto, setEditingPhoto] = useState<EventPhoto | null>(null)
   const [uploadFiles, setUploadFiles] = useState<File[]>([])
   const [uploadDescription, setUploadDescription] = useState("")
@@ -50,19 +61,11 @@ export default function EventGallery({
   const [editTags, setEditTags] = useState("")
 
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { user, isDemoMode } = useAuth()
   const { addPhoto, removePhoto, updatePhoto } = useEventStore()
   const { toast } = useToast()
 
-  // Simular upload de arquivo (em produção, usar serviço real)
-  const simulateFileUpload = (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      setTimeout(() => {
-        // Gerar URL placeholder baseada no nome do arquivo
-        const url = `/placeholder.svg?height=400&width=600&text=${encodeURIComponent(file.name.split(".")[0])}`
-        resolve(url)
-      }, 1000)
-    })
-  }
+  const uploaderName = user?.name || currentUser
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
@@ -82,22 +85,43 @@ export default function EventGallery({
   const handleUpload = async () => {
     if (uploadFiles.length === 0) return
 
+    setIsUploading(true)
     try {
+      const tags = uploadTags
+        .split(",")
+        .map((tag) => tag.trim())
+        .filter((tag) => tag.length > 0)
+
       for (const file of uploadFiles) {
-        const url = await simulateFileUpload(file)
+        const dataUrl = await readFileAsDataUrl(file)
 
-        const tags = uploadTags
-          .split(",")
-          .map((tag) => tag.trim())
-          .filter((tag) => tag.length > 0)
-
-        addPhoto(eventId, {
-          url,
-          filename: file.name,
-          uploadedBy: currentUser,
-          description: uploadDescription,
-          tags: tags.length > 0 ? tags : undefined,
-        })
+        if (!isDemoMode) {
+          const res = await uploadEventPhotoAction({
+            eventId,
+            url: dataUrl,
+            filename: file.name,
+            description: uploadDescription || undefined,
+            tags,
+          })
+          if (res.error) {
+            throw new Error(res.error)
+          }
+          addPhoto(eventId, {
+            url: res.data?.url || dataUrl,
+            filename: res.data?.filename || file.name,
+            uploadedBy: res.data?.uploadedBy || uploaderName,
+            description: uploadDescription || undefined,
+            tags: tags.length > 0 ? tags : undefined,
+          })
+        } else {
+          addPhoto(eventId, {
+            url: dataUrl,
+            filename: file.name,
+            uploadedBy: uploaderName,
+            description: uploadDescription || undefined,
+            tags: tags.length > 0 ? tags : undefined,
+          })
+        }
       }
 
       toast({
@@ -105,7 +129,6 @@ export default function EventGallery({
         description: `${uploadFiles.length} foto${uploadFiles.length > 1 ? "s" : ""} adicionada${uploadFiles.length > 1 ? "s" : ""} ao evento.`,
       })
 
-      // Limpar formulário
       setUploadFiles([])
       setUploadDescription("")
       setUploadTags("")
@@ -116,9 +139,11 @@ export default function EventGallery({
     } catch (error) {
       toast({
         title: "Erro no upload",
-        description: "Não foi possível enviar as fotos. Tente novamente.",
+        description: error instanceof Error ? error.message : "Não foi possível enviar as fotos. Tente novamente.",
         variant: "destructive",
       })
+    } finally {
+      setIsUploading(false)
     }
   }
 
@@ -153,24 +178,42 @@ export default function EventGallery({
     setEditTags("")
   }
 
-  const handleDelete = (photoId: string) => {
-    removePhoto(eventId, photoId)
-    toast({
-      title: "Foto removida",
-      description: "A foto foi removida da galeria.",
-    })
+  const handleDelete = async (photoId: string) => {
+    try {
+      if (!isDemoMode) {
+        const res = await deleteEventPhotoAction(eventId, photoId)
+        if (!res.success && res.error) {
+          throw new Error(res.error)
+        }
+      }
+      removePhoto(eventId, photoId)
+      if (selectedPhoto?.id === photoId) setSelectedPhoto(null)
+      toast({
+        title: "Foto removida",
+        description: "A foto foi removida da galeria pelo organizador.",
+      })
+    } catch (error) {
+      toast({
+        title: "Erro ao remover foto",
+        description: error instanceof Error ? error.message : "Somente o organizador pode excluir fotos do evento.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleDownload = (photo: EventPhoto) => {
-    // Em produção, implementar download real
-    toast({
-      title: "Download nao configurado",
-      description: `A foto ${photo.filename} esta em modo demo/local. O download real depende do Supabase Storage.`,
-    })
+    const link = document.createElement("a")
+    link.href = photo.url
+    link.download = photo.filename || "foto-evento.jpg"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("pt-BR", {
+    const d = new Date(dateString)
+    if (Number.isNaN(d.getTime())) return dateString
+    return d.toLocaleDateString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
@@ -188,10 +231,9 @@ export default function EventGallery({
               <ImageIcon className="h-5 w-5" />
               Galeria de Fotos
             </CardTitle>
-            <p className="text-sm text-gray-600 mt-1">
-              {photos.length} foto{photos.length !== 1 ? "s" : ""} compartilhada{photos.length !== 1 ? "s" : ""}
+            <p className="text-sm text-muted-foreground mt-1">
+              {photos.length} foto{photos.length !== 1 ? "s" : ""} registrada{photos.length !== 1 ? "s" : ""} no evento
             </p>
-            <p className="text-xs text-amber-700 mt-1">Galeria em modo demo/local ate o Supabase Storage ser configurado.</p>
           </div>
 
           {canUpload && (
@@ -199,12 +241,12 @@ export default function EventGallery({
               <DialogTrigger asChild>
                 <Button className="bg-emerald-600 hover:bg-emerald-700">
                   <Plus className="h-4 w-4 mr-2" />
-                  Adicionar fotos demo
+                  Adicionar fotos
                 </Button>
               </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
-                  <DialogTitle>Adicionar fotos demo</DialogTitle>
+                  <DialogTitle>Adicionar fotos do evento</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-4">
                   <div>
@@ -219,7 +261,7 @@ export default function EventGallery({
                       className="mt-1"
                     />
                     {uploadFiles.length > 0 && (
-                      <p className="text-sm text-gray-600 mt-1">
+                      <p className="text-sm text-muted-foreground mt-1">
                         {uploadFiles.length} arquivo{uploadFiles.length > 1 ? "s" : ""} selecionado
                         {uploadFiles.length > 1 ? "s" : ""}
                       </p>
@@ -241,7 +283,7 @@ export default function EventGallery({
                     <Label htmlFor="tags">Tags (opcional)</Label>
                     <Input
                       id="tags"
-                      placeholder="festa, amigos, diversão (separadas por vírgula)"
+                      placeholder="festa, equipe, celebração (separadas por vírgula)"
                       value={uploadTags}
                       onChange={(e) => setUploadTags(e.target.value)}
                       className="mt-1"
@@ -249,9 +291,9 @@ export default function EventGallery({
                   </div>
 
                   <div className="flex gap-2 pt-4">
-                    <Button onClick={handleUpload} disabled={uploadFiles.length === 0} className="flex-1">
+                    <Button onClick={handleUpload} disabled={uploadFiles.length === 0 || isUploading} className="flex-1">
                       <Upload className="h-4 w-4 mr-2" />
-                      Enviar
+                      {isUploading ? "Enviando..." : "Enviar"}
                     </Button>
                     <Button variant="outline" onClick={() => setIsUploadOpen(false)}>
                       Cancelar
@@ -267,12 +309,12 @@ export default function EventGallery({
       <CardContent>
         {photos.length === 0 ? (
           <div className="text-center py-12">
-            <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma foto ainda</h3>
-            <p className="text-gray-600 mb-4">
+            <ImageIcon className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-medium text-foreground mb-2">Nenhuma foto ainda</h3>
+            <p className="text-muted-foreground mb-4">
               {canUpload
-                ? "Seja o primeiro a compartilhar fotos deste evento!"
-                : "As fotos do evento aparecerão aqui quando forem compartilhadas."}
+                ? "Adicione registros fotográficos deste evento na galeria."
+                : "As fotos do evento aparecerão aqui quando forem adicionadas pelo organizador."}
             </p>
             {canUpload && (
               <Button variant="outline" onClick={() => setIsUploadOpen(true)}>
@@ -285,7 +327,7 @@ export default function EventGallery({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {photos.map((photo) => (
               <div key={photo.id} className="group relative">
-                <div className="aspect-square bg-gray-100 rounded-lg overflow-hidden">
+                <div className="aspect-square bg-muted rounded-lg overflow-hidden">
                   <Image
                     src={photo.url || "/placeholder.svg"}
                     alt={photo.filename}
@@ -294,8 +336,7 @@ export default function EventGallery({
                     className="w-full h-full object-cover transition-transform group-hover:scale-105"
                   />
 
-                  {/* Overlay com ações */}
-                  <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-50 transition-all duration-200 flex items-center justify-center">
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/50 transition-all duration-200 flex items-center justify-center">
                     <div className="opacity-0 group-hover:opacity-100 transition-opacity flex gap-2">
                       <Button size="sm" variant="secondary" onClick={() => setSelectedPhoto(photo)}>
                         <Eye className="h-4 w-4" />
@@ -303,7 +344,7 @@ export default function EventGallery({
                       <Button size="sm" variant="secondary" onClick={() => handleDownload(photo)}>
                         <Download className="h-4 w-4" />
                       </Button>
-                      {canUpload && photo.uploadedBy === currentUser && (
+                      {canUpload && (
                         <>
                           <Button size="sm" variant="secondary" onClick={() => handleEdit(photo)}>
                             <Edit className="h-4 w-4" />
@@ -317,14 +358,13 @@ export default function EventGallery({
                   </div>
                 </div>
 
-                {/* Informações da foto */}
                 <div className="mt-2 space-y-1">
                   <p className="text-sm font-medium truncate">{photo.filename}</p>
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <User className="h-3 w-3" />
                     {photo.uploadedBy}
                   </div>
-                  <div className="flex items-center gap-1 text-xs text-gray-500">
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />
                     {formatDate(photo.uploadedAt)}
                   </div>
@@ -349,7 +389,6 @@ export default function EventGallery({
         )}
       </CardContent>
 
-      {/* Modal de visualização */}
       <Dialog open={!!selectedPhoto} onOpenChange={() => setSelectedPhoto(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           {selectedPhoto && (
@@ -379,11 +418,11 @@ export default function EventGallery({
                     <h4 className="font-medium mb-2">Informações</h4>
                     <div className="space-y-2 text-sm">
                       <div className="flex items-center gap-2">
-                        <User className="h-4 w-4 text-gray-500" />
+                        <User className="h-4 w-4 text-muted-foreground" />
                         <span>Enviado por {selectedPhoto.uploadedBy}</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-gray-500" />
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
                         <span>{formatDate(selectedPhoto.uploadedAt)}</span>
                       </div>
                     </div>
@@ -392,7 +431,7 @@ export default function EventGallery({
                   {selectedPhoto.description && (
                     <div>
                       <h4 className="font-medium mb-2">Descrição</h4>
-                      <p className="text-sm text-gray-600">{selectedPhoto.description}</p>
+                      <p className="text-sm text-muted-foreground">{selectedPhoto.description}</p>
                     </div>
                   )}
 
@@ -422,7 +461,7 @@ export default function EventGallery({
                       <Download className="h-4 w-4 mr-2" />
                       Baixar
                     </Button>
-                    {canUpload && selectedPhoto.uploadedBy === currentUser && (
+                    {canUpload && (
                       <Button
                         variant="outline"
                         size="sm"
@@ -442,7 +481,6 @@ export default function EventGallery({
         </DialogContent>
       </Dialog>
 
-      {/* Modal de edição */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -464,7 +502,7 @@ export default function EventGallery({
               <Label htmlFor="edit-tags">Tags</Label>
               <Input
                 id="edit-tags"
-                placeholder="festa, amigos, diversão (separadas por vírgula)"
+                placeholder="festa, equipe, celebração (separadas por vírgula)"
                 value={editTags}
                 onChange={(e) => setEditTags(e.target.value)}
                 className="mt-1"

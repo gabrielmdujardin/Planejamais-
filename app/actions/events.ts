@@ -1,36 +1,111 @@
 "use server"
 
+import {
+  calculateConfirmedParticipants,
+  filterEffectiveGuests,
+  generateSecureToken,
+  normalizeItemValue,
+  validateNominalEventDeletion,
+} from "@/lib/domain/business-rules"
+import { isSupabaseEnvConfigured } from "@/lib/security/route-guard"
 import { createClient } from "@/lib/supabase/server"
+import { eventPayloadSchema } from "@/lib/validation"
 import { revalidatePath } from "next/cache"
 
-type GuestInput = {
-  name: string
-  email?: string
-  phone?: string
-  contactId?: string
+function toDisplayGuest(guest: any) {
+  const metadata = typeof guest?.metadata === "object" && guest.metadata !== null ? guest.metadata : {}
+  const rawCompanions = Array.isArray(guest?.guest_companions)
+    ? guest.guest_companions
+    : Array.isArray(guest?.companions)
+    ? guest.companions
+    : []
+
+  return {
+    id: guest.id,
+    name: guest.name,
+    email: guest.email || "",
+    phone: guest.phone || "",
+    status: guest.status || "pending",
+    source: guest.source || "manual",
+    contactId: guest.contact_id || guest.contactId || undefined,
+    token: guest.token || guest.confirmation_token || undefined,
+    notes: guest.notes || undefined,
+    department: guest.department || metadata.department || undefined,
+    dietaryRestrictions: guest.dietary_restrictions ?? guest.dietaryRestrictions ?? undefined,
+    accessibilityNeeds: guest.accessibility_needs ?? guest.accessibilityNeeds ?? undefined,
+    requestedCompanionsCount: guest.requested_companions_count ?? rawCompanions.length ?? 0,
+    companions: rawCompanions.map((comp: any) => ({
+      id: comp.id,
+      name: comp.name,
+      email: comp.email || undefined,
+      phone: comp.phone || undefined,
+      notes: comp.notes || undefined,
+      status: comp.status || "awaiting_approval",
+    })),
+  }
 }
 
-function isSupabaseConfigured() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+function toDisplayItem(item: any) {
+  const metadata = typeof item?.metadata === "object" && item.metadata !== null ? item.metadata : {}
+  const price = normalizeItemValue(item)
+  const quantity = Number(item?.quantity || metadata.quantity || 1)
+  const paymentStatus = item?.payment_status || item?.paymentStatus || metadata.paymentStatus || "pending"
+  const category = item?.category || metadata.category || "Geral"
+  const supplier = item?.supplier || metadata.supplier || undefined
+  const assignedTo = item?.assigned_to ?? item?.assignedTo ?? metadata.assignedTo ?? undefined
+  const notes = item?.notes || metadata.notes || undefined
 
-  return Boolean(
-    url &&
-      key &&
-      !url.includes("example.supabase.co") &&
-      !url.includes("your-project.supabase.co") &&
-      !key.includes("dummy") &&
-      !key.includes("your-supabase"),
-  )
+  return {
+    id: item.id,
+    name: item.name,
+    price,
+    unitPrice: Number(item?.unit_price ?? item?.unitPrice ?? (quantity > 0 ? price / quantity : price)),
+    quantity,
+    category,
+    supplier,
+    paymentStatus,
+    dueDate: item?.due_date || metadata.dueDate || undefined,
+    invoiceNumber: item?.invoice_number || metadata.invoiceNumber || undefined,
+    notes,
+    image: item?.image || undefined,
+    assignedTo,
+  }
 }
 
-function toDisplayEvent(event: any, guests: any[] = [], items: any[] = [], photos: any[] = []) {
+function toDisplayPhoto(photo: any) {
+  return {
+    id: photo.id,
+    url: photo.url,
+    filename: photo.filename,
+    uploadedBy: photo.uploaded_by || photo.uploadedBy || "Organizador",
+    uploadedAt: photo.uploaded_at || photo.uploadedAt || new Date().toISOString(),
+    description: photo.description || undefined,
+    tags: Array.isArray(photo.tags) ? photo.tags : [],
+  }
+}
+
+function toDisplayEvent(event: any, rawGuests: any[] = [], rawItems: any[] = [], rawPhotos: any[] = []) {
   const metadata = typeof event.metadata === "object" && event.metadata !== null ? event.metadata : {}
   const financialMode =
     event.financial_mode ||
     event.financialMode ||
     metadata.financial_mode ||
     (event.type === "Colaborativo" ? "collaborative_split" : "corporate_budget")
+
+  const effectiveRawGuests = filterEffectiveGuests(rawGuests)
+  const guests = effectiveRawGuests.map(toDisplayGuest)
+  const items = (rawItems || []).map(toDisplayItem)
+  const photos = (rawPhotos || []).map(toDisplayPhoto)
+
+  const confirmedGuests =
+    rawGuests && rawGuests.length > 0
+      ? calculateConfirmedParticipants(guests)
+      : Number(event.confirmed_guests || 0)
+
+  const totalGuests =
+    rawGuests && rawGuests.length > 0
+      ? guests.length
+      : Number(event.total_guests || 0)
 
   return {
     id: event.id,
@@ -40,6 +115,7 @@ function toDisplayEvent(event: any, guests: any[] = [], items: any[] = [], photo
     status: event.status || "active",
     visibility: event.visibility || "private",
     financialMode,
+    image: event.image || metadata.image || undefined,
     date: event.date,
     time: event.time,
     fullDate: event.full_date || undefined,
@@ -52,7 +128,7 @@ function toDisplayEvent(event: any, guests: any[] = [], items: any[] = [], photo
     mapsUrl: event.maps_url || null,
     eventMode: event.event_mode || "presential",
     meetingUrl: event.meeting_url || null,
-    description: event.description,
+    description: event.description || "",
     capacity: event.capacity ?? null,
     allowGuests: event.allow_guests ?? true,
     allowCompanions: event.allow_companions ?? false,
@@ -63,24 +139,29 @@ function toDisplayEvent(event: any, guests: any[] = [], items: any[] = [], photo
     rsvpDeadline: event.rsvp_deadline || null,
     allowResponseEdit: event.allow_response_edit ?? true,
     invitationMessage: event.invitation_message || null,
-    budgetEstimated: event.budget_estimated ?? null,
-    initialEstimatedCost: event.initial_estimated_cost ?? null,
+    budgetEstimated: event.budget_estimated !== null && event.budget_estimated !== undefined ? Number(event.budget_estimated) : null,
+    initialEstimatedCost:
+      event.initial_estimated_cost !== null && event.initial_estimated_cost !== undefined
+        ? Number(event.initial_estimated_cost)
+        : null,
     currency: event.currency || "BRL",
     financialNotes: event.financial_notes || null,
-    confirmedGuests: event.confirmed_guests,
-    totalGuests: event.total_guests,
+    confirmedGuests,
+    totalGuests,
     items,
     guests,
     photos,
     publicInviteToken: event.public_invite_token || null,
-    publicInviteEnabled: event.public_invite_enabled || false,
+    publicInviteEnabled: Boolean(event.public_invite_enabled),
+    hostViewToken: event.host_view_token || metadata.host_view_token || null,
+    hostViewEnabled: Boolean(event.host_view_enabled ?? metadata.host_view_enabled ?? false),
     createdAt: event.created_at,
     updatedAt: event.updated_at,
   }
 }
 
 export async function getEvents() {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseEnvConfigured()) {
     return { data: [], error: "Supabase not configured" }
   }
 
@@ -95,34 +176,50 @@ export async function getEvents() {
     return { data: [], error: "Not authenticated" }
   }
 
-
-  const { data: events, error } = await supabase
+  let { data: events, error } = await supabase
     .from("events")
     .select(
       `
       *,
-      guests (*),
+      guests (*, guest_companions (*)),
       items (*),
       event_photos (*)
-    `,
+    `
     )
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
 
   if (error) {
+    const fallback = await supabase
+      .from("events")
+      .select(
+        `
+        *,
+        guests (*),
+        items (*),
+        event_photos (*)
+      `
+      )
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+
+    events = fallback.data as any
+    error = fallback.error
+  }
+
+  if (error) {
     return { data: [], error: error.message }
   }
 
-
-  const transformedEvents = events?.map((event) =>
-    toDisplayEvent(event, event.guests || [], event.items || [], event.event_photos || []),
+  const transformedEvents = (events || []).map((event: any) =>
+    toDisplayEvent(event, event.guests || [], event.items || [], event.event_photos || [])
   )
 
-  return { data: transformedEvents || [], error: null }
+  return { data: transformedEvents, error: null }
 }
 
 export async function getEventById(eventId: string) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseEnvConfigured()) {
     return { data: null, error: "Supabase not configured" }
   }
 
@@ -137,19 +234,37 @@ export async function getEventById(eventId: string) {
     return { data: null, error: "Not authenticated" }
   }
 
-  const { data: event, error } = await supabase
+  let { data: event, error } = await supabase
     .from("events")
     .select(
       `
       *,
-      guests (*),
+      guests (*, guest_companions (*)),
       items (*),
       event_photos (*)
-    `,
+    `
     )
     .eq("id", eventId)
     .eq("user_id", user.id)
     .maybeSingle()
+
+  if (error) {
+    const fallback = await supabase
+      .from("events")
+      .select(
+        `
+        *,
+        guests (*),
+        items (*),
+        event_photos (*)
+      `
+      )
+      .eq("id", eventId)
+      .eq("user_id", user.id)
+      .maybeSingle()
+    event = fallback.data as any
+    error = fallback.error
+  }
 
   if (error) {
     return { data: null, error: error.message }
@@ -166,7 +281,7 @@ export async function getEventById(eventId: string) {
 }
 
 export async function updateEventDetails(eventId: string, eventData: any) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseEnvConfigured()) {
     return { data: null, error: "Supabase not configured" }
   }
 
@@ -181,76 +296,128 @@ export async function updateEventDetails(eventId: string, eventData: any) {
     return { data: null, error: "Not authenticated" }
   }
 
-  const title = String(eventData.title || "").trim()
-  const startDate = eventData.startDate || null
-  const startTime = eventData.startTime || eventData.time
-  const location = String(eventData.location || "").trim()
-  const capacity = eventData.capacity ?? null
-  const maxCompanions = eventData.maxCompanionsPerGuest ?? eventData.maxCompanions ?? 0
-  const budgetEstimated = eventData.budgetEstimated ?? null
-  const initialEstimatedCost = eventData.initialEstimatedCost ?? null
+  const { data: existingEvent } = await supabase
+    .from("events")
+    .select("*")
+    .eq("id", eventId)
+    .eq("user_id", user.id)
+    .maybeSingle()
 
-  if (!title) return { data: null, error: "Nome do evento é obrigatório" }
-  if (!startDate && !eventData.fullDate) return { data: null, error: "Data do evento é obrigatória" }
-  if (!startTime) return { data: null, error: "Horário de início é obrigatório" }
-  if (eventData.endTime && startTime && eventData.endTime <= startTime) {
-    return { data: null, error: "O horário de término precisa ser depois do início" }
+  if (!existingEvent) {
+    return { data: null, error: "Evento não encontrado ou acesso negado" }
   }
-  if ((eventData.eventMode || "presential") !== "online" && !location) return { data: null, error: "Local é obrigatório" }
-  if ((eventData.eventMode || "presential") !== "presential" && !eventData.meetingUrl) {
-    return { data: null, error: "Link da reunião é obrigatório para eventos online ou híbridos" }
+
+  const existingMeta =
+    typeof existingEvent.metadata === "object" && existingEvent.metadata !== null
+      ? (existingEvent.metadata as Record<string, any>)
+      : {}
+
+  const mergedPayload = {
+    title: eventData.title ?? existingEvent.title,
+    type: eventData.type ?? existingEvent.type,
+    category: eventData.category !== undefined ? eventData.category : existingEvent.category,
+    status: eventData.status ?? existingEvent.status ?? "active",
+    visibility: eventData.visibility ?? existingEvent.visibility ?? "private",
+    financialMode:
+      eventData.financialMode ||
+      (existingEvent as any).financial_mode ||
+      existingMeta.financial_mode ||
+      (eventData.type === "Colaborativo" ? "collaborative_split" : "corporate_budget"),
+    image: eventData.image !== undefined ? eventData.image : existingEvent.image,
+    date: eventData.date ?? existingEvent.date,
+    time: eventData.startTime ?? eventData.time ?? existingEvent.time,
+    fullDate: eventData.fullDate !== undefined ? eventData.fullDate : existingEvent.full_date,
+    startDate: eventData.startDate !== undefined ? eventData.startDate : existingEvent.start_date,
+    startTime: eventData.startTime ?? eventData.time ?? existingEvent.start_time ?? existingEvent.time,
+    endDate: eventData.endDate !== undefined ? eventData.endDate : existingEvent.end_date,
+    endTime: eventData.endTime !== undefined ? eventData.endTime : existingEvent.end_time,
+    location: eventData.location ?? existingEvent.location,
+    address: eventData.address !== undefined ? eventData.address : existingEvent.address,
+    mapsUrl: eventData.mapsUrl !== undefined ? eventData.mapsUrl : existingEvent.maps_url,
+    eventMode: eventData.eventMode ?? existingEvent.event_mode ?? "presential",
+    meetingUrl: eventData.meetingUrl !== undefined ? eventData.meetingUrl : existingEvent.meeting_url,
+    description: eventData.description ?? existingEvent.description ?? "",
+    capacity: eventData.capacity !== undefined ? eventData.capacity : existingEvent.capacity,
+    allowGuests: eventData.allowGuests ?? existingEvent.allow_guests ?? true,
+    allowCompanions: eventData.allowCompanions ?? existingEvent.allow_companions ?? false,
+    maxCompanionsPerGuest:
+      eventData.maxCompanionsPerGuest ?? eventData.maxCompanions ?? existingEvent.max_companions ?? 0,
+    companionsRequireApproval:
+      eventData.companionsRequireApproval ?? existingEvent.companions_require_approval ?? false,
+    publicInviteEnabled: eventData.publicInviteEnabled ?? existingEvent.public_invite_enabled ?? false,
+    publicInviteToken: eventData.publicInviteToken !== undefined ? eventData.publicInviteToken : existingEvent.public_invite_token,
+    autoApprovePublicGuests:
+      eventData.autoApprovePublicGuests ?? existingEvent.auto_approve_public_guests ?? false,
+    rsvpEnabled: eventData.rsvpEnabled ?? existingEvent.rsvp_enabled ?? true,
+    rsvpDeadline: eventData.rsvpDeadline !== undefined ? eventData.rsvpDeadline : existingEvent.rsvp_deadline,
+    allowResponseEdit: eventData.allowResponseEdit ?? existingEvent.allow_response_edit ?? true,
+    invitationMessage:
+      eventData.invitationMessage !== undefined ? eventData.invitationMessage : existingEvent.invitation_message,
+    budgetEstimated:
+      eventData.budgetEstimated !== undefined ? eventData.budgetEstimated : existingEvent.budget_estimated,
+    initialEstimatedCost:
+      eventData.initialEstimatedCost !== undefined
+        ? eventData.initialEstimatedCost
+        : existingEvent.initial_estimated_cost,
+    currency: eventData.currency ?? existingEvent.currency ?? "BRL",
+    financialNotes: eventData.financialNotes !== undefined ? eventData.financialNotes : existingEvent.financial_notes,
   }
-  if (capacity !== null && capacity < 0) return { data: null, error: "A capacidade não pode ser negativa" }
-  if (maxCompanions < 0) return { data: null, error: "O máximo de acompanhantes não pode ser negativo" }
-  if (eventData.rsvpDeadline && startDate && eventData.rsvpDeadline > startDate) {
-    return { data: null, error: "A data limite de confirmação não pode ser depois da data do evento" }
+
+  const parsed = eventPayloadSchema.safeParse(mergedPayload)
+  if (!parsed.success) {
+    return { data: null, error: parsed.error.issues[0]?.message || "Dados do evento inválidos" }
   }
-  if (budgetEstimated !== null && budgetEstimated < 0) return { data: null, error: "O orçamento não pode ser negativo" }
-  if (initialEstimatedCost !== null && initialEstimatedCost < 0) {
-    return { data: null, error: "O custo estimado inicial não pode ser negativo" }
+
+  const v = parsed.data
+  const publicInviteToken = v.publicInviteEnabled
+    ? v.publicInviteToken || generateSecureToken(16)
+    : v.publicInviteToken || null
+
+  const dbUpdatePayload: Record<string, any> = {
+    title: v.title,
+    type: v.type,
+    category: v.category || null,
+    status: v.status,
+    visibility: v.visibility,
+    image: v.image || null,
+    date: v.date || v.startDate || "",
+    time: v.startTime || v.time || "",
+    full_date: v.fullDate || v.startDate || null,
+    start_date: v.startDate || null,
+    start_time: v.startTime || v.time || null,
+    end_date: v.endDate || v.startDate || null,
+    end_time: v.endTime || null,
+    location: v.location,
+    address: v.address || null,
+    maps_url: v.mapsUrl || null,
+    event_mode: v.eventMode,
+    meeting_url: v.meetingUrl || null,
+    description: v.description || "",
+    capacity: v.capacity ?? null,
+    allow_guests: v.allowGuests,
+    allow_companions: v.allowCompanions,
+    max_companions: v.maxCompanionsPerGuest,
+    companions_require_approval: v.companionsRequireApproval,
+    public_invite_enabled: v.publicInviteEnabled,
+    public_invite_token: publicInviteToken,
+    auto_approve_public_guests: v.autoApprovePublicGuests,
+    rsvp_enabled: v.rsvpEnabled,
+    rsvp_deadline: v.rsvpDeadline || null,
+    allow_response_edit: v.allowResponseEdit,
+    invitation_message: v.invitationMessage || null,
+    budget_estimated: v.budgetEstimated ?? null,
+    initial_estimated_cost: v.initialEstimatedCost ?? null,
+    currency: v.currency,
+    financial_notes: v.financialNotes || null,
+    metadata: {
+      ...existingMeta,
+      financial_mode: v.financialMode || "corporate_budget",
+    },
   }
 
   const { data, error } = await supabase
     .from("events")
-    .update({
-      title,
-      type: eventData.type || "Outro",
-      category: eventData.category || null,
-      status: eventData.status || "active",
-      visibility: eventData.visibility || "private",
-      date: eventData.date,
-      time: startTime,
-      full_date: eventData.fullDate,
-      start_date: startDate,
-      start_time: startTime,
-      end_date: eventData.endDate || startDate,
-      end_time: eventData.endTime || null,
-      location,
-      address: eventData.address || null,
-      maps_url: eventData.mapsUrl || null,
-      event_mode: eventData.eventMode || "presential",
-      meeting_url: eventData.meetingUrl || null,
-      description: eventData.description || "",
-      capacity,
-      allow_guests: eventData.allowGuests ?? true,
-      allow_companions: eventData.allowCompanions ?? false,
-      max_companions: maxCompanions,
-      companions_require_approval: eventData.companionsRequireApproval ?? false,
-      public_invite_enabled: eventData.publicInviteEnabled ?? false,
-      public_invite_token: eventData.publicInviteToken || null,
-      auto_approve_public_guests: eventData.autoApprovePublicGuests ?? false,
-      rsvp_enabled: eventData.rsvpEnabled ?? true,
-      rsvp_deadline: eventData.rsvpDeadline || null,
-      allow_response_edit: eventData.allowResponseEdit ?? true,
-      invitation_message: eventData.invitationMessage || null,
-      budget_estimated: budgetEstimated,
-      initial_estimated_cost: initialEstimatedCost,
-      currency: eventData.currency || "BRL",
-      financial_notes: eventData.financialNotes || null,
-      metadata: {
-        financial_mode: eventData.financialMode || (eventData.type === "Colaborativo" ? "collaborative_split" : "corporate_budget"),
-      },
-    })
+    .update(dbUpdatePayload)
     .eq("id", eventId)
     .eq("user_id", user.id)
     .select()
@@ -261,12 +428,15 @@ export async function updateEventDetails(eventId: string, eventData: any) {
   }
 
   revalidatePath("/dashboard")
+  revalidatePath("/calendar")
   revalidatePath(`/event/${eventId}`)
-  return { data: toDisplayEvent(data), error: null }
+
+  const refreshed = await getEventById(eventId)
+  return { data: refreshed.data || toDisplayEvent(data), error: null }
 }
 
 export async function createEvent(eventData: any) {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseEnvConfigured()) {
     return { data: null, error: "Supabase not configured" }
   }
 
@@ -281,87 +451,65 @@ export async function createEvent(eventData: any) {
     return { data: null, error: "Not authenticated" }
   }
 
-  const selectedGuests: GuestInput[] = Array.isArray(eventData.guests) ? eventData.guests : []
-  const publicInviteEnabled = Boolean(eventData.publicInviteEnabled)
-  const publicInviteToken = publicInviteEnabled ? crypto.randomUUID() : null
-  const status = eventData.status || "active"
-  const title = String(eventData.title || "").trim()
-  const startDate = eventData.startDate || eventData.fullDate || eventData.date
-  const startTime = eventData.startTime || eventData.time
-  const location = String(eventData.location || "").trim()
-  const capacity = eventData.capacity ?? null
-  const maxCompanions = eventData.maxCompanionsPerGuest ?? 0
-  const budgetEstimated = eventData.budgetEstimated ?? null
-  const initialEstimatedCost = eventData.initialEstimatedCost ?? null
-
-  if (!title) return { data: null, error: "Nome do evento é obrigatório" }
-  if (!startDate) return { data: null, error: "Data do evento é obrigatória" }
-  if (!startTime) return { data: null, error: "Horário de início é obrigatório" }
-  if (eventData.endTime && startTime && eventData.endTime <= startTime) {
-    return { data: null, error: "O horário de término precisa ser depois do início" }
-  }
-  if (eventData.eventMode !== "online" && !location) {
-    return { data: null, error: "Local é obrigatório para eventos presenciais ou híbridos" }
-  }
-  if (eventData.eventMode !== "presential" && !eventData.meetingUrl) {
-    return { data: null, error: "Link da reunião é obrigatório para eventos online ou híbridos" }
-  }
-  if (capacity !== null && capacity < 0) return { data: null, error: "A capacidade não pode ser negativa" }
-  if (maxCompanions < 0) return { data: null, error: "O máximo de acompanhantes não pode ser negativo" }
-  if (eventData.rsvpDeadline && eventData.startDate && eventData.rsvpDeadline > eventData.startDate) {
-    return { data: null, error: "A data limite de confirmação não pode ser depois da data do evento" }
-  }
-  if (budgetEstimated !== null && budgetEstimated < 0) return { data: null, error: "O orçamento não pode ser negativo" }
-  if (initialEstimatedCost !== null && initialEstimatedCost < 0) {
-    return { data: null, error: "O custo estimado inicial não pode ser negativo" }
+  const parsed = eventPayloadSchema.safeParse(eventData)
+  if (!parsed.success) {
+    return { data: null, error: parsed.error.issues[0]?.message || "Dados do evento inválidos" }
   }
 
-  const { data, error } = await supabase
-    .from("events")
-    .insert({
-      title,
-      type: eventData.type || "Outro",
-      category: eventData.category || null,
-      date: eventData.date,
-      time: startTime,
-      full_date: eventData.fullDate,
-      location,
-      description: eventData.description || "",
-      status,
-      start_date: eventData.startDate || null,
-      start_time: startTime || null,
-      end_date: eventData.endDate || eventData.startDate || null,
-      end_time: eventData.endTime || null,
-      address: eventData.address || null,
-      maps_url: eventData.mapsUrl || null,
-      event_mode: eventData.eventMode || "presential",
-      meeting_url: eventData.meetingUrl || null,
-      capacity,
-      allow_guests: eventData.allowGuests ?? true,
-      allow_companions: eventData.allowCompanions ?? false,
-      max_companions: maxCompanions,
-      companions_require_approval: eventData.companionsRequireApproval ?? false,
-      public_invite_enabled: publicInviteEnabled,
-      public_invite_token: publicInviteToken,
-      auto_approve_public_guests: eventData.autoApprovePublicGuests ?? false,
-      rsvp_enabled: eventData.rsvpEnabled ?? true,
-      rsvp_deadline: eventData.rsvpDeadline || null,
-      allow_response_edit: eventData.allowResponseEdit ?? true,
-      invitation_message: eventData.invitationMessage || null,
-      budget_estimated: budgetEstimated,
-      initial_estimated_cost: initialEstimatedCost,
-      currency: eventData.currency || "BRL",
-      financial_notes: eventData.financialNotes || null,
-      visibility: eventData.visibility || "private",
-      confirmed_guests: eventData.confirmedGuests || 0,
-      total_guests: selectedGuests.length || eventData.totalGuests || 0,
-      metadata: {
-        financial_mode: eventData.financialMode || (eventData.type === "Colaborativo" ? "collaborative_split" : "corporate_budget"),
-      },
-      user_id: user.id,
-    })
-    .select()
-    .single()
+  const v = parsed.data
+  const selectedGuests = Array.isArray(v.guests) ? v.guests : []
+  const publicInviteToken = v.publicInviteEnabled ? generateSecureToken(16) : null
+  const hostViewToken = generateSecureToken(16)
+  const financialMode =
+    v.financialMode || (v.type === "Colaborativo" ? "collaborative_split" : "corporate_budget")
+
+  const insertPayload: Record<string, any> = {
+    title: v.title,
+    type: v.type,
+    category: v.category || null,
+    date: v.date || v.startDate || "",
+    time: v.startTime || v.time || "",
+    full_date: v.fullDate || v.startDate || null,
+    location: v.location,
+    description: v.description || "",
+    status: v.status || "active",
+    image: v.image || null,
+    start_date: v.startDate || null,
+    start_time: v.startTime || v.time || null,
+    end_date: v.endDate || v.startDate || null,
+    end_time: v.endTime || null,
+    address: v.address || null,
+    maps_url: v.mapsUrl || null,
+    event_mode: v.eventMode,
+    meeting_url: v.meetingUrl || null,
+    capacity: v.capacity ?? null,
+    allow_guests: v.allowGuests,
+    allow_companions: v.allowCompanions,
+    max_companions: v.maxCompanionsPerGuest,
+    companions_require_approval: v.companionsRequireApproval,
+    public_invite_enabled: v.publicInviteEnabled,
+    public_invite_token: publicInviteToken,
+    auto_approve_public_guests: v.autoApprovePublicGuests,
+    rsvp_enabled: v.rsvpEnabled,
+    rsvp_deadline: v.rsvpDeadline || null,
+    allow_response_edit: v.allowResponseEdit,
+    invitation_message: v.invitationMessage || null,
+    budget_estimated: v.budgetEstimated ?? null,
+    initial_estimated_cost: v.initialEstimatedCost ?? null,
+    currency: v.currency,
+    financial_notes: v.financialNotes || null,
+    visibility: v.visibility,
+    confirmed_guests: 0,
+    total_guests: selectedGuests.length,
+    metadata: {
+      financial_mode: financialMode,
+      host_view_token: hostViewToken,
+      host_view_enabled: true,
+    },
+    user_id: user.id,
+  }
+
+  const { data, error } = await supabase.from("events").insert(insertPayload).select().single()
 
   if (error) {
     return { data: null, error: error.message }
@@ -372,14 +520,20 @@ export async function createEvent(eventData: any) {
     const { data: guests, error: guestsError } = await supabase
       .from("guests")
       .insert(
-        selectedGuests.map((guest) => ({
-          event_id: data.id,
-          name: guest.name,
-          email: guest.email || "",
-          phone: guest.phone || "",
-          status: "pending",
-          contact_id: guest.contactId || null,
-        })),
+        selectedGuests.map((guest) => {
+          const token = generateSecureToken(16)
+          return {
+            event_id: data.id,
+            name: guest.name,
+            email: (guest.email || "").toLowerCase(),
+            phone: guest.phone || "",
+            status: "pending",
+            source: "manual",
+            contact_id: guest.contactId || null,
+            token,
+            confirmation_token: token,
+          }
+        })
       )
       .select()
 
@@ -391,12 +545,13 @@ export async function createEvent(eventData: any) {
   }
 
   revalidatePath("/dashboard")
+  revalidatePath("/calendar")
   revalidatePath(`/event/${data.id}`)
   return { data: toDisplayEvent(data, insertedGuests), error: null }
 }
 
-export async function deleteEventAction(id: string) {
-  if (!isSupabaseConfigured()) {
+export async function deleteEventAction(id: string, confirmTitle?: string) {
+  if (!isSupabaseEnvConfigured()) {
     return { success: true, localOnly: true }
   }
 
@@ -409,6 +564,24 @@ export async function deleteEventAction(id: string) {
     return { success: false, error: "Usuário não autenticado." }
   }
 
+  const { data: existingEvent, error: fetchError } = await supabase
+    .from("events")
+    .select("id, title, user_id")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .maybeSingle()
+
+  if (fetchError || !existingEvent) {
+    return { success: false, error: "Evento não encontrado ou sem permissão." }
+  }
+
+  if (confirmTitle !== undefined && !validateNominalEventDeletion(existingEvent.title, confirmTitle)) {
+    return {
+      success: false,
+      error: "O título digitado não confere com o nome do evento.",
+    }
+  }
+
   const { error } = await supabase.from("events").delete().eq("id", id).eq("user_id", user.id)
 
   if (error) {
@@ -416,5 +589,6 @@ export async function deleteEventAction(id: string) {
   }
 
   revalidatePath("/dashboard")
+  revalidatePath("/calendar")
   return { success: true }
 }

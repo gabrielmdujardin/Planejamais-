@@ -1,7 +1,5 @@
-import { BaseJob } from "../lib/job-runner"
-import { createClient } from "@supabase/supabase-js"
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+import { buildIcsCalendar, parseFlexibleEventDate } from "../lib/domain/business-rules.ts"
+import { BaseJob } from "../lib/job-runner.ts"
 
 export class CalendarSyncJob extends BaseJob {
   getName(): string {
@@ -9,11 +7,12 @@ export class CalendarSyncJob extends BaseJob {
   }
 
   async execute(): Promise<void> {
+    const supabase = this.getSupabase()
     await this.log("info", "Starting calendar sync")
 
     const { data: users } = await supabase.from("users").select("id, email")
 
-    if (!users) {
+    if (!users || users.length === 0) {
       await this.log("warn", "No users found for calendar sync")
       return
     }
@@ -22,8 +21,9 @@ export class CalendarSyncJob extends BaseJob {
       try {
         await this.generateUserICS(user.id, user.email)
         await this.log("info", `ICS generated for user ${user.email}`)
-      } catch (error) {
-        await this.log("error", `Failed to generate ICS for user ${user.email}`, { error: error.message })
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : "Unknown error"
+        await this.log("error", `Failed to generate ICS for user ${user.email}`, { error: errorMessage })
       }
     }
 
@@ -31,61 +31,27 @@ export class CalendarSyncJob extends BaseJob {
   }
 
   private async generateUserICS(userId: string, userEmail: string): Promise<void> {
-    const { data: events } = await supabase
-      .from("events")
-      .select("*")
-      .eq("user_id", userId)
-      .gte("date", new Date().toISOString().split("T")[0])
+    const supabase = this.getSupabase()
+    const { data: events } = await supabase.from("events").select("*").eq("user_id", userId)
 
-    if (!events || events.length === 0) {
+    const startOfToday = new Date()
+    startOfToday.setHours(0, 0, 0, 0)
+
+    const upcomingEvents = (events || []).filter((ev: any) => {
+      const parsed = parseFlexibleEventDate(ev)
+      return parsed && parsed >= startOfToday
+    })
+
+    if (upcomingEvents.length === 0) {
       return
     }
 
-    const icsContent = this.generateICSContent(events, userEmail)
+    const icsContent = buildIcsCalendar(upcomingEvents, `Planeja+ (${userEmail})`)
 
-    // In a real implementation, you would save this to a file storage
-    await this.log("info", `Generated ICS with ${events.length} events`, {
+    await this.log("info", `Generated ICS with ${upcomingEvents.length} events`, {
       userId,
-      eventsCount: events.length,
+      eventsCount: upcomingEvents.length,
       icsSize: icsContent.length,
     })
-  }
-
-  private generateICSContent(events: any[], userEmail: string): string {
-    const icsHeader = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//Planeja+//Calendar//PT",
-      "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH",
-    ].join("\r\n")
-
-    const icsFooter = "END:VCALENDAR"
-
-    const icsEvents = events
-      .map((event) => {
-        const startDate = new Date(`${event.date}T${event.time}:00`)
-        const endDate = new Date(startDate.getTime() + 2 * 60 * 60 * 1000) // 2 hours duration
-
-        return [
-          "BEGIN:VEVENT",
-          `UID:${event.id}@planeja.app`,
-          `DTSTART:${this.formatICSDate(startDate)}`,
-          `DTEND:${this.formatICSDate(endDate)}`,
-          `SUMMARY:${event.title}`,
-          `DESCRIPTION:${event.description || ""}`,
-          `LOCATION:${event.location || ""}`,
-          `ORGANIZER:mailto:${userEmail}`,
-          "STATUS:CONFIRMED",
-          "END:VEVENT",
-        ].join("\r\n")
-      })
-      .join("\r\n")
-
-    return [icsHeader, icsEvents, icsFooter].join("\r\n")
-  }
-
-  private formatICSDate(date: Date): string {
-    return date.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z"
   }
 }

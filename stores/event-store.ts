@@ -1,18 +1,20 @@
 "use client"
 
+import { calculateConfirmedParticipants, filterEffectiveGuests } from "@/lib/domain/business-rules"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
-interface Person {
-  id: string
+export interface Person {
+  id?: string
   name: string
+  type?: "guest" | "contact" | "manual" | "custom" | string
 }
 
-interface Item {
+export interface Item {
   id: string
   name: string
   price: number
-  assignedTo: Person[] | null
+  assignedTo?: Person | Person[] | null
   image?: string | null
   category?: string
   description?: string
@@ -20,20 +22,31 @@ interface Item {
   unitPrice?: number
   estimatedCost?: number
   actualCost?: number
-  paymentStatus?: "estimated" | "pending" | "partial" | "paid" | string
+  paymentStatus?: "estimated" | "pending" | "partial" | "paid" | "cancelled" | string
   supplier?: string
   dueDate?: string
   invoiceNumber?: string
   notes?: string
 }
 
-interface Guest {
+export interface Guest {
   id: string
   name: string
   email: string
   phone: string
-  status: "confirmed" | "pending" | "declined" | "awaiting_approval" | "pending_approval" | "rejected"
+  status:
+    | "confirmed"
+    | "pending"
+    | "declined"
+    | "awaiting_approval"
+    | "expired"
+    | "cancelled"
+    | "pending_approval"
+    | "rejected"
+  source?: "manual" | "public_request" | "public_invite" | string
   contactId?: string
+  token?: string
+  notes?: string
   department?: string
   tableNumber?: string
   dietaryRestrictions?: string
@@ -41,11 +54,14 @@ interface Guest {
   companions?: Array<{
     id: string
     name: string
-    status: "pending" | "approved" | "rejected"
+    email?: string
+    phone?: string
+    notes?: string
+    status: "pending" | "awaiting_approval" | "approved" | "rejected" | "cancelled"
   }>
 }
 
-interface EventPhoto {
+export interface EventPhoto {
   id: string
   url: string
   filename: string
@@ -55,7 +71,7 @@ interface EventPhoto {
   tags?: string[]
 }
 
-interface Event {
+export interface Event {
   id: string
   title: string
   type: string
@@ -63,6 +79,7 @@ interface Event {
   status?: "draft" | "active" | "completed" | "canceled" | string
   visibility?: "private" | "public" | string
   financialMode?: "corporate_budget" | "collaborative_split"
+  image?: string | null
   date: string
   time: string
   fullDate?: string
@@ -73,7 +90,7 @@ interface Event {
   location: string
   address?: string | null
   mapsUrl?: string | null
-  eventMode?: "presencial" | "online" | "hibrido" | string
+  eventMode?: "presential" | "presencial" | "online" | "hybrid" | "hibrido" | string
   meetingUrl?: string | null
   description: string
   capacity?: number | null
@@ -83,6 +100,8 @@ interface Event {
   companionsRequireApproval?: boolean
   publicInviteEnabled?: boolean
   publicInviteToken?: string | null
+  hostViewEnabled?: boolean
+  hostViewToken?: string | null
   autoApprovePublicGuests?: boolean
   rsvpEnabled?: boolean
   rsvpDeadline?: string | null
@@ -100,6 +119,15 @@ interface Event {
   photos: EventPhoto[]
   createdAt: string
   updatedAt: string
+}
+
+function syncEventGuestMetrics(guests: Guest[]) {
+  const effective = filterEffectiveGuests(guests)
+  return {
+    guests: effective,
+    totalGuests: effective.length,
+    confirmedGuests: calculateConfirmedParticipants(effective),
+  }
 }
 
 interface EventStore {
@@ -123,7 +151,7 @@ interface EventStore {
   getGuestById: (eventId: string, guestId: string) => Guest | undefined
 
   // Fotos
-  addPhoto: (eventId: string, photo: Omit<EventPhoto, "id" | "uploadedAt">) => void
+  addPhoto: (eventId: string, photo: Omit<EventPhoto, "id" | "uploadedAt"> & { id?: string; uploadedAt?: string }) => void
   removePhoto: (eventId: string, photoId: string) => void
   updatePhoto: (eventId: string, photoId: string, updates: Partial<EventPhoto>) => void
 }
@@ -139,13 +167,13 @@ export const useEventStore = create<EventStore>()(
 
       addEvent: (event) =>
         set((state) => ({
-          events: [...state.events, event],
+          events: [event, ...state.events.filter((e) => e.id !== event.id)],
         })),
 
       updateEvent: (id, updatedEvent) =>
         set((state) => ({
           events: state.events.map((event) =>
-            event.id === id ? { ...event, ...updatedEvent, updatedAt: new Date().toISOString() } : event,
+            event.id === id ? { ...event, ...updatedEvent, updatedAt: new Date().toISOString() } : event
           ),
         })),
 
@@ -168,7 +196,7 @@ export const useEventStore = create<EventStore>()(
                   items: [...(event.items || []), item],
                   updatedAt: new Date().toISOString(),
                 }
-              : event,
+              : event
           ),
         })),
 
@@ -178,10 +206,10 @@ export const useEventStore = create<EventStore>()(
             event.id === eventId
               ? {
                   ...event,
-                  items: event.items.map((item) => (item.id === itemId ? updatedItem : item)),
+                  items: (event.items || []).map((item) => (item.id === itemId ? updatedItem : item)),
                   updatedAt: new Date().toISOString(),
                 }
-              : event,
+              : event
           ),
         })),
 
@@ -191,62 +219,45 @@ export const useEventStore = create<EventStore>()(
             event.id === eventId
               ? {
                   ...event,
-                  items: event.items.filter((item) => item.id !== itemId),
+                  items: (event.items || []).filter((item) => item.id !== itemId),
                   updatedAt: new Date().toISOString(),
                 }
-              : event,
+              : event
           ),
         })),
 
       // Convidados
       addGuests: (eventId, newGuests) =>
         set((state) => {
-          const event = state.events.find((e) => e.id === eventId)
-          if (!event) return state
-
           return {
-            events: state.events.map((event) =>
-              event.id === eventId
-                ? {
-                    ...event,
-                    guests: [...(event.guests || []), ...newGuests],
-                    totalGuests: (event.totalGuests || 0) + newGuests.length,
-                    updatedAt: new Date().toISOString(),
-                  }
-                : event,
-            ),
+            events: state.events.map((event) => {
+              if (event.id !== eventId) return event
+              const combined = [...(event.guests || []), ...newGuests]
+              const metrics = syncEventGuestMetrics(combined)
+              return {
+                ...event,
+                ...metrics,
+                updatedAt: new Date().toISOString(),
+              }
+            }),
           }
         }),
 
       updateGuest: (eventId, guestId, updatedGuest) =>
         set((state) => {
-          const event = state.events.find((e) => e.id === eventId)
-          if (!event) return state
-
-          const oldGuest = event.guests.find((g) => g.id === guestId)
-          let confirmedDelta = 0
-
-          const nextGuest = oldGuest ? { ...oldGuest, ...updatedGuest } : null
-
-          if (oldGuest && nextGuest && oldGuest.status !== nextGuest.status) {
-            if (oldGuest.status === "confirmed" && nextGuest.status !== "confirmed") {
-              confirmedDelta = -1
-            } else if (oldGuest.status !== "confirmed" && nextGuest.status === "confirmed") {
-              confirmedDelta = 1
-            }
-          }
-
           return {
-            events: state.events.map((event) =>
-              event.id === eventId
-                ? {
-                    ...event,
-                    guests: event.guests.map((guest) => (guest.id === guestId ? { ...guest, ...updatedGuest } : guest)),
-                    confirmedGuests: event.confirmedGuests + confirmedDelta,
-                    updatedAt: new Date().toISOString(),
-                  }
-                : event,
-            ),
+            events: state.events.map((event) => {
+              if (event.id !== eventId) return event
+              const nextGuests = (event.guests || []).map((guest) =>
+                guest.id === guestId ? { ...guest, ...updatedGuest } : guest
+              )
+              const metrics = syncEventGuestMetrics(nextGuests)
+              return {
+                ...event,
+                ...metrics,
+                updatedAt: new Date().toISOString(),
+              }
+            }),
           }
         }),
 
@@ -267,24 +278,17 @@ export const useEventStore = create<EventStore>()(
 
       removeGuest: (eventId, guestId) =>
         set((state) => {
-          const event = state.events.find((e) => e.id === eventId)
-          if (!event) return state
-
-          const guest = event.guests.find((g) => g.id === guestId)
-          const confirmedDelta = guest && guest.status === "confirmed" ? -1 : 0
-
           return {
-            events: state.events.map((event) =>
-              event.id === eventId
-                ? {
-                    ...event,
-                    guests: event.guests.filter((guest) => guest.id !== guestId),
-                    totalGuests: event.totalGuests - 1,
-                    confirmedGuests: event.confirmedGuests + confirmedDelta,
-                    updatedAt: new Date().toISOString(),
-                  }
-                : event,
-            ),
+            events: state.events.map((event) => {
+              if (event.id !== eventId) return event
+              const nextGuests = (event.guests || []).filter((guest) => guest.id !== guestId)
+              const metrics = syncEventGuestMetrics(nextGuests)
+              return {
+                ...event,
+                ...metrics,
+                updatedAt: new Date().toISOString(),
+              }
+            }),
           }
         }),
 
@@ -293,8 +297,8 @@ export const useEventStore = create<EventStore>()(
         set((state) => {
           const newPhoto: EventPhoto = {
             ...photoData,
-            id: `photo_${Date.now()}`,
-            uploadedAt: new Date().toISOString(),
+            id: photoData.id || `photo_${Date.now()}`,
+            uploadedAt: photoData.uploadedAt || new Date().toISOString(),
           }
 
           return {
@@ -305,7 +309,7 @@ export const useEventStore = create<EventStore>()(
                     photos: [...(event.photos || []), newPhoto],
                     updatedAt: new Date().toISOString(),
                   }
-                : event,
+                : event
             ),
           }
         }),
@@ -319,7 +323,7 @@ export const useEventStore = create<EventStore>()(
                   photos: (event.photos || []).filter((photo) => photo.id !== photoId),
                   updatedAt: new Date().toISOString(),
                 }
-              : event,
+              : event
           ),
         })),
 
@@ -330,11 +334,11 @@ export const useEventStore = create<EventStore>()(
               ? {
                   ...event,
                   photos: (event.photos || []).map((photo) =>
-                    photo.id === photoId ? { ...photo, ...updates } : photo,
+                    photo.id === photoId ? { ...photo, ...updates } : photo
                   ),
                   updatedAt: new Date().toISOString(),
                 }
-              : event,
+              : event
           ),
         })),
     }),
@@ -349,6 +353,6 @@ export const useEventStore = create<EventStore>()(
           events: persisted?.events ?? currentState.events,
         }
       },
-    },
-  ),
+    }
+  )
 )

@@ -1,3 +1,4 @@
+import { buildPublicEventPayload, generateSecureToken, isSafeToken } from "@/lib/domain/business-rules"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { publicRsvpSchema } from "@/lib/validation"
 import { NextRequest, NextResponse } from "next/server"
@@ -7,54 +8,40 @@ function normalizeEmail(email: string) {
 }
 
 export async function GET(
-  request: NextRequest,
+  _request: NextRequest,
   { params }: { params: Promise<{ token: string }> }
 ) {
   try {
     const { token } = await params
 
-    if (!token || typeof token !== "string" || token.trim().length === 0) {
+    if (!isSafeToken(token)) {
       return NextResponse.json({ error: "Token de convite inválido" }, { status: 400 })
     }
 
     const supabase = createAdminClient()
 
-    // Seleção estrita apenas de colunas públicas do evento
+    // RN-007: Seleção estrita apenas de colunas públicas do evento (sem meeting_url privado, sem convidados e sem custos)
     const { data: event, error } = await supabase
       .from("events")
       .select(
-        "id, title, date, time, start_date, start_time, end_date, end_time, location, address, maps_url, event_mode, meeting_url, description, public_invite_enabled, rsvp_deadline, allow_companions, max_companions, auto_approve_public_guests, rsvp_enabled, invitation_message"
+        "id, title, type, date, time, start_date, start_time, end_date, end_time, location, address, maps_url, event_mode, description, public_invite_enabled, rsvp_deadline, allow_companions, max_companions, auto_approve_public_guests, rsvp_enabled, invitation_message"
       )
       .eq("public_invite_token", token.trim())
-      .single()
+      .maybeSingle()
 
     if (error || !event || !event.public_invite_enabled) {
-      return NextResponse.json({ error: "Convite público não encontrado ou desativado" }, { status: 404 })
+      return NextResponse.json(
+        { error: "Este convite não é mais válido ou foi desativado" },
+        { status: 404 }
+      )
     }
 
     const expired = event.rsvp_deadline ? new Date(event.rsvp_deadline) < new Date() : false
+    const publicPayload = buildPublicEventPayload(event)
 
     return NextResponse.json({
       event: {
-        id: event.id,
-        title: event.title,
-        date: event.date,
-        time: event.time,
-        startDate: event.start_date,
-        startTime: event.start_time,
-        endDate: event.end_date,
-        endTime: event.end_time,
-        location: event.location,
-        address: event.address,
-        mapsUrl: event.maps_url,
-        eventMode: event.event_mode,
-        meetingUrl: event.meeting_url,
-        description: event.description,
-        rsvpDeadline: event.rsvp_deadline,
-        rsvpEnabled: event.rsvp_enabled,
-        invitationMessage: event.invitation_message,
-        allowCompanions: event.allow_companions,
-        maxCompanions: event.max_companions,
+        ...publicPayload,
         autoApprovePublicGuests: event.auto_approve_public_guests,
       },
       expired,
@@ -72,11 +59,10 @@ export async function POST(
   try {
     const { token } = await params
 
-    if (!token || typeof token !== "string" || token.trim().length === 0) {
+    if (!isSafeToken(token)) {
       return NextResponse.json({ error: "Token de convite inválido" }, { status: 400 })
     }
 
-    // 1. Validação estrita do payload usando Zod
     const rawBody = await request.json().catch(() => null)
     if (!rawBody) {
       return NextResponse.json({ error: "Corpo da requisição inválido" }, { status: 400 })
@@ -101,32 +87,34 @@ export async function POST(
 
     const supabase = createAdminClient()
 
-    // 2. Consulta do evento associado ao token público
     const { data: event, error: eventError } = await supabase
       .from("events")
       .select(
-        "id, public_invite_enabled, rsvp_deadline, allow_companions, max_companions, auto_approve_public_guests, rsvp_enabled"
+        "id, public_invite_enabled, rsvp_deadline, allow_companions, max_companions, auto_approve_public_guests, companions_require_approval, rsvp_enabled"
       )
       .eq("public_invite_token", token.trim())
-      .single()
+      .maybeSingle()
 
     if (eventError || !event || !event.public_invite_enabled) {
-      return NextResponse.json({ error: "Convite público não encontrado ou desativado" }, { status: 404 })
+      return NextResponse.json(
+        { error: "Este convite não é mais válido ou foi desativado" },
+        { status: 404 }
+      )
     }
 
-    // Check se confirmações RSVP estão ativas para este evento
     if (event.rsvp_enabled === false) {
-      return NextResponse.json({ error: "As confirmações de presença para este evento estão desativadas" }, { status: 400 })
+      return NextResponse.json(
+        { error: "As confirmações de presença para este evento estão desativadas" },
+        { status: 400 }
+      )
     }
 
-    // 3. Validação de prazo expirado
     if (event.rsvp_deadline && new Date(event.rsvp_deadline) < new Date()) {
       return NextResponse.json({ error: "O prazo para confirmação de presença expirou" }, { status: 400 })
     }
 
-    // 4. Validação de acompanhantes e remoção de duplicados na mesma submissão
     const willAttend = attendanceStatus !== "declined"
-    const uniqueCompanionsMap = new Map<string, typeof companions[0]>()
+    const uniqueCompanionsMap = new Map<string, (typeof companions)[0]>()
     if (willAttend && Array.isArray(companions)) {
       companions.forEach((c) => {
         const key = c.name.trim().toLowerCase()
@@ -148,7 +136,6 @@ export async function POST(
       )
     }
 
-    // 5. Prevenção de duplicidade por e-mail no mesmo evento
     const normalizedEmail = normalizeEmail(email)
     const { data: existingGuest } = await supabase
       .from("guests")
@@ -164,11 +151,10 @@ export async function POST(
       )
     }
 
-    // 6. Inserção controlada do convidado com atribuição estrita de colunas
     const now = new Date().toISOString()
     const autoApproved = Boolean(event.auto_approve_public_guests)
     const guestStatus = willAttend ? (autoApproved ? "confirmed" : "awaiting_approval") : "declined"
-    const guestToken = guestStatus === "confirmed" ? crypto.randomUUID() : null
+    const guestToken = guestStatus === "confirmed" ? generateSecureToken(16) : null
 
     const { data: guest, error: guestError } = await supabase
       .from("guests")
@@ -198,9 +184,10 @@ export async function POST(
       return NextResponse.json({ error: "Erro ao registrar confirmação" }, { status: 500 })
     }
 
-    // 7. Inserção controlada dos acompanhantes (se aplicável)
+    // RN-009: Acompanhantes permanecem pendentes de aprovação do organizador quando exigido
     if (requestedCompanions.length > 0) {
-      const companionStatus = autoApproved ? "approved" : "awaiting_approval"
+      const companionAutoApproved = autoApproved && !event.companions_require_approval
+      const companionStatus = companionAutoApproved ? "approved" : "awaiting_approval"
       const companionsToInsert = requestedCompanions.map((companion) => ({
         guest_id: guest.id,
         name: companion.name,
@@ -208,7 +195,7 @@ export async function POST(
         phone: companion.phone || null,
         notes: companion.notes || null,
         status: companionStatus,
-        approved_at: autoApproved ? now : null,
+        approved_at: companionAutoApproved ? now : null,
       }))
 
       const { error: companionsError } = await supabase

@@ -1,5 +1,7 @@
+import { generateSecureToken, isUuid } from "@/lib/domain/business-rules"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
+import { publicLinkSettingsSchema } from "@/lib/validation"
 import { NextRequest, NextResponse } from "next/server"
 
 type EventSnapshot = {
@@ -19,10 +21,6 @@ type EventSnapshot = {
 function buildPublicUrl(request: NextRequest, token: string) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
   return `${appUrl}/convite/${token}`
-}
-
-function isUuid(value: string) {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
 function publicInviteColumnsMissing(error: { code?: string; message?: string } | null) {
@@ -56,7 +54,8 @@ async function getAuthenticatedUser() {
 }
 
 async function findEvent(admin: ReturnType<typeof createAdminClient>, eventId: string, userId: string) {
-  const baseSelect = "id, user_id, public_invite_token, public_invite_enabled"
+  const baseSelect =
+    "id, user_id, public_invite_token, public_invite_enabled, auto_approve_public_guests, allow_companions, max_companions, rsvp_deadline"
 
   if (isUuid(eventId)) {
     const result = await admin
@@ -107,7 +106,7 @@ async function createEventFromSnapshot(
       total_guests: snapshot.totalGuests || 0,
       metadata: { local_event_id: eventId },
     })
-    .select("id, user_id, public_invite_token, public_invite_enabled")
+    .select("id, user_id, public_invite_token, public_invite_enabled, auto_approve_public_guests, allow_companions, max_companions, rsvp_deadline")
     .single()
 
   if (publicInviteColumnsMissing(error)) throw new Error("PUBLIC_INVITE_COLUMNS_MISSING")
@@ -135,6 +134,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({
       token: event.public_invite_token,
       enabled: event.public_invite_enabled,
+      autoApprove: event.auto_approve_public_guests,
+      allowCompanions: event.allow_companions,
+      maxCompanions: event.max_companions,
+      rsvpDeadline: event.rsvp_deadline,
       url: event.public_invite_token ? buildPublicUrl(request, event.public_invite_token) : null,
     })
   } catch (error) {
@@ -169,7 +172,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       )
     }
 
-    const token = event.public_invite_token || crypto.randomUUID()
+    const token = body.regenerateToken || !event.public_invite_token ? generateSecureToken(16) : event.public_invite_token
     const { data: updated, error: updateError } = await admin
       .from("events")
       .update({
@@ -178,7 +181,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       })
       .eq("id", event.id)
       .eq("user_id", user.id)
-      .select("public_invite_token, public_invite_enabled")
+      .select("public_invite_token, public_invite_enabled, auto_approve_public_guests")
       .single()
 
     if (publicInviteColumnsMissing(updateError)) return migrationError()
@@ -187,7 +190,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     return NextResponse.json({
       token: updated.public_invite_token,
       enabled: updated.public_invite_enabled,
-      url: buildPublicUrl(request, updated.public_invite_token),
+      autoApprove: updated.auto_approve_public_guests,
+      url: buildPublicUrl(request, updated.public_invite_token!),
     })
   } catch (error) {
     if (error instanceof Error && error.message === "PUBLIC_INVITE_COLUMNS_MISSING") return migrationError()
@@ -200,7 +204,17 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ eventId: string }> }) {
   try {
     const { eventId } = await params
-    const { enabled } = await request.json()
+    const rawBody = await request.json().catch(() => null)
+    const parsed = publicLinkSettingsSchema.safeParse(rawBody)
+
+    if (!parsed.success) {
+      return NextResponse.json(
+        { error: parsed.error.issues[0]?.message || "Configurações de link público inválidas" },
+        { status: 400 }
+      )
+    }
+
+    const settings = parsed.data
     const user = await getAuthenticatedUser()
 
     if (!user) {
@@ -214,12 +228,24 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return NextResponse.json({ error: "Evento não encontrado no Supabase" }, { status: 404 })
     }
 
+    const updatePayload: Record<string, any> = {}
+    if (settings.enabled !== undefined) updatePayload.public_invite_enabled = settings.enabled
+    if (settings.autoApprove !== undefined) updatePayload.auto_approve_public_guests = settings.autoApprove
+    if (settings.allowCompanions !== undefined) updatePayload.allow_companions = settings.allowCompanions
+    if (settings.maxCompanions !== undefined) updatePayload.max_companions = settings.maxCompanions
+    if (settings.rsvpDeadline !== undefined) updatePayload.rsvp_deadline = settings.rsvpDeadline
+    if (settings.regenerateToken) {
+      updatePayload.public_invite_token = generateSecureToken(16)
+    } else if (settings.enabled && !event.public_invite_token) {
+      updatePayload.public_invite_token = generateSecureToken(16)
+    }
+
     const { data: updated, error } = await admin
       .from("events")
-      .update({ public_invite_enabled: Boolean(enabled) })
+      .update(updatePayload)
       .eq("id", event.id)
       .eq("user_id", user.id)
-      .select("public_invite_token, public_invite_enabled")
+      .select("public_invite_token, public_invite_enabled, auto_approve_public_guests")
       .single()
 
     if (publicInviteColumnsMissing(error)) return migrationError()
@@ -230,6 +256,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     return NextResponse.json({
       token: updated.public_invite_token,
       enabled: updated.public_invite_enabled,
+      autoApprove: updated.auto_approve_public_guests,
       url: updated.public_invite_token ? buildPublicUrl(request, updated.public_invite_token) : null,
     })
   } catch (error) {

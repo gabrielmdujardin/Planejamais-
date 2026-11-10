@@ -1,7 +1,5 @@
 import { createClient } from "@supabase/supabase-js"
 
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
-
 export interface JobRun {
   id: string
   job_name: string
@@ -25,6 +23,7 @@ export interface JobLog {
 export class JobQueue {
   private static instance: JobQueue
   private runningJobs = new Set<string>()
+  private customClient: any = null
 
   static getInstance(): JobQueue {
     if (!JobQueue.instance) {
@@ -33,16 +32,43 @@ export class JobQueue {
     return JobQueue.instance
   }
 
+  setClient(client: any): void {
+    this.customClient = client
+  }
+
+  getClient(): any {
+    if (this.customClient) {
+      return this.customClient
+    }
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      throw new Error("Missing Supabase environment variables for JobQueue")
+    }
+
+    return createClient(supabaseUrl, serviceRoleKey, {
+      auth: {
+        autoRefreshToken: false,
+        persistSession: false,
+      },
+    })
+  }
+
   async startJob(jobName: string, metadata: Record<string, any> = {}): Promise<string> {
     if (this.runningJobs.has(jobName)) {
       throw new Error(`Job ${jobName} is already running`)
     }
 
+    const supabase = this.getClient()
+    const startedAt = new Date().toISOString()
     const { data, error } = await supabase
       .from("job_runs")
       .insert({
         job_name: jobName,
         status: "running",
+        started_at: startedAt,
         metadata,
       })
       .select()
@@ -55,10 +81,15 @@ export class JobQueue {
   }
 
   async completeJob(jobRunId: string, success = true, errorMessage?: string): Promise<void> {
-    const { data: jobRun } = await supabase.from("job_runs").select("job_name, started_at").eq("id", jobRunId).single()
+    const supabase = this.getClient()
+    const { data: jobRun } = await supabase
+      .from("job_runs")
+      .select("job_name, started_at")
+      .eq("id", jobRunId)
+      .single()
 
     if (jobRun) {
-      const duration = Date.now() - new Date(jobRun.started_at).getTime()
+      const duration = Math.max(0, Date.now() - new Date(jobRun.started_at).getTime())
 
       await supabase
         .from("job_runs")
@@ -66,7 +97,7 @@ export class JobQueue {
           status: success ? "completed" : "failed",
           completed_at: new Date().toISOString(),
           duration_ms: duration,
-          error_message: errorMessage,
+          error_message: errorMessage || null,
         })
         .eq("id", jobRunId)
 
@@ -78,8 +109,9 @@ export class JobQueue {
     jobRunId: string,
     level: "info" | "warn" | "error",
     message: string,
-    metadata: Record<string, any> = {},
+    metadata: Record<string, any> = {}
   ): Promise<void> {
+    const supabase = this.getClient()
     await supabase.from("job_logs").insert({
       job_run_id: jobRunId,
       level,
@@ -89,6 +121,7 @@ export class JobQueue {
   }
 
   async getRecentJobs(limit = 50): Promise<JobRun[]> {
+    const supabase = this.getClient()
     const { data, error } = await supabase
       .from("job_runs")
       .select("*")
@@ -100,6 +133,7 @@ export class JobQueue {
   }
 
   async getJobLogs(jobRunId: string): Promise<JobLog[]> {
+    const supabase = this.getClient()
     const { data, error } = await supabase
       .from("job_logs")
       .select("*")

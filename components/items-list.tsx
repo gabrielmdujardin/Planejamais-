@@ -8,6 +8,8 @@ import { MoreHorizontal, Trash2, Edit, User, Users, ImageIcon, Receipt } from "l
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
+import { useAuth } from "@/context/auth-context"
+import { deleteEventItemAction } from "@/app/actions/items"
 import { useState } from "react"
 import EditItemDialog from "@/components/edit-item-dialog"
 import AssignPersonDialog from "@/components/assign-person-dialog"
@@ -43,6 +45,7 @@ interface ItemsListProps {
 
 export default function ItemsList({ items, eventId }: ItemsListProps) {
   const { toast } = useToast()
+  const { isDemoMode } = useAuth()
   const { removeItem } = useEventStore()
   const [editingItem, setEditingItem] = useState<Item | null>(null)
   const [assigningItem, setAssigningItem] = useState<Item | null>(null)
@@ -61,12 +64,26 @@ export default function ItemsList({ items, eventId }: ItemsListProps) {
     setIsAssignDialogOpen(true)
   }
 
-  const handleRemoveItem = (item: Item) => {
-    removeItem(eventId, item.id)
-    toast({
-      title: "Item removido",
-      description: `O item ${item.name} foi removido.`,
-    })
+  const handleRemoveItem = async (item: Item) => {
+    try {
+      if (!isDemoMode) {
+        const res = await deleteEventItemAction(eventId, item.id)
+        if (!res.success && res.error) {
+          throw new Error(res.error)
+        }
+      }
+      removeItem(eventId, item.id)
+      toast({
+        title: "Item removido",
+        description: `O item ${item.name} foi removido.`,
+      })
+    } catch (error) {
+      toast({
+        title: "Erro ao remover item",
+        description: error instanceof Error ? error.message : "Não foi possível remover o item.",
+        variant: "destructive",
+      })
+    }
   }
 
   const handleViewImage = (imageUrl: string) => {

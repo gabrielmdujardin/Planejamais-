@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { X } from "lucide-react"
+import { updateEventItemAction } from "@/app/actions/items"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -13,10 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useAuth } from "@/context/auth-context"
 import { useToast } from "@/hooks/use-toast"
+import { useContactStore } from "@/stores/contact-store"
 import { useEventStore } from "@/stores/event-store"
-import { Badge } from "@/components/ui/badge"
-import { X } from "lucide-react"
 
 interface Person {
   id: string
@@ -43,21 +46,25 @@ export default function AssignPersonDialog({ open, onOpenChange, item, eventId }
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { toast } = useToast()
+  const { isDemoMode } = useAuth()
   const { getEventById, updateItem } = useEventStore()
+  const { contacts, initializeData } = useContactStore()
   const event = getEventById(eventId)
 
-  // Carregar pessoas já atribuídas quando o diálogo for aberto
   useEffect(() => {
+    if (open) {
+      initializeData()
+    }
     if (item && open) {
       setSelectedPersons(item.assignedTo || [])
     }
-  }, [item, open])
+  }, [initializeData, item, open])
 
   const handleAddPerson = () => {
     if (!newPersonName.trim()) return
 
     const newPerson: Person = {
-      id: Date.now().toString(),
+      id: `free-${Date.now()}`,
       name: newPersonName.trim(),
     }
 
@@ -69,26 +76,33 @@ export default function AssignPersonDialog({ open, onOpenChange, item, eventId }
     setSelectedPersons(selectedPersons.filter((p) => p.id !== personId))
   }
 
-  const handleSelectGuest = (guest: any) => {
-    const isAlreadySelected = selectedPersons.some((p) => p.id === guest.id)
+  const handleTogglePerson = (person: { id: string; name: string }) => {
+    const isAlreadySelected = selectedPersons.some((p) => p.id === person.id)
 
     if (isAlreadySelected) {
-      setSelectedPersons(selectedPersons.filter((p) => p.id !== guest.id))
+      setSelectedPersons(selectedPersons.filter((p) => p.id !== person.id))
     } else {
-      setSelectedPersons([...selectedPersons, { id: guest.id, name: guest.name }])
+      setSelectedPersons([...selectedPersons, { id: person.id, name: person.name }])
     }
   }
 
-  const handleSaveAssignments = () => {
+  const handleSaveAssignments = async () => {
     if (!item) return
 
     setIsSubmitting(true)
 
     try {
-      // Atualizar item com as pessoas atribuídas
+      const assignedTo = selectedPersons.length > 0 ? selectedPersons : null
       const updatedItem = {
         ...item,
-        assignedTo: selectedPersons.length > 0 ? selectedPersons : null,
+        assignedTo,
+      }
+
+      if (!isDemoMode) {
+        const res = await updateEventItemAction(eventId, item.id, { assignedTo })
+        if (res.error) {
+          throw new Error(res.error)
+        }
       }
 
       updateItem(eventId, item.id, updatedItem)
@@ -101,7 +115,7 @@ export default function AssignPersonDialog({ open, onOpenChange, item, eventId }
     } catch (error) {
       toast({
         title: "Erro ao atribuir responsáveis",
-        description: "Ocorreu um erro ao atribuir os responsáveis. Tente novamente.",
+        description: error instanceof Error ? error.message : "Ocorreu um erro ao atribuir os responsáveis.",
         variant: "destructive",
       })
     } finally {
@@ -111,11 +125,11 @@ export default function AssignPersonDialog({ open, onOpenChange, item, eventId }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-md max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Atribuir responsáveis</DialogTitle>
           <DialogDescription>
-            {item ? `Atribua responsáveis para o item "${item.name}".` : "Atribua responsáveis para o item."}
+            {item ? `Atribua convidados, contatos ou nomes livres ao item "${item.name}".` : "Atribua responsáveis."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
@@ -144,7 +158,7 @@ export default function AssignPersonDialog({ open, onOpenChange, item, eventId }
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="new-person">Adicionar novo responsável</Label>
+            <Label htmlFor="new-person">Digitar nome livremente</Label>
             <div className="flex gap-2">
               <Input
                 id="new-person"
@@ -171,20 +185,43 @@ export default function AssignPersonDialog({ open, onOpenChange, item, eventId }
 
           {event?.guests && event.guests.length > 0 && (
             <div className="space-y-2">
-              <Label>Selecionar dos convidados</Label>
-              <div className="border rounded-md max-h-40 overflow-y-auto">
+              <Label>Selecionar dos convidados do evento</Label>
+              <div className="border rounded-md max-h-36 overflow-y-auto">
                 {event.guests.map((guest) => (
                   <div key={guest.id} className="flex items-center space-x-2 p-2 border-b last:border-0">
                     <Checkbox
                       id={`guest-${guest.id}`}
                       checked={selectedPersons.some((p) => p.id === guest.id)}
-                      onCheckedChange={() => handleSelectGuest(guest)}
+                      onCheckedChange={() => handleTogglePerson({ id: guest.id, name: guest.name })}
                     />
                     <Label htmlFor={`guest-${guest.id}`} className="flex-1 cursor-pointer">
                       {guest.name}
                     </Label>
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {contacts.length > 0 && (
+            <div className="space-y-2">
+              <Label>Selecionar da agenda de contatos</Label>
+              <div className="border rounded-md max-h-36 overflow-y-auto">
+                {contacts.map((contact) => {
+                  const contactKey = `contact-${contact.id}`
+                  return (
+                    <div key={contactKey} className="flex items-center space-x-2 p-2 border-b last:border-0">
+                      <Checkbox
+                        id={contactKey}
+                        checked={selectedPersons.some((p) => p.id === contactKey)}
+                        onCheckedChange={() => handleTogglePerson({ id: contactKey, name: contact.name })}
+                      />
+                      <Label htmlFor={contactKey} className="flex-1 cursor-pointer">
+                        {contact.name}
+                      </Label>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           )}

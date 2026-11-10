@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { updateEventItemAction } from "@/app/actions/items"
+import ImageUpload from "@/components/image-upload"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Dialog,
   DialogContent,
@@ -12,9 +12,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { useAuth } from "@/context/auth-context"
 import { useToast } from "@/hooks/use-toast"
 import { useEventStore } from "@/stores/event-store"
-import ImageUpload from "@/components/image-upload"
 
 interface Person {
   id: string
@@ -62,9 +64,9 @@ export default function EditItemDialog({ open, onOpenChange, item, eventId }: Ed
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   const { toast } = useToast()
+  const { isDemoMode } = useAuth()
   const { updateItem } = useEventStore()
 
-  // Carregar dados do item quando o diálogo for aberto
   useEffect(() => {
     if (item && open) {
       setItemName(item.name || "")
@@ -74,19 +76,18 @@ export default function EditItemDialog({ open, onOpenChange, item, eventId }: Ed
       setDueDate(item.dueDate || "")
       setInvoiceNumber(item.invoiceNumber || "")
       setQuantity(item.quantity ? String(item.quantity) : "1")
-      setUnitPrice(item.unitPrice ? String(item.unitPrice) : (item.price ? String(item.price) : ""))
-      setItemPrice(item.price ? String(item.price) : "")
+      setUnitPrice(item.unitPrice !== undefined ? String(item.unitPrice) : item.price !== undefined ? String(item.price) : "")
+      setItemPrice(item.price !== undefined ? String(item.price) : "")
       setItemImage(item.image || "")
       setNotes(item.notes || "")
     }
   }, [item, open])
 
-  // Recalcular preço total quando quantidade ou valor unitário mudar
   const handleUnitPriceChange = (val: string) => {
     setUnitPrice(val)
     const q = Number(quantity.replace(",", ".")) || 1
-    const u = Number(val.replace(",", ".")) || 0
-    if (u > 0) {
+    const u = val.trim() === "" ? 0 : Number(val.replace(",", "."))
+    if (Number.isFinite(u) && u >= 0) {
       setItemPrice((q * u).toFixed(2))
     }
   }
@@ -94,13 +95,13 @@ export default function EditItemDialog({ open, onOpenChange, item, eventId }: Ed
   const handleQuantityChange = (val: string) => {
     setQuantity(val)
     const q = Number(val.replace(",", ".")) || 1
-    const u = Number(unitPrice.replace(",", ".")) || 0
-    if (u > 0) {
+    const u = unitPrice.trim() === "" ? 0 : Number(unitPrice.replace(",", "."))
+    if (Number.isFinite(u) && u >= 0) {
       setItemPrice((q * u).toFixed(2))
     }
   }
 
-  const handleUpdateItem = () => {
+  const handleUpdateItem = async () => {
     if (!item) return
 
     if (!itemName.trim()) {
@@ -112,18 +113,21 @@ export default function EditItemDialog({ open, onOpenChange, item, eventId }: Ed
       return
     }
 
-    const price = Number.parseFloat(itemPrice.replace(",", "."))
-    if (isNaN(price) || price < 0) {
+    const price = itemPrice.trim() === "" ? 0 : Number.parseFloat(itemPrice.replace(",", "."))
+    if (Number.isNaN(price) || price < 0) {
       toast({
         title: "Valor inválido",
-        description: "Por favor, informe um valor válido para o item.",
+        description: "O valor do item não pode ser negativo.",
         variant: "destructive",
       })
       return
     }
 
     const parsedQty = Number.parseFloat(quantity.replace(",", ".")) || 1
-    const parsedUnitPrice = Number.parseFloat(unitPrice.replace(",", ".")) || (price / parsedQty)
+    const parsedUnitPrice =
+      unitPrice.trim() === ""
+        ? price / parsedQty
+        : Number.parseFloat(unitPrice.replace(",", ".")) || price / parsedQty
 
     setIsSubmitting(true)
 
@@ -131,7 +135,7 @@ export default function EditItemDialog({ open, onOpenChange, item, eventId }: Ed
       const updatedItem: Item = {
         ...item,
         name: itemName.trim(),
-        category: category.trim() || undefined,
+        category: category.trim() || "Geral",
         supplier: supplier.trim() || undefined,
         paymentStatus,
         dueDate: dueDate || undefined,
@@ -144,17 +148,43 @@ export default function EditItemDialog({ open, onOpenChange, item, eventId }: Ed
         image: itemImage || null,
       }
 
-      updateItem(eventId, item.id, updatedItem)
+      if (!isDemoMode) {
+        const res = await updateEventItemAction(eventId, item.id, {
+          name: updatedItem.name,
+          category: updatedItem.category,
+          supplier: updatedItem.supplier || "",
+          paymentStatus: updatedItem.paymentStatus,
+          dueDate: updatedItem.dueDate || "",
+          invoiceNumber: updatedItem.invoiceNumber || "",
+          quantity: updatedItem.quantity,
+          unitPrice: updatedItem.unitPrice,
+          price: updatedItem.price,
+          notes: updatedItem.notes || "",
+          image: updatedItem.image,
+          assignedTo: updatedItem.assignedTo,
+        })
+        if (res.error) {
+          throw new Error(res.error)
+        }
+        if (res.data) {
+          updateItem(eventId, item.id, { ...updatedItem, ...res.data })
+        } else {
+          updateItem(eventId, item.id, updatedItem)
+        }
+      } else {
+        updateItem(eventId, item.id, updatedItem)
+      }
+
       onOpenChange(false)
 
       toast({
         title: "Item atualizado",
         description: `${itemName} foi atualizado com sucesso.`,
       })
-    } catch {
+    } catch (error) {
       toast({
         title: "Erro ao atualizar item",
-        description: "Ocorreu um erro ao atualizar o item. Tente novamente.",
+        description: error instanceof Error ? error.message : "Ocorreu um erro ao atualizar o item. Tente novamente.",
         variant: "destructive",
       })
     } finally {
@@ -245,7 +275,7 @@ export default function EditItemDialog({ open, onOpenChange, item, eventId }: Ed
               <Input
                 id="edit-item-quantity"
                 type="number"
-                min="0"
+                min="0.01"
                 step="0.01"
                 value={quantity}
                 onChange={(e) => handleQuantityChange(e.target.value)}
@@ -256,17 +286,17 @@ export default function EditItemDialog({ open, onOpenChange, item, eventId }: Ed
               <Label htmlFor="edit-item-unitprice">Valor Unitário (R$)</Label>
               <Input
                 id="edit-item-unitprice"
-                placeholder="Ex: 150,00"
+                placeholder="0,00"
                 value={unitPrice}
                 onChange={(e) => handleUnitPriceChange(e.target.value)}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="edit-item-price">Valor Total (R$) *</Label>
+              <Label htmlFor="edit-item-price">Valor Total (R$)</Label>
               <Input
                 id="edit-item-price"
-                placeholder="Ex: 150,00"
+                placeholder="0,00"
                 value={itemPrice}
                 onChange={(e) => setItemPrice(e.target.value)}
               />

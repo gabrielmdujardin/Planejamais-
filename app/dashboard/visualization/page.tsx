@@ -17,7 +17,7 @@ import { useToast } from "@/hooks/use-toast"
 const COLORS = ["#10b981", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899"]
 
 export default function VisualizationPage() {
-  const [selectedTypes, setSelectedTypes] = useState<string[]>(["Festa", "Colaborativo"])
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([])
   const [selectedCategories, setSelectedCategories] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(false)
   const [activeTab, setActiveTab] = useState("geral")
@@ -59,6 +59,14 @@ export default function VisualizationPage() {
     loadEvents()
   }, [setEvents, toast])
 
+  const allTypes = useMemo(() => {
+    const types = Array.from(new Set(events.map((e) => e.type || "Outro")))
+    if (selectedTypes.length === 0 && types.length > 0) {
+      setSelectedTypes(types)
+    }
+    return types
+  }, [events, selectedTypes.length])
+
   // Extrair categorias únicas dos eventos
   const allCategories = useMemo(() => {
     const cats = events.map((e) => e.category || "Sem categoria")
@@ -70,13 +78,13 @@ export default function VisualizationPage() {
     }
 
     return uniqueCats
-  }, [events])
+  }, [events, selectedCategories.length])
 
   // Filtrar eventos
   const filteredEvents = useMemo(() => {
     return events.filter((event) => {
-      const typeMatch = selectedTypes.includes(event.type)
-      const categoryMatch = selectedCategories.includes(event.category || "Sem categoria")
+      const typeMatch = selectedTypes.length === 0 || selectedTypes.includes(event.type || "Outro")
+      const categoryMatch = selectedCategories.length === 0 || selectedCategories.includes(event.category || "Sem categoria")
       return typeMatch && categoryMatch
     })
   }, [events, selectedTypes, selectedCategories])
@@ -160,6 +168,7 @@ export default function VisualizationPage() {
   const guestsByEvent = useMemo(() => {
     return filteredEvents.slice(0, 10).map((event) => ({
       name: event.title.length > 20 ? event.title.substring(0, 20) + "..." : event.title,
+      value: event.confirmedGuests,
       total: event.totalGuests,
       confirmados: event.confirmedGuests,
     }))
@@ -182,7 +191,7 @@ export default function VisualizationPage() {
   }
 
   const clearFilters = () => {
-    setSelectedTypes(["Festa", "Colaborativo"])
+    setSelectedTypes(allTypes)
     setSelectedCategories(allCategories)
   }
 
@@ -243,7 +252,7 @@ export default function VisualizationPage() {
               <div className="space-y-3">
                 <Label className="text-base font-semibold">Tipo de Evento</Label>
                 <div className="space-y-2">
-                  {["Festa", "Colaborativo"].map((type) => (
+                  {allTypes.map((type) => (
                     <div key={type} className="flex items-center space-x-2">
                       <Checkbox
                         id={`type-${type}`}

@@ -3,27 +3,27 @@
 import { useEffect, useMemo, useState } from "react"
 import { useParams } from "next/navigation"
 import {
+  AlertCircle,
   Calendar,
+  Check,
   CheckCircle2,
   Clock,
+  Copy,
   MapPin,
-  Share2,
+  Search,
   Users,
   UtensilsCrossed,
   XCircle,
-  Copy,
-  Check,
-  Search,
 } from "lucide-react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Card, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { useToast } from "@/hooks/use-toast"
-import { useEventStore } from "@/stores/event-store"
+import { calculateConfirmedParticipants, filterEffectiveGuests } from "@/lib/domain/business-rules"
 import { getEventTerminology } from "@/lib/terminology"
-import { getEventById as fetchEventById } from "@/app/actions/events"
+import { useEventStore } from "@/stores/event-store"
 
 export default function HostViewPage() {
   const params = useParams()
@@ -31,6 +31,7 @@ export default function HostViewPage() {
   const { getEventById } = useEventStore()
   const storedEvent = getEventById(eventId)
   const [remoteEvent, setRemoteEvent] = useState<any | null>(null)
+  const [accessError, setAccessError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [copied, setCopied] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
@@ -42,16 +43,38 @@ export default function HostViewPage() {
     let active = true
 
     async function load() {
-      if (storedEvent) {
+      const urlToken =
+        typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("token") || "" : ""
+
+      if (storedEvent && !urlToken) {
         setIsLoading(false)
         return
       }
 
-      const res = await fetchEventById(eventId)
-      if (active && res.data) {
-        setRemoteEvent(res.data)
+      try {
+        const res = await fetch(
+          `/api/events/${encodeURIComponent(eventId)}/host-view?token=${encodeURIComponent(urlToken)}`,
+          { cache: "no-store" }
+        )
+        const payload = await res.json().catch(() => null)
+        if (!active) return
+
+        if (res.ok && payload?.event) {
+          setRemoteEvent(payload.event)
+          setAccessError(null)
+        } else if (!storedEvent) {
+          setAccessError(
+            payload?.error ||
+              "Link do painel do anfitrião inválido ou expirado. Solicite um novo link de leitura ao organizador."
+          )
+        }
+      } catch {
+        if (active && !storedEvent) {
+          setAccessError("Não foi possível carregar o painel do anfitrião neste momento.")
+        }
+      } finally {
+        if (active) setIsLoading(false)
       }
-      setIsLoading(false)
     }
 
     load()
@@ -65,12 +88,13 @@ export default function HostViewPage() {
   }, [event?.type])
 
   const stats = useMemo(() => {
-    const guests = event?.guests || []
+    const rawGuests = event?.guests || []
+    const guests = filterEffectiveGuests(rawGuests)
     const confirmed = guests.filter((g: any) => g.status === "confirmed")
     const pending = guests.filter((g: any) => g.status === "pending")
     const declined = guests.filter((g: any) => g.status === "declined" || g.status === "rejected")
+    const confirmedParticipants = calculateConfirmedParticipants(guests)
 
-    // Calcular restrições alimentares
     const dietaryMap: Record<string, number> = {}
     guests.forEach((g: any) => {
       const rest = g.dietary_restrictions || g.dietaryRestrictions
@@ -85,12 +109,12 @@ export default function HostViewPage() {
     })
 
     const total = guests.length || event?.totalGuests || 0
-    const rate = total > 0 ? Math.round((confirmed.length / total) * 100) : 0
+    const rate = total > 0 ? Math.min(100, Math.round((confirmed.length / total) * 100)) : 0
 
     return {
       total,
       confirmedList: confirmed,
-      confirmedCount: confirmed.length,
+      confirmedCount: confirmedParticipants || confirmed.length,
       pendingCount: pending.length,
       declinedCount: declined.length,
       rate,
@@ -118,7 +142,7 @@ export default function HostViewPage() {
     }
   }
 
-  if (isLoading || !event) {
+  if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-4">
         <div className="text-center space-y-3">
@@ -129,16 +153,34 @@ export default function HostViewPage() {
     )
   }
 
+  if (!event) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="max-w-md w-full p-6 text-center space-y-3">
+          <div className="mx-auto w-12 h-12 rounded-full bg-destructive/10 flex items-center justify-center">
+            <AlertCircle className="h-6 w-6 text-destructive" />
+          </div>
+          <h1 className="text-lg font-semibold text-foreground">Acesso Restrito ao Painel do Anfitrião</h1>
+          <p className="text-sm text-muted-foreground">
+            {accessError || "Este painel somente leitura requer um link válido gerado pelo organizador do evento."}
+          </p>
+        </Card>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950/50">
-      {/* Header Fixo de Modo Leitura */}
       <div className="border-b bg-background/80 backdrop-blur sticky top-0 z-20">
         <div className="container mx-auto max-w-5xl px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Badge variant="outline" className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20">
+            <Badge
+              variant="outline"
+              className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20"
+            >
               Modo Visualização do Anfitrião
             </Badge>
-            <span className="text-xs text-muted-foreground hidden sm:inline">Acompanhamento em tempo real</span>
+            <span className="text-xs text-muted-foreground hidden sm:inline">Acompanhamento somente leitura</span>
           </div>
           <Button variant="outline" size="sm" onClick={handleCopyLink} className="gap-1.5 text-xs">
             {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
@@ -148,7 +190,6 @@ export default function HostViewPage() {
       </div>
 
       <div className="container mx-auto max-w-5xl px-4 py-8 space-y-6">
-        {/* Banner do Evento */}
         <div className="rounded-xl border bg-card p-6 shadow-sm">
           <div className="space-y-3">
             <div className="flex flex-wrap gap-2 items-center">
@@ -161,7 +202,9 @@ export default function HostViewPage() {
             <div className="flex flex-wrap gap-4 pt-2 text-xs sm:text-sm text-muted-foreground border-t border-border/60">
               <div className="flex items-center gap-1.5">
                 <Calendar className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                <span>{event.date} {event.time ? `às ${event.time}` : ""}</span>
+                <span>
+                  {event.date} {event.time ? `às ${event.time}` : ""}
+                </span>
               </div>
               <div className="flex items-center gap-1.5">
                 <MapPin className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -171,7 +214,6 @@ export default function HostViewPage() {
           </div>
         </div>
 
-        {/* Métricas Principais */}
         <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
           <Card className="p-4 flex flex-col justify-between">
             <span className="text-xs text-muted-foreground">Total de {terminology.guestsLabel}</span>
@@ -184,7 +226,9 @@ export default function HostViewPage() {
           <Card className="p-4 flex flex-col justify-between border-emerald-500/20 bg-emerald-500/5">
             <span className="text-xs text-emerald-800 dark:text-emerald-300 font-medium">Confirmados</span>
             <div className="flex items-baseline justify-between mt-2">
-              <span className="text-2xl sm:text-3xl font-bold text-emerald-700 dark:text-emerald-400">{stats.confirmedCount}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-emerald-700 dark:text-emerald-400">
+                {stats.confirmedCount}
+              </span>
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             </div>
           </Card>
@@ -192,7 +236,9 @@ export default function HostViewPage() {
           <Card className="p-4 flex flex-col justify-between border-amber-500/20 bg-amber-500/5">
             <span className="text-xs text-amber-800 dark:text-amber-300 font-medium">Aguardando Resposta</span>
             <div className="flex items-baseline justify-between mt-2">
-              <span className="text-2xl sm:text-3xl font-bold text-amber-700 dark:text-amber-400">{stats.pendingCount}</span>
+              <span className="text-2xl sm:text-3xl font-bold text-amber-700 dark:text-amber-400">
+                {stats.pendingCount}
+              </span>
               <Clock className="h-4 w-4 text-amber-600" />
             </div>
           </Card>
@@ -206,7 +252,6 @@ export default function HostViewPage() {
           </Card>
         </div>
 
-        {/* Barra de Progresso de RSVP */}
         <Card className="p-5">
           <div className="flex items-center justify-between text-sm mb-2">
             <span className="font-medium text-foreground">Taxa de Confirmação de Presença</span>
@@ -214,11 +259,10 @@ export default function HostViewPage() {
           </div>
           <Progress value={stats.rate} className="h-2.5" />
           <p className="text-xs text-muted-foreground mt-2">
-            {stats.confirmedCount} de {stats.total} {terminology.guestsLabel.toLowerCase()} com presença garantida.
+            {stats.confirmedCount} participante(s) confirmado(s) entre titulares e acompanhantes aprovados.
           </p>
         </Card>
 
-        {/* Relatório de Restrições Alimentares (Buffet) */}
         {Object.keys(stats.dietaryMap).length > 0 && (
           <Card className="p-5">
             <CardHeader className="p-0 pb-3 flex flex-row items-center gap-2">
@@ -227,7 +271,10 @@ export default function HostViewPage() {
             </CardHeader>
             <div className="flex flex-wrap gap-2 pt-1">
               {Object.entries(stats.dietaryMap).map(([restriction, count]) => (
-                <div key={restriction} className="flex items-center gap-1.5 px-3 py-1 rounded-full border bg-muted text-xs">
+                <div
+                  key={restriction}
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-full border bg-muted text-xs"
+                >
                   <span className="font-medium">{restriction}:</span>
                   <Badge variant="secondary" className="px-1.5 py-0 h-4 text-[10px]">
                     {count} pessoa(s)
@@ -238,7 +285,6 @@ export default function HostViewPage() {
           </Card>
         )}
 
-        {/* Lista Nominal de Confirmados */}
         <Card className="p-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
@@ -262,9 +308,8 @@ export default function HostViewPage() {
                 <div key={guest.id || idx} className="p-3 flex items-center justify-between">
                   <div>
                     <span className="font-semibold text-foreground text-sm block">{guest.name}</span>
-                    <span className="text-muted-foreground">{guest.email || "Sem e-mail"}</span>
                     {guest.department && (
-                      <span className="ml-2 px-1.5 py-0.5 rounded bg-muted text-[10px] text-muted-foreground font-medium">
+                      <span className="px-1.5 py-0.5 rounded bg-muted text-[10px] text-muted-foreground font-medium">
                         {guest.department}
                       </span>
                     )}

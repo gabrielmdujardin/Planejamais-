@@ -1,39 +1,33 @@
 import { checkRateLimit } from "@/lib/rate-limit"
+import {
+  evaluateRouteAccess,
+  isPublicAppOrInvitePath,
+  isPublicRateLimitedEndpoint,
+  isSupabaseEnvConfigured,
+} from "@/lib/security/route-guard"
 import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
 
-const publicPaths = ["/", "/login", "/register", "/about", "/pricing", "/help", "/contact", "/terms", "/privacy"]
-
-function isSupabaseConfigured() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  return Boolean(
-    url &&
-      key &&
-      !url.includes("example.supabase.co") &&
-      !url.includes("your-project.supabase.co") &&
-      !key.includes("dummy") &&
-      !key.includes("your-supabase"),
-  )
-}
-
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // 1. Aplicar Rate Limiting em chamadas POST para endpoints públicos
-  const isPublicApiRoute =
-    pathname.startsWith("/api/public-events") ||
-    pathname.includes("/solicitar") ||
-    pathname.startsWith("/api/guests")
+  // 1. Permitir acesso imediato a assets estáticos
+  if (
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/static") ||
+    pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|css|js|webp)$/)
+  ) {
+    return NextResponse.next()
+  }
 
-  if (isPublicApiRoute && request.method === "POST") {
+  // 2. Aplicar Rate Limiting em rotas públicas de API/formulário (RNF-004: 10 req/min/IP <= 20 req/min/IP)
+  if (isPublicRateLimitedEndpoint(pathname, request.method)) {
     const forwardedFor = request.headers.get("x-forwarded-for")
     const realIp = request.headers.get("x-real-ip")
     const ip = forwardedFor ? forwardedFor.split(",")[0].trim() : realIp || "127.0.0.1"
 
-    const rateLimit = checkRateLimit(ip, 10, 60 * 1000) // 10 requisições por minuto por IP
+    const rateLimit = checkRateLimit(`${ip}:${pathname.split("/").slice(0, 3).join("/")}`, 10, 60 * 1000)
 
     if (!rateLimit.success) {
       return NextResponse.json(
@@ -51,43 +45,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 2. Permitir acesso a assets estáticos
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/static") ||
-    pathname.match(/\.(ico|png|jpg|jpeg|svg|gif|woff|woff2|ttf|css|js|webp)$/)
-  ) {
-    return NextResponse.next()
-  }
-
-  // 3. Identificar categorias de rota
-  const isPublicPath =
-    publicPaths.some((path) => pathname === path) ||
-    pathname.startsWith("/confirm-invitation") ||
-    pathname.startsWith("/convite") ||
-    pathname.startsWith("/rsvp") ||
-    pathname.startsWith("/solicitar") ||
-    pathname.includes("/host-view") ||
-    pathname.startsWith("/api/public-events")
-
-  const isAuthPath = pathname === "/login" || pathname === "/register"
-  const isProtectedPath =
-    (pathname.startsWith("/dashboard") ||
-      pathname.startsWith("/create-event") ||
-      pathname.startsWith("/event")) &&
-    !pathname.includes("/host-view")
-
-  // 4. Verificação de sessão
+  // 3. Verificação de sessão
   let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
   })
 
+  const supabaseConfigured = isSupabaseEnvConfigured()
   let user = null
   const hasDemoCookie = Boolean(request.cookies.get("planeja_demo_user")?.value)
 
-  if (isSupabaseConfigured()) {
+  if (supabaseConfigured) {
     try {
       const supabase = createServerClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -119,22 +88,25 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  const isAuthenticated = Boolean(user || hasDemoCookie)
+  // 4. Avaliar regra de acesso (RF-004, RNF-004)
+  const decision = evaluateRouteAccess({
+    pathname,
+    hasSupabaseSession: Boolean(user),
+    hasDemoCookie,
+    supabaseConfigured,
+  })
 
-  // 5. Redirecionar para login caso tente acessar rota protegida sem sessão
-  if (isProtectedPath && !isAuthenticated) {
+  if (decision.action === "redirect_login") {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("redirect", pathname)
     return NextResponse.redirect(loginUrl)
   }
 
-  // 6. Redirecionar usuário autenticado para dashboard se tentar acessar login ou registro
-  if (isAuthPath && isAuthenticated) {
+  if (decision.action === "redirect_dashboard") {
     return NextResponse.redirect(new URL("/dashboard", request.url))
   }
 
-  // 7. Liberar rotas públicas
-  if (isPublicPath) {
+  if (isPublicAppOrInvitePath(pathname)) {
     return response
   }
 

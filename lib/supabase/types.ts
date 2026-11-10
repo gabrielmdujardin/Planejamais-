@@ -1,17 +1,65 @@
-export type GuestStatus = 
-  | "awaiting_approval" 
-  | "pending" 
-  | "confirmed" 
-  | "declined" 
-  | "expired" 
+export type GuestStatus =
+  | "awaiting_approval"
+  | "pending"
+  | "confirmed"
+  | "declined"
+  | "expired"
   | "cancelled"
 
 export type CompanionStatus = "awaiting_approval" | "approved" | "rejected" | "cancelled"
 export type GuestSource = "manual" | "public_request" | "public_invite"
+export type ItemPaymentStatus = "pending" | "partial" | "paid" | "estimated" | "cancelled"
+export type EventFinancialMode = "corporate_budget" | "collaborative_split"
+
+export type Json =
+  | string
+  | number
+  | boolean
+  | null
+  | { [key: string]: Json | undefined }
+  | Json[]
 
 export type Database = {
   public: {
     Tables: {
+      users: {
+        Row: {
+          id: string
+          email: string
+          name: string | null
+          phone: string | null
+          location: string | null
+          avatar: string | null
+          calendar_feed_token: string | null
+          metadata: Json
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id: string
+          email: string
+          name?: string | null
+          phone?: string | null
+          location?: string | null
+          avatar?: string | null
+          calendar_feed_token?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          name?: string | null
+          phone?: string | null
+          location?: string | null
+          avatar?: string | null
+          calendar_feed_token?: string | null
+          metadata?: Json
+          created_at?: string
+          updated_at?: string
+        }
+      }
       events: {
         Row: {
           id: string
@@ -24,6 +72,7 @@ export type Database = {
           location: string
           description: string
           status: string
+          financial_mode: EventFinancialMode
           image: string | null
           start_date: string | null
           start_time: string | null
@@ -39,6 +88,8 @@ export type Database = {
           total_guests: number
           public_invite_token: string | null
           public_invite_enabled: boolean
+          host_view_token: string | null
+          host_view_enabled: boolean
           auto_approve_public_guests: boolean
           rsvp_deadline: string | null
           allow_companions: boolean
@@ -52,6 +103,7 @@ export type Database = {
           currency: string
           financial_notes: string | null
           visibility: string
+          metadata: Json
           created_at: string
           updated_at: string
           user_id: string
@@ -65,8 +117,9 @@ export type Database = {
           time: string
           full_date?: string | null
           location: string
-          description: string
+          description?: string
           status?: string
+          financial_mode?: EventFinancialMode
           image?: string | null
           start_date?: string | null
           start_time?: string | null
@@ -82,6 +135,8 @@ export type Database = {
           total_guests?: number
           public_invite_token?: string | null
           public_invite_enabled?: boolean
+          host_view_token?: string | null
+          host_view_enabled?: boolean
           auto_approve_public_guests?: boolean
           rsvp_deadline?: string | null
           allow_companions?: boolean
@@ -95,6 +150,7 @@ export type Database = {
           currency?: string
           financial_notes?: string | null
           visibility?: string
+          metadata?: Json
           created_at?: string
           updated_at?: string
           user_id: string
@@ -110,6 +166,7 @@ export type Database = {
           location?: string
           description?: string
           status?: string
+          financial_mode?: EventFinancialMode
           image?: string | null
           start_date?: string | null
           start_time?: string | null
@@ -125,6 +182,8 @@ export type Database = {
           total_guests?: number
           public_invite_token?: string | null
           public_invite_enabled?: boolean
+          host_view_token?: string | null
+          host_view_enabled?: boolean
           auto_approve_public_guests?: boolean
           rsvp_deadline?: string | null
           allow_companions?: boolean
@@ -138,6 +197,7 @@ export type Database = {
           currency?: string
           financial_notes?: string | null
           visibility?: string
+          metadata?: Json
           created_at?: string
           updated_at?: string
           user_id?: string
@@ -155,7 +215,6 @@ export type Database = {
           token: string | null
           created_at: string
           updated_at: string
-          // New fields for approval flow
           confirmation_token: string | null
           confirmation_deadline: string | null
           token_expires_at: string | null
@@ -177,13 +236,14 @@ export type Database = {
           rejection_reason: string | null
           confirmed_at: string | null
           declined_at: string | null
+          metadata: Json
         }
         Insert: {
           id?: string
           event_id: string
           name: string
-          email: string
-          phone: string
+          email?: string
+          phone?: string
           status?: GuestStatus
           contact_id?: string | null
           token?: string | null
@@ -210,6 +270,7 @@ export type Database = {
           rejection_reason?: string | null
           confirmed_at?: string | null
           declined_at?: string | null
+          metadata?: Json
         }
         Update: {
           id?: string
@@ -243,6 +304,7 @@ export type Database = {
           rejection_reason?: string | null
           confirmed_at?: string | null
           declined_at?: string | null
+          metadata?: Json
         }
       }
       guest_companions: {
@@ -260,6 +322,7 @@ export type Database = {
           approved_by: string | null
           rejected_at: string | null
           rejection_reason: string | null
+          metadata: Json
         }
         Insert: {
           id?: string
@@ -275,6 +338,7 @@ export type Database = {
           approved_by?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
+          metadata?: Json
         }
         Update: {
           id?: string
@@ -290,6 +354,7 @@ export type Database = {
           approved_by?: string | null
           rejected_at?: string | null
           rejection_reason?: string | null
+          metadata?: Json
         }
       }
       items: {
@@ -297,25 +362,67 @@ export type Database = {
           id: string
           event_id: string
           name: string
+          category: string
+          supplier: string | null
           price: number
+          unit_price: number
+          estimated_cost: number
+          payment_status: ItemPaymentStatus
+          due_date: string | null
+          invoice_number: string | null
+          description: string | null
+          notes: string | null
           image: string | null
+          assigned_to: Json | null
+          quantity: number
+          status: "pending" | "assigned" | "completed"
+          metadata: Json
           created_at: string
+          updated_at: string
         }
         Insert: {
           id?: string
           event_id: string
           name: string
-          price: number
+          category?: string
+          supplier?: string | null
+          price?: number
+          unit_price?: number
+          estimated_cost?: number
+          payment_status?: ItemPaymentStatus
+          due_date?: string | null
+          invoice_number?: string | null
+          description?: string | null
+          notes?: string | null
           image?: string | null
+          assigned_to?: Json | null
+          quantity?: number
+          status?: "pending" | "assigned" | "completed"
+          metadata?: Json
           created_at?: string
+          updated_at?: string
         }
         Update: {
           id?: string
           event_id?: string
           name?: string
+          category?: string
+          supplier?: string | null
           price?: number
+          unit_price?: number
+          estimated_cost?: number
+          payment_status?: ItemPaymentStatus
+          due_date?: string | null
+          invoice_number?: string | null
+          description?: string | null
+          notes?: string | null
           image?: string | null
+          assigned_to?: Json | null
+          quantity?: number
+          status?: "pending" | "assigned" | "completed"
+          metadata?: Json
           created_at?: string
+          updated_at?: string
         }
       }
       event_photos: {
@@ -328,6 +435,7 @@ export type Database = {
           uploaded_at: string
           description: string | null
           tags: string[] | null
+          metadata: Json
         }
         Insert: {
           id?: string
@@ -338,6 +446,7 @@ export type Database = {
           uploaded_at?: string
           description?: string | null
           tags?: string[] | null
+          metadata?: Json
         }
         Update: {
           id?: string
@@ -348,7 +457,239 @@ export type Database = {
           uploaded_at?: string
           description?: string | null
           tags?: string[] | null
+          metadata?: Json
         }
+      }
+      contacts: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          email: string
+          phone: string
+          tags: string[]
+          lists: string[]
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          email?: string
+          phone?: string
+          tags?: string[]
+          lists?: string[]
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          email?: string
+          phone?: string
+          tags?: string[]
+          lists?: string[]
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      contact_lists: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          description: string
+          color: string
+          contacts: string[]
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          description?: string
+          color?: string
+          contacts?: string[]
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          name?: string
+          description?: string
+          color?: string
+          contacts?: string[]
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      job_runs: {
+        Row: {
+          id: string
+          job_name: string
+          status: "running" | "completed" | "failed"
+          started_at: string
+          completed_at: string | null
+          duration_ms: number | null
+          error_message: string | null
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          job_name: string
+          status?: "running" | "completed" | "failed"
+          started_at?: string
+          completed_at?: string | null
+          duration_ms?: number | null
+          error_message?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          job_name?: string
+          status?: "running" | "completed" | "failed"
+          started_at?: string
+          completed_at?: string | null
+          duration_ms?: number | null
+          error_message?: string | null
+          metadata?: Json
+          created_at?: string
+        }
+      }
+      job_logs: {
+        Row: {
+          id: string
+          job_run_id: string | null
+          level: "info" | "warn" | "error"
+          message: string
+          metadata: Json
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          job_run_id?: string | null
+          level?: "info" | "warn" | "error"
+          message: string
+          metadata?: Json
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          job_run_id?: string | null
+          level?: "info" | "warn" | "error"
+          message?: string
+          metadata?: Json
+          created_at?: string
+        }
+      }
+      stg_event_costs: {
+        Row: {
+          id: string
+          event_id: string | null
+          total_cost: number | null
+          items_count: number | null
+          processed_at: string
+        }
+        Insert: {
+          id?: string
+          event_id?: string | null
+          total_cost?: number | null
+          items_count?: number | null
+          processed_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string | null
+          total_cost?: number | null
+          items_count?: number | null
+          processed_at?: string
+        }
+      }
+      stg_rsvp_stats: {
+        Row: {
+          id: string
+          event_id: string | null
+          confirmed_count: number | null
+          pending_count: number | null
+          declined_count: number | null
+          processed_at: string
+        }
+        Insert: {
+          id?: string
+          event_id?: string | null
+          confirmed_count?: number | null
+          pending_count?: number | null
+          declined_count?: number | null
+          processed_at?: string
+        }
+        Update: {
+          id?: string
+          event_id?: string | null
+          confirmed_count?: number | null
+          pending_count?: number | null
+          declined_count?: number | null
+          processed_at?: string
+        }
+      }
+      facts_daily_events: {
+        Row: {
+          date: string
+          total_events: number
+          total_guests: number
+          total_cost: number
+          created_at: string
+        }
+        Insert: {
+          date: string
+          total_events?: number
+          total_guests?: number
+          total_cost?: number
+          created_at?: string
+        }
+        Update: {
+          date?: string
+          total_events?: number
+          total_guests?: number
+          total_cost?: number
+          created_at?: string
+        }
+      }
+    }
+    Views: {
+      mv_event_costs: {
+        Row: {
+          id: string
+          title: string
+          date: string
+          total_cost: number
+          items_count: number
+        }
+      }
+      mv_rsvp_stats: {
+        Row: {
+          id: string
+          title: string
+          date: string
+          confirmed_count: number
+          pending_count: number
+          declined_count: number
+          total_guests: number
+        }
+      }
+    }
+    Functions: {
+      refresh_materialized_view: {
+        Args: { view_name: string }
+        Returns: undefined
       }
     }
   }

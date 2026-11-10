@@ -1,7 +1,9 @@
-import { BaseJob } from "../lib/job-runner"
-import { createClient } from "@supabase/supabase-js"
-
-const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!)
+import {
+  calculateConfirmedParticipants,
+  calculateEventTotalCost,
+  filterEffectiveGuests,
+} from "../lib/domain/business-rules.ts"
+import { BaseJob } from "../lib/job-runner.ts"
 
 export class DailyAggregateJob extends BaseJob {
   getName(): string {
@@ -11,19 +13,15 @@ export class DailyAggregateJob extends BaseJob {
   async execute(): Promise<void> {
     await this.log("info", "Starting daily aggregation")
 
-    // Refresh materialized views
     await this.refreshMaterializedViews()
-
-    // Update staging tables
     await this.updateStagingTables()
-
-    // Generate daily facts
     await this.generateDailyFacts()
 
     await this.log("info", "Daily aggregation completed")
   }
 
   private async refreshMaterializedViews(): Promise<void> {
+    const supabase = this.getSupabase()
     await this.log("info", "Refreshing materialized views")
 
     await supabase.rpc("refresh_materialized_view", { view_name: "mv_event_costs" })
@@ -33,40 +31,40 @@ export class DailyAggregateJob extends BaseJob {
   }
 
   private async updateStagingTables(): Promise<void> {
+    const supabase = this.getSupabase()
     await this.log("info", "Updating staging tables")
 
-    // Clear old staging data
-    await supabase
-      .from("stg_event_costs")
-      .delete()
-      .lt("processed_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
-    await supabase
-      .from("stg_rsvp_stats")
-      .delete()
-      .lt("processed_at", new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    await supabase.from("stg_event_costs").delete().lt("processed_at", cutoff)
+    await supabase.from("stg_rsvp_stats").delete().lt("processed_at", cutoff)
 
-    // Insert fresh staging data
     const { data: events } = await supabase.from("events").select("id")
 
     if (events) {
       for (const event of events) {
-        // Calculate costs
-        const { data: items } = await supabase.from("items").select("estimated_cost").eq("event_id", event.id)
+        const { data: items } = await supabase
+          .from("items")
+          .select("price, estimated_cost, payment_status")
+          .eq("event_id", event.id)
 
-        const totalCost = items?.reduce((sum, item) => sum + (item.estimated_cost || 0), 0) || 0
+        const activeItems = (items || []).filter((i: any) => i.payment_status !== "cancelled")
+        const totalCost = calculateEventTotalCost(activeItems)
 
         await supabase.from("stg_event_costs").insert({
           event_id: event.id,
           total_cost: totalCost,
-          items_count: items?.length || 0,
+          items_count: activeItems.length,
         })
 
-        // Calculate RSVP stats
-        const { data: guests } = await supabase.from("guests").select("status").eq("event_id", event.id)
+        const { data: guests } = await supabase
+          .from("guests")
+          .select("id, status, source, guest_companions(id, status)")
+          .eq("event_id", event.id)
 
-        const confirmed = guests?.filter((g) => g.status === "confirmed").length || 0
-        const pending = guests?.filter((g) => g.status === "pending").length || 0
-        const declined = guests?.filter((g) => g.status === "declined").length || 0
+        const effective = filterEffectiveGuests(guests || [])
+        const confirmed = calculateConfirmedParticipants(effective)
+        const pending = effective.filter((g: any) => g.status === "pending").length
+        const declined = effective.filter((g: any) => g.status === "declined").length
 
         await supabase.from("stg_rsvp_stats").insert({
           event_id: event.id,
@@ -81,28 +79,38 @@ export class DailyAggregateJob extends BaseJob {
   }
 
   private async generateDailyFacts(): Promise<void> {
+    const supabase = this.getSupabase()
     await this.log("info", "Generating daily facts")
 
     const today = new Date().toISOString().split("T")[0]
+    const { data: allEvents } = await supabase.from("events").select("id, start_date, date")
+    const todayEventIds = (allEvents || [])
+      .filter((e: any) => e.start_date === today || e.date === today)
+      .map((e: any) => e.id)
 
-    const { data: todayEvents } = await supabase.from("events").select("id").eq("date", today)
+    let totalGuests = 0
+    let totalCost = 0
 
-    const { data: todayGuests } = await supabase
-      .from("guests")
-      .select("id")
-      .in("event_id", todayEvents?.map((e) => e.id) || [])
+    if (todayEventIds.length > 0) {
+      const { data: todayGuests } = await supabase
+        .from("guests")
+        .select("id, status, source")
+        .in("event_id", todayEventIds)
 
-    const { data: todayCosts } = await supabase
-      .from("stg_event_costs")
-      .select("total_cost")
-      .in("event_id", todayEvents?.map((e) => e.id) || [])
+      totalGuests = filterEffectiveGuests(todayGuests || []).length
 
-    const totalCost = todayCosts?.reduce((sum, cost) => sum + (cost.total_cost || 0), 0) || 0
+      const { data: todayCosts } = await supabase
+        .from("stg_event_costs")
+        .select("total_cost")
+        .in("event_id", todayEventIds)
+
+      totalCost = (todayCosts || []).reduce((sum: number, cost: any) => sum + Number(cost.total_cost || 0), 0)
+    }
 
     await supabase.from("facts_daily_events").upsert({
       date: today,
-      total_events: todayEvents?.length || 0,
-      total_guests: todayGuests?.length || 0,
+      total_events: todayEventIds.length,
+      total_guests: totalGuests,
       total_cost: totalCost,
     })
 

@@ -68,7 +68,10 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
 
     setIsDeleting(true)
     try {
-      await deleteEventAction(eventId)
+      const result = await deleteEventAction(eventId, confirmTitle)
+      if (result && !result.success) {
+        throw new Error(result.error || "Não foi possível excluir o evento.")
+      }
       removeEvent(eventId)
       toast({
         title: "Evento excluído",
@@ -77,10 +80,10 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
       setIsDeleteDialogOpen(false)
       onOpenChange(false)
       router.push("/dashboard")
-    } catch {
+    } catch (error) {
       toast({
         title: "Erro ao excluir",
-        description: "Não foi possível excluir o evento. Tente novamente.",
+        description: error instanceof Error ? error.message : "Não foi possível excluir o evento. Tente novamente.",
         variant: "destructive",
       })
     } finally {
@@ -92,6 +95,7 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
     description: "",
     type: "Festa",
     status: "active",
+    financialMode: "corporate_budget" as "corporate_budget" | "collaborative_split",
     startDate: "",
     startTime: "",
     endDate: "",
@@ -119,6 +123,8 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
       description: event.description || "",
       type: event.type || "Festa",
       status: event.status || "active",
+      financialMode:
+        event.financialMode || (event.type === "Colaborativo" ? "collaborative_split" : "corporate_budget"),
       startDate: toInputDate(event),
       startTime: event.startTime || event.time || "",
       endDate: event.endDate || toInputDate(event),
@@ -206,14 +212,16 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
         budgetEstimated: toNumberOrNull(form.budgetEstimated),
         initialEstimatedCost: toNumberOrNull(form.initialEstimatedCost),
         financialNotes: form.financialNotes,
+        financialMode: form.financialMode,
       }
 
       if (!isDemoMode) {
         const result = await updateEventDetails(event.id, payload)
         if (result.error || !result.data) throw new Error(result.error || "Nao foi possivel atualizar o evento.")
+        updateEvent(event.id, result.data)
+      } else {
+        updateEvent(event.id, payload)
       }
-
-      updateEvent(event.id, payload)
       onOpenChange(false)
       toast({ title: "Evento atualizado", description: "A central de gestao ja reflete as novas informacoes." })
     } catch (error) {
@@ -338,6 +346,19 @@ export default function EditEventDialog({ open, onOpenChange, eventId }: EditEve
           </section>
 
           <section className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-2">
+              <Label>Modelo financeiro</Label>
+              <Select
+                value={form.financialMode}
+                onValueChange={(value) => setField("financialMode", value)}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="corporate_budget">Orçamento Corporativo / Verba Fechada</SelectItem>
+                  <SelectItem value="collaborative_split">Rateio Colaborativo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
             <div className="space-y-2">
               <Label>Orcamento previsto</Label>
               <Input value={form.budgetEstimated} onChange={(e) => setField("budgetEstimated", e.target.value)} />

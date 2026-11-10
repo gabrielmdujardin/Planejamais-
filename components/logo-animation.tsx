@@ -112,10 +112,8 @@ export function LogoAnimation() {
                 <motion.div
                   className="text-8xl font-bold text-emerald-600 dark:text-emerald-400"
                   initial={{ scale: 1, rotate: 0 }}
-                  animate={[
-                    { scale: 1.5, rotate: 90, transition: { delay: 2.5, duration: 0.4 } },
-                    { scale: 1, rotate: 0, transition: { delay: 3.0, duration: 0.5 } },
-                  ]}
+                  animate={{ scale: [1, 1.5, 1], rotate: [0, 90, 0] }}
+                  transition={{ delay: 2.5, duration: 0.9, times: [0, 0.45, 1] }}
                 >
                   +
                 </motion.div>

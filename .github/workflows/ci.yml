@@ -1,0 +1,35 @@
+name: Planeja+ CI
+
+on:
+  push:
+    branches: ["main", "master", "develop", "feat/**"]
+  pull_request:
+    branches: ["main", "master", "develop"]
+
+jobs:
+  quality-and-tests:
+    name: TypeScript, Lint & Testes Automatizados
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout do repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Verificação estrita de tipos (TypeScript)
+        run: npm run typecheck
+
+      - name: Análise estática de código (ESLint)
+        run: npm run lint
+
+      - name: Executar suíte de testes de Regras de Negócio e Requisitos
+        run: npm test
+

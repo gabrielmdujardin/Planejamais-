@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint app components context hooks jobs lib stores src",
+    "typecheck": "tsc --noEmit",
     "test": "node --test tests/*.test.js",
     "design:lint": "design.md lint DESIGN.md --format json",
     "ui:audit": "node scripts/ui-audit.mjs"
