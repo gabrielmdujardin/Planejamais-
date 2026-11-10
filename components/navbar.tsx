@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { User, LogOut, ArrowUpRight } from "lucide-react"
+import { User, LogOut, ArrowUpRight, ShieldCheck, Sparkles } from "lucide-react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { AccessibilityMenu } from "@/components/accessibility-menu"
 import { Logo } from "@/components/logo"
@@ -89,7 +89,33 @@ export default function Navbar() {
           </div>
 
           <div className="flex items-center gap-1">
-            <div className="hidden items-center gap-0.5 sm:flex">
+            <div className="hidden items-center gap-1.5 sm:flex">
+              <Link
+                href="/simulator"
+                title="Simulador de Jornada do Usuário (Live E2E Demo)"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border transition-all",
+                  pathname === "/simulator"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted/80 text-foreground border-border hover:bg-muted"
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                Simulador E2E
+              </Link>
+              <Link
+                href="/validation"
+                title="Central Interativa de Validação de Requisitos (TCC 2026)"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold border transition-all",
+                  pathname === "/validation"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-primary/10 text-primary border-primary/20 hover:bg-primary/20"
+                )}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Validação TCC
+              </Link>
               <ThemeToggle />
               <AccessibilityMenu />
             </div>
@@ -111,6 +137,16 @@ export default function Navbar() {
                   <DropdownMenuItem asChild className="rounded-xl">
                     <Link href="/profile" className="flex cursor-pointer items-center gap-2">
                       <User className="h-4 w-4" strokeWidth={1.5} /> Perfil
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="rounded-xl">
+                    <Link href="/simulator" className="flex cursor-pointer items-center gap-2 font-medium">
+                      <Sparkles className="h-4 w-4 text-primary" strokeWidth={1.5} /> Simulador de Jornada E2E
+                    </Link>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild className="rounded-xl">
+                    <Link href="/validation" className="flex cursor-pointer items-center gap-2 text-primary font-medium">
+                      <ShieldCheck className="h-4 w-4" strokeWidth={1.5} /> Central de Testes (TCC)
                     </Link>
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
