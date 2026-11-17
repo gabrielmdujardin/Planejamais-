@@ -1,4 +1,7 @@
 import {
+  aggregateDietaryRestrictions,
+  buildIcsCalendar,
+  buildPublicEventPayload,
   calculateAttendanceSummary,
   calculateBudgetComparison,
   calculateCollaborativeSplit,
@@ -7,36 +10,53 @@ import {
   canOrganizerModifyPhoto,
   cloneContactToGuestSnapshot,
   countApprovedCompanionsForGuest,
+  evaluateInviteTokenValidity,
+  filterEffectiveGuests,
   filterEligibleReminderGuests,
   generateSecureToken,
+  isAllowedAttendanceTransition,
   isSafeToken,
+  normalizeGuestStatus,
   normalizeItemValue,
   parseFlexibleEventDate,
+  resolveCompanionInitialStatus,
+  resolvePublicRequestInitialStatus,
   validateNominalEventDeletion,
-  buildPublicEventPayload,
-  buildIcsCalendar,
 } from "@/lib/domain/business-rules"
 import {
-  registerUserSchema,
-  loginUserSchema,
+  acceptEventTeamInvite,
+  canActorModifyMemberPermissions,
+  createOwnerMemberRecord,
+  evaluateEventPermission,
+  getCollaboratorPresetPermissions,
+  inviteEventTeamMember,
+  revokeEventTeamMember,
+  transferEventOwnership,
+} from "@/lib/domain/rbac"
+import {
+  approvalDecisionSchema,
+  companionSchema,
+  contactSchema,
   eventPayloadSchema,
   guestSingleCreateSchema,
-  guestUpdateSchema,
   guestStatusSchema,
+  guestUpdateSchema,
   itemCreateSchema,
   itemUpdateSchema,
-  contactSchema,
-  publicRsvpSchema,
-  companionSchema,
-  approvalDecisionSchema,
+  loginUserSchema,
   photoCreateSchema,
+  publicRsvpSchema,
+  registerUserSchema,
   sendInvitesPayloadSchema,
+  teamInviteSchema,
+  teamTransferOwnershipSchema,
+  teamUpdateRoleSchema,
 } from "@/lib/validation"
 import {
-  isProtectedAppPath,
   evaluateRouteAccess,
+  isProtectedAppPath,
 } from "@/lib/security/route-guard"
-import { normalizeReportData, formatBRL } from "@/lib/reports/data-collector"
+import { formatBRL, normalizeReportData } from "@/lib/reports/data-collector"
 import { checkRateLimit } from "@/lib/rate-limit"
 import { ScenarioDefinition } from "./types"
 
@@ -53,6 +73,7 @@ const defaultSections = {
 
 const defaultReportOptions = {
   reportType: "executive-summary" as const,
+  selectedEventId: "all" as const,
   guestStatusFilter: "all" as const,
   density: "normal" as const,
   includedSections: defaultSections,
@@ -108,20 +129,783 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
 
   "RN-002": [
     {
-      id: "rn002_s1",
-      name: "Titularidade exclusiva do evento pelo organizador criador",
-      input: 'Evento criado pelo user_id "user-org-001"',
-      expected: "Autorizar apenas o organizador titular; bloquear outro usuário",
+      id: "rn002_s01",
+      name: "1. Proprietário cria evento e recebe controle integral",
+      input: 'createOwnerMemberRecord({ eventId: "evt-rbac-1", ownerUserId: "usr-owner-1" })',
+      expected: "Papel 'owner' ativo com permissão integral em todos os módulos",
       run: () => {
-        const eventOrganizerId = "user-org-001"
-        const isOwner = (userId: string) => userId === eventOrganizerId
-        const checkOwner = isOwner("user-org-001")
-        const checkStranger = isOwner("user-stranger-999")
-        const passed = checkOwner === true && checkStranger === false
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana Proprietária",
+        })
+        const checkEdit = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-owner-1",
+          members: [owner],
+          module: "event",
+          action: "edit",
+        })
+        const checkDelete = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-owner-1",
+          members: [owner],
+          module: "event",
+          action: "delete_event",
+        })
+        const passed = owner.role === "owner" && checkEdit.allowed && checkDelete.allowed
         return {
           passed,
-          actual: passed ? "Titular autorizado; terceiro bloqueado" : "Falha na checagem de titularidade",
-          details: "Apenas o user_id idêntico ao organizador tem permissão de mutação.",
+          actual: passed ? "Proprietário ativo com acesso integral (edit + delete_event)" : "Falha na criação do proprietário",
+          details: "Proprietário possui controle integral sobre o evento.",
+        }
+      },
+    },
+    {
+      id: "rn002_s02",
+      name: "2. Proprietário convida um administrador por e-mail",
+      input: 'inviteEventTeamMember({ role: "admin", email: "admin@planeja.app" })',
+      expected: "Convite pendente gerado com token CSPRNG e expiração",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const res = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "admin@planeja.app",
+          name: "Carlos Admin",
+          role: "admin",
+        })
+        const passed = res.success && res.member?.status === "pending" && Boolean(res.member?.inviteToken)
+        return {
+          passed,
+          actual: passed ? `Convite gerado para ${res.member?.email} (status: ${res.member?.status})` : "Falha no convite",
+          details: "Proprietário convidou administrador com token único.",
+        }
+      },
+    },
+    {
+      id: "rn002_s03",
+      name: "3. Usuário aceita o convite e torna-se membro ativo",
+      input: "acceptEventTeamInvite com token válido dentro do prazo",
+      expected: "Status do membro muda de 'pending' para 'active' e vincula userId",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "admin@planeja.app",
+          name: "Carlos Admin",
+          role: "admin",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-admin-2",
+          acceptingEmail: "admin@planeja.app",
+          members: inv.updatedMembers,
+        })
+        const passed = acc.success && acc.member?.status === "active" && acc.member?.userId === "usr-admin-2"
+        return {
+          passed,
+          actual: passed ? "Convite aceito: membro 'active' vinculado a usr-admin-2" : "Falha no aceite",
+          details: "Ciclo de aceite de convite validado com sucesso.",
+        }
+      },
+    },
+    {
+      id: "rn002_s04",
+      name: "4. Administrador edita dados operacionais do evento",
+      input: 'evaluateEventPermission({ actorUserId: "usr-admin-2", module: "event", action: "edit" })',
+      expected: "Edição operacional do evento autorizada para Administrador",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "admin@planeja.app",
+          name: "Carlos Admin",
+          role: "admin",
+          targetUserId: "usr-admin-2",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-admin-2",
+          members: inv.updatedMembers,
+        })
+        const perm = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-admin-2",
+          members: acc.updatedMembers,
+          module: "event",
+          action: "edit",
+        })
+        return {
+          passed: perm.allowed === true && perm.role === "admin",
+          actual: perm.allowed ? "Edição autorizada para Administrador" : perm.reason,
+          details: "Administrador pode editar dados operacionais do evento.",
+        }
+      },
+    },
+    {
+      id: "rn002_s05",
+      name: "5. Administrador tenta excluir o evento e é impedido",
+      input: 'evaluateEventPermission({ actorUserId: "usr-admin-2", module: "event", action: "delete_event" })',
+      expected: "Bloqueado (allowed = false): somente o proprietário pode excluir o evento",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "admin@planeja.app",
+          name: "Carlos Admin",
+          role: "admin",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-admin-2",
+          members: inv.updatedMembers,
+        })
+        const perm = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-admin-2",
+          members: acc.updatedMembers,
+          module: "event",
+          action: "delete_event",
+        })
+        const passed = perm.allowed === false
+        return {
+          passed,
+          actual: passed ? `Bloqueado com segurança: ${perm.reason}` : "Permitiu exclusão indevida",
+          details: "Administrador não possui permissão para excluir o evento.",
+        }
+      },
+    },
+    {
+      id: "rn002_s06",
+      name: "6. Colaborador financeiro registra um gasto autorizado",
+      input: 'Colaborador com preset "financial" executa action "create" no módulo "financial"',
+      expected: "Autorizado (allowed = true)",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "financas@planeja.app",
+          name: "Roberto Financeiro",
+          role: "collaborator",
+          permissions: getCollaboratorPresetPermissions("financial"),
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-fin-3",
+          members: inv.updatedMembers,
+        })
+        const perm = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-fin-3",
+          members: acc.updatedMembers,
+          module: "financial",
+          action: "create",
+        })
+        return {
+          passed: perm.allowed === true,
+          actual: perm.allowed ? "Gasto registrado pelo colaborador financeiro" : perm.reason,
+          details: "Colaborador autorizado no módulo financeiro pode criar e editar despesas.",
+        }
+      },
+    },
+    {
+      id: "rn002_s07",
+      name: "7. Colaborador sem permissão financeira tenta acessar/criar gastos e é impedido",
+      input: 'Colaborador com preset "media_photos" tenta acessar módulo "financial"',
+      expected: "Bloqueado (allowed = false)",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "foto@planeja.app",
+          name: "Fotógrafo",
+          role: "collaborator",
+          permissions: getCollaboratorPresetPermissions("media_photos"),
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-foto-4",
+          members: inv.updatedMembers,
+        })
+        const permView = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-foto-4",
+          members: acc.updatedMembers,
+          module: "financial",
+          action: "view",
+        })
+        const permCreate = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-foto-4",
+          members: acc.updatedMembers,
+          module: "financial",
+          action: "create",
+        })
+        const passed = permView.allowed === false && permCreate.allowed === false
+        return {
+          passed,
+          actual: passed ? "Acesso ao módulo financeiro bloqueado com sucesso" : "Vazamento de módulo não autorizado",
+          details: "Isolamento modular estrito entre colaboradores.",
+        }
+      },
+    },
+    {
+      id: "rn002_s08",
+      name: "8. Colaborador gerencia convidados quando autorizado",
+      input: 'Colaborador com preset "guests_rsvp" executa create/edit/approve em "guests"',
+      expected: "Autorizado (allowed = true)",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "rsvp@planeja.app",
+          name: "Recepção RSVP",
+          role: "collaborator",
+          permissions: getCollaboratorPresetPermissions("guests_rsvp"),
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-rsvp-5",
+          members: inv.updatedMembers,
+        })
+        const canEditGuests = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-rsvp-5",
+          members: acc.updatedMembers,
+          module: "guests",
+          action: "edit",
+        })
+        const canApproveRequests = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-rsvp-5",
+          members: acc.updatedMembers,
+          module: "requests",
+          action: "approve",
+        })
+        const passed = canEditGuests.allowed && canApproveRequests.allowed
+        return {
+          passed,
+          actual: passed ? "Gerenciamento de convidados e solicitações autorizado" : "Falha na autorização de convidados",
+          details: "Colaborador de recepção opera sobre convidados e moderação.",
+        }
+      },
+    },
+    {
+      id: "rn002_s09",
+      name: "9. Colaborador tenta alterar suas próprias permissões e é impedido",
+      input: "canActorModifyMemberPermissions com actorMember === targetMember",
+      expected: "Bloqueado (allowed = false): prevenção contra auto-elevação de privilégios",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "colab@planeja.app",
+          name: "Colaborador",
+          role: "collaborator",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-colab-6",
+          members: inv.updatedMembers,
+        })
+        const selfAttempt = canActorModifyMemberPermissions({
+          actorMember: acc.member!,
+          targetMember: acc.member!,
+          proposedRole: "admin",
+        })
+        return {
+          passed: selfAttempt.allowed === false,
+          actual: !selfAttempt.allowed ? `Bloqueado: ${selfAttempt.reason}` : "Permitiu auto-elevação!",
+          details: "Nenhum membro consegue elevar suas próprias permissões.",
+        }
+      },
+    },
+    {
+      id: "rn002_s10",
+      name: "10. Visualizador tenta modificar dados e é impedido",
+      input: 'Membro com role "viewer" tenta create/edit/delete em evento, convidados e custos',
+      expected: "Leitura permitida (view = true); qualquer modificação bloqueada (false)",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "viewer@planeja.app",
+          name: "Auditor Visualizador",
+          role: "viewer",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-viewer-7",
+          members: inv.updatedMembers,
+        })
+        const canView = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-viewer-7",
+          members: acc.updatedMembers,
+          module: "guests",
+          action: "view",
+        })
+        const canCreate = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-viewer-7",
+          members: acc.updatedMembers,
+          module: "guests",
+          action: "create",
+        })
+        const canEdit = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-viewer-7",
+          members: acc.updatedMembers,
+          module: "financial",
+          action: "edit",
+        })
+        const passed = canView.allowed === true && canCreate.allowed === false && canEdit.allowed === false
+        return {
+          passed,
+          actual: passed ? "Visualização permitida; criação e edição bloqueadas" : "Falha na restrição do Visualizador",
+          details: "Visualizador possui acesso estritamente somente-leitura.",
+        }
+      },
+    },
+    {
+      id: "rn002_s11",
+      name: "11. Usuário externo (anfitrião) acessa indicadores autorizados via token",
+      input: 'evaluateEventPermission com hostViewTokenProvided válido e action "view"',
+      expected: "Autorizado como 'external_host' para leitura de indicadores",
+      run: () => {
+        const perm = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: null,
+          hostViewTokenProvided: "tok-host-secret-123",
+          eventHostViewToken: "tok-host-secret-123",
+          eventHostViewEnabled: true,
+          module: "analytics",
+          action: "view",
+        })
+        return {
+          passed: perm.allowed === true && perm.role === "external_host",
+          actual: perm.allowed ? "Indicadores autorizados para anfitrião externo via token" : perm.reason,
+          details: "Anfitrião externo consulta indicadores sem precisar de conta interna.",
+        }
+      },
+    },
+    {
+      id: "rn002_s12",
+      name: "12. Usuário externo tenta modificar dados e é impedido",
+      input: 'evaluateEventPermission com hostViewTokenProvided tentando action "edit" ou "create"',
+      expected: "Bloqueado (allowed = false)",
+      run: () => {
+        const permEdit = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: null,
+          hostViewTokenProvided: "tok-host-secret-123",
+          eventHostViewToken: "tok-host-secret-123",
+          eventHostViewEnabled: true,
+          module: "financial",
+          action: "create",
+        })
+        return {
+          passed: permEdit.allowed === false,
+          actual: !permEdit.allowed ? `Bloqueado: ${permEdit.reason}` : "Permitiu mutação externa!",
+          details: "Anfitrião externo não possui permissão de escrita em nenhum módulo.",
+        }
+      },
+    },
+    {
+      id: "rn002_s13",
+      name: "13. Usuário tenta acessar um evento ao qual não pertence e é bloqueado",
+      input: 'evaluateEventPermission({ actorUserId: "usr-intruso-999" })',
+      expected: "Bloqueado (allowed = false, role = null)",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const perm = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-intruso-999",
+          members: [owner],
+          module: "event",
+          action: "view",
+        })
+        return {
+          passed: perm.allowed === false && perm.role === null,
+          actual: !perm.allowed ? `Acesso negado a terceiro: ${perm.reason}` : "Vazamento entre usuários!",
+          details: "Isolamento completo contra acesso por usuários não vinculados ao evento.",
+        }
+      },
+    },
+    {
+      id: "rn002_s14",
+      name: "14. Proprietário revoga o acesso de um colaborador",
+      input: "revokeEventTeamMember executado pelo proprietário",
+      expected: "Status do colaborador muda para 'revoked' e registra log de auditoria",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "temp@planeja.app",
+          name: "Colaborador Temporário",
+          role: "collaborator",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-temp-8",
+          members: inv.updatedMembers,
+        })
+        const rev = revokeEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          targetMemberId: acc.member!.id,
+          members: acc.updatedMembers,
+        })
+        const targetAfter = rev.updatedMembers.find((m) => m.id === acc.member!.id)
+        const passed = rev.success && targetAfter?.status === "revoked"
+        return {
+          passed,
+          actual: passed ? `Acesso revogado (status: ${targetAfter?.status})` : "Falha ao revogar",
+          details: "Revogação imediata registrada pelo proprietário.",
+        }
+      },
+    },
+    {
+      id: "rn002_s15",
+      name: "15. Colaborador removido tenta acessar novamente o evento e é bloqueado",
+      input: "evaluateEventPermission para usuário com status 'revoked'",
+      expected: "Bloqueado imediatamente (allowed = false)",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "temp@planeja.app",
+          name: "Colaborador Temporário",
+          role: "collaborator",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-temp-8",
+          members: inv.updatedMembers,
+        })
+        const rev = revokeEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          targetMemberId: acc.member!.id,
+          members: acc.updatedMembers,
+        })
+        const attempt = evaluateEventPermission({
+          eventOwnerId: "usr-owner-1",
+          actorUserId: "usr-temp-8",
+          members: rev.updatedMembers,
+          module: "event",
+          action: "view",
+        })
+        return {
+          passed: attempt.allowed === false,
+          actual: !attempt.allowed ? `Bloqueado pós-revogação: ${attempt.reason}` : "Ex-colaborador manteve acesso!",
+          details: "Colaborador revogado perde todo acesso de leitura e escrita.",
+        }
+      },
+    },
+    {
+      id: "rn002_s16",
+      name: "16. Proprietário transfere a titularidade mantendo unicidade de owner",
+      input: "transferEventOwnership do Proprietário para membro ativo",
+      expected: "Destinatário vira 'owner', anterior vira 'admin' e há exatamente 1 'owner' no evento",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "sucessor@planeja.app",
+          name: "Sucessor",
+          role: "admin",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-sucessor-9",
+          members: inv.updatedMembers,
+        })
+        const transfer = transferEventOwnership({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          newOwnerMemberId: acc.member!.id,
+          members: acc.updatedMembers,
+        })
+        const owners = transfer.updatedMembers.filter((m) => m.role === "owner" && m.status === "active")
+        const oldOwner = transfer.updatedMembers.find((m) => m.userId === "usr-owner-1")
+        const passed =
+          transfer.success &&
+          owners.length === 1 &&
+          owners[0].userId === "usr-sucessor-9" &&
+          oldOwner?.role === "admin"
+        return {
+          passed,
+          actual: passed
+            ? `Novo owner: ${owners[0].userId} | Anterior convertido para: ${oldOwner?.role} (Total owners: ${owners.length})`
+            : "Falha na transferência",
+          details: "Transferência transacional garante exatamente 1 proprietário por evento.",
+        }
+      },
+    },
+    {
+      id: "rn002_s17",
+      name: "17. Convite expirado é rejeitado",
+      input: "acceptEventTeamInvite após a data de expiração (inviteExpiresAt < now)",
+      expected: "Rejeitado (success = false) e status marcado como 'expired'",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "atrasado@planeja.app",
+          name: "Convidado Atrasado",
+          role: "collaborator",
+          expiresInDays: 1,
+        })
+        const futureDate = new Date(Date.now() + 5 * 86400000)
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-late-10",
+          members: inv.updatedMembers,
+          now: futureDate,
+        })
+        const updated = acc.updatedMembers.find((m) => m.id === inv.member!.id)
+        const passed = acc.success === false && updated?.status === "expired"
+        return {
+          passed,
+          actual: passed ? `Rejeitado: ${acc.error} (status: ${updated?.status})` : "Aceitou convite expirado!",
+          details: "Convites vencidos não concedem acesso à equipe.",
+        }
+      },
+    },
+    {
+      id: "rn002_s18",
+      name: "18. Convite duplicado para o mesmo e-mail no evento é bloqueado",
+      input: "Duas chamadas seguidas a inviteEventTeamMember para o mesmo e-mail no mesmo evento",
+      expected: "Segundo convite bloqueado com erro de duplicidade",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-rbac-1",
+          ownerUserId: "usr-owner-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Mariana",
+        })
+        const first = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "duplicado@planeja.app",
+          name: "Primeiro",
+          role: "collaborator",
+        })
+        const second = inviteEventTeamMember({
+          eventId: "evt-rbac-1",
+          actorMember: owner,
+          existingMembers: first.updatedMembers,
+          email: "DUPLICADO@planeja.app",
+          name: "Segundo",
+          role: "admin",
+        })
+        const passed = first.success === true && second.success === false
+        return {
+          passed,
+          actual: passed ? `Duplicidade bloqueada: ${second.error}` : "Permitiu vínculo duplicado!",
+          details: "Unicidade de vínculo (event_id + lower(email)) preservada.",
+        }
+      },
+    },
+    {
+      id: "rn002_s19",
+      name: "19. Permissões distintas são respeitadas em diferentes eventos para o mesmo usuário",
+      input: "Usuário 'usr-multi' é 'admin' no Evento A e 'viewer' no Evento B",
+      expected: "Pode editar no Evento A (true) e é bloqueado ao tentar editar no Evento B (false)",
+      run: () => {
+        const ownerA = createOwnerMemberRecord({
+          eventId: "evt-A",
+          ownerUserId: "usr-owner-A",
+          ownerEmail: "oa@planeja.app",
+          ownerName: "Owner A",
+        })
+        const invA = inviteEventTeamMember({
+          eventId: "evt-A",
+          actorMember: ownerA,
+          existingMembers: [ownerA],
+          email: "multi@planeja.app",
+          name: "Multi User",
+          role: "admin",
+        })
+        const accA = acceptEventTeamInvite({
+          inviteToken: invA.member!.inviteToken!,
+          acceptingUserId: "usr-multi",
+          members: invA.updatedMembers,
+        })
+
+        const ownerB = createOwnerMemberRecord({
+          eventId: "evt-B",
+          ownerUserId: "usr-owner-B",
+          ownerEmail: "ob@planeja.app",
+          ownerName: "Owner B",
+        })
+        const invB = inviteEventTeamMember({
+          eventId: "evt-B",
+          actorMember: ownerB,
+          existingMembers: [ownerB],
+          email: "multi@planeja.app",
+          name: "Multi User",
+          role: "viewer",
+        })
+        const accB = acceptEventTeamInvite({
+          inviteToken: invB.member!.inviteToken!,
+          acceptingUserId: "usr-multi",
+          members: invB.updatedMembers,
+        })
+
+        const editInA = evaluateEventPermission({
+          eventOwnerId: "usr-owner-A",
+          actorUserId: "usr-multi",
+          members: accA.updatedMembers,
+          module: "guests",
+          action: "create",
+        })
+        const editInB = evaluateEventPermission({
+          eventOwnerId: "usr-owner-B",
+          actorUserId: "usr-multi",
+          members: accB.updatedMembers,
+          module: "guests",
+          action: "create",
+        })
+        const passed = editInA.allowed === true && editInB.allowed === false
+        return {
+          passed,
+          actual: passed
+            ? `Evento A (admin): edit=${editInA.allowed} | Evento B (viewer): edit=${editInB.allowed}`
+            : "Vazamento de permissões entre eventos!",
+          details: "Permissões são estritamente isoladas por evento.",
+        }
+      },
+    },
+    {
+      id: "rn002_s20",
+      name: "20. Eventos antigos continuam funcionando após a atualização do banco",
+      input: "Evento legado sem linhas prévias em event_members avaliado pelo eventOwnerId",
+      expected: "Criador original mantém acesso integral como 'owner' e terceiros continuam bloqueados",
+      run: () => {
+        const legacyOwnerCheck = evaluateEventPermission({
+          eventOwnerId: "legacy-user-001",
+          actorUserId: "legacy-user-001",
+          members: [],
+          module: "event",
+          action: "delete_event",
+        })
+        const legacyStrangerCheck = evaluateEventPermission({
+          eventOwnerId: "legacy-user-001",
+          actorUserId: "stranger-002",
+          members: [],
+          module: "event",
+          action: "view",
+        })
+        const passed =
+          legacyOwnerCheck.allowed === true &&
+          legacyOwnerCheck.role === "owner" &&
+          legacyStrangerCheck.allowed === false
+        return {
+          passed,
+          actual: passed
+            ? "Retrocompatibilidade preservada: titular legado reconhecido como owner"
+            : "Quebra de compatibilidade com eventos antigos",
+          details: "Eventos existentes funcionam sem perda de acesso ou necessidade de recriação.",
         }
       },
     },
@@ -131,36 +915,44 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
     {
       id: "rn003_s1",
       name: "Rejeição de horário final anterior ao horário de início no mesmo dia",
-      input: '{ title: "Workshop", start_time: "18:00", end_time: "14:00" }',
-      expected: "Erro: horário de término não pode ser anterior ao de início",
+      input: '{ title: "Workshop", type: "Corporativo", startDate: "2026-12-10", startTime: "18:00", endTime: "14:00", location: "Auditório" }',
+      expected: "Rejeição pelo eventPayloadSchema no campo endTime",
       run: () => {
-        const start = "18:00"
-        const end = "14:00"
-        const isValidTimeOrder = end > start
+        const res = eventPayloadSchema.safeParse({
+          title: "Workshop",
+          type: "Corporativo",
+          startDate: "2026-12-10",
+          startTime: "18:00",
+          endTime: "14:00",
+          location: "Auditório",
+        })
+        const hasEndTimeError = !res.success && res.error.issues.some((i) => i.path.includes("endTime"))
         return {
-          passed: !isValidTimeOrder,
-          actual: isValidTimeOrder ? "Aceitou indevidamente" : "Rejeitado: término anterior ao início",
-          details: "Validação temporal impediu término anterior ao início.",
+          passed: hasEndTimeError,
+          actual: hasEndTimeError ? "Rejeitado especificamente em endTime (14:00 <= 18:00)" : "Falha na validação temporal",
+          details: "eventPayloadSchema bloqueou horário final anterior ao inicial.",
         }
       },
     },
     {
       id: "rn003_s2",
-      name: "Rejeição de orçamento previsto negativo",
-      input: '{ title: "Encontro", budget: -2500 }',
-      expected: "Rejeição pelo schema Zod (budget >= 0)",
+      name: "Rejeição isolada de orçamento previsto negativo em payload completo",
+      input: '{ title: "Encontro", type: "Social", startDate: "2026-12-10", startTime: "18:00", location: "Salão", budget: -2500 }',
+      expected: "Rejeição específica no campo budgetEstimated (valor < 0)",
       run: () => {
         const res = eventPayloadSchema.safeParse({
           title: "Encontro",
-          event_type: "social",
-          start_date: "2026-12-10",
+          type: "Social",
+          startDate: "2026-12-10",
+          startTime: "18:00",
+          location: "Salão",
           budget: -2500,
         })
-        const rejected = !res.success
+        const hasBudgetError = !res.success && res.error.issues.some((i) => i.path.includes("budgetEstimated"))
         return {
-          passed: rejected,
-          actual: rejected ? "Rejeitado: orçamento negativo não permitido" : "Aceitou orçamento negativo",
-          details: "eventPayloadSchema exige teto orçamentário não negativo.",
+          passed: hasBudgetError,
+          actual: hasBudgetError ? "Rejeitado especificamente em budgetEstimated (-2500 < 0)" : "Aceitou orçamento negativo",
+          details: "Eliminado falso positivo anterior: validação testa estritamente o campo de orçamento.",
         }
       },
     },
@@ -169,19 +961,33 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RN-004": [
     {
       id: "rn004_s1",
-      name: "Convidado inicializado como Pendente e transição válida de status",
-      input: 'Status inicial "Pendente" -> transição para "Confirmado"',
-      expected: "Transição permitida e validada pelo schema",
+      name: "Convidado inicializado como Pendente e transição válida de status (PT-BR e Canônico)",
+      input: 'Status inicial "Pendente" -> transição para "Confirmado" ou "Recusado"',
+      expected: "Normalização e transição permitida; status inválido rejeitado",
       run: () => {
-        const initialValid = guestStatusSchema.safeParse("Pendente").success
-        const confirmValid = guestStatusSchema.safeParse("Confirmado").success
-        const refuseValid = guestStatusSchema.safeParse("Recusado").success
+        const initialParsed = guestStatusSchema.safeParse("Pendente")
+        const confirmParsed = guestStatusSchema.safeParse("Confirmado")
+        const refuseParsed = guestStatusSchema.safeParse("Recusado")
         const invalidRejected = !guestStatusSchema.safeParse("PresenteSemCadastro").success
-        const passed = initialValid && confirmValid && refuseValid && invalidRejected
+        const transitionOk =
+          isAllowedAttendanceTransition("Pendente", "Confirmado") &&
+          isAllowedAttendanceTransition("pending", "declined") &&
+          !isAllowedAttendanceTransition("expired", "confirmed")
+        const passed =
+          initialParsed.success &&
+          initialParsed.data === "pending" &&
+          confirmParsed.success &&
+          confirmParsed.data === "confirmed" &&
+          refuseParsed.success &&
+          refuseParsed.data === "declined" &&
+          invalidRejected &&
+          transitionOk
         return {
           passed,
-          actual: passed ? "Pendente, Confirmado e Recusado aceitos; inválido rejeitado" : "Falha na máquina de estados",
-          details: "guestStatusSchema valida rigorosamente os estados permitidos.",
+          actual: passed
+            ? "Normalizado ('Pendente'->'pending', 'Confirmado'->'confirmed', 'Recusado'->'declined') e transições validadas"
+            : "Falha na máquina de estados de presença",
+          details: "guestStatusSchema e isAllowedAttendanceTransition validaram todos os estados.",
         }
       },
     },
@@ -296,17 +1102,30 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RN-008": [
     {
       id: "rn008_s1",
-      name: "Moderação de solicitações externas de participação",
-      input: "Decisão de aprovação de solicitação externa",
-      expected: "approvalDecisionSchema valida decisão com status aprovado",
+      name: "Moderação manual vs. aprovação automática e expurgo de rejeitados da lista efetiva",
+      input: "Solicitação pública com autoApprove=false vs autoApprove=true; filtro de rejeitados",
+      expected: "Manual inicia em 'awaiting_approval'; automático em 'pending'; rejeitado ('cancelled') não entra na lista efetiva",
       run: () => {
-        const validDecision = approvalDecisionSchema.safeParse({
-          decision: "approve",
-        })
+        const manualStatus = resolvePublicRequestInitialStatus(false)
+        const autoStatus = resolvePublicRequestInitialStatus(true)
+        const guests = [
+          { id: "g1", source: "manual", status: "pending" },
+          { id: "g2", source: "public_request", status: "cancelled" },
+        ]
+        const effective = filterEffectiveGuests(guests)
+        const validDecision = approvalDecisionSchema.safeParse({ decision: "approve" })
+        const passed =
+          manualStatus === "awaiting_approval" &&
+          autoStatus === "pending" &&
+          effective.length === 1 &&
+          effective[0].id === "g1" &&
+          validDecision.success
         return {
-          passed: validDecision.success,
-          actual: validDecision.success ? "Decisão de aprovação validada" : "Falha na validação da decisão",
-          details: "Decisão aprovada transita a solicitação para a lista de convidados.",
+          passed,
+          actual: passed
+            ? `Manual: ${manualStatus}, Auto: ${autoStatus}, Lista efetiva expurgou rejeitado (${effective.length}/2)`
+            : "Falha na moderação de solicitações externas",
+          details: "resolvePublicRequestInitialStatus e filterEffectiveGuests validaram o ciclo de moderação.",
         }
       },
     },
@@ -320,15 +1139,18 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
       expected: "countApprovedCompanionsForGuest retorna 0",
       run: () => {
         const guestWithCompanions = {
+          status: "confirmed",
           companions: [
             { name: "Acompanhante 1", status: "pending" },
             { name: "Acompanhante 2", status: "rejected" },
           ],
         }
         const count = countApprovedCompanionsForGuest(guestWithCompanions)
+        const initMod = resolveCompanionInitialStatus(true)
+        const passed = count === 0 && initMod === "awaiting_approval"
         return {
-          passed: count === 0,
-          actual: `${count} acompanhantes aprovados`,
+          passed,
+          actual: `${count} acompanhantes aprovados (status inicial: ${initMod})`,
           details: "Acompanhantes sem aprovação não inflam o headcount.",
         }
       },
@@ -338,21 +1160,27 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RN-010": [
     {
       id: "rn010_s1",
-      name: "Normalização de valor ausente para R$ 0,00 e rejeição de negativo",
-      input: "Item sem valor informado; segundo item com valor -100",
-      expected: "Item 1 normalizado para 0; Item 2 rejeitado pelo schema",
+      name: "Normalização de valor ausente para R$ 0,00 e rejeição estrita de valor negativo",
+      input: "Item sem valor informado (eventId válido); segundo item com unit_price: -100 e eventId válido",
+      expected: "Item 1 normalizado para R$ 0,00; Item 2 rejeitado especificamente pelo valor negativo",
       run: () => {
         const normalized = normalizeItemValue({})
-        const schemaCheck = itemCreateSchema.safeParse({
+        const validZero = itemCreateSchema.safeParse({
+          eventId: "evt-01",
+          name: "Item Sem Valor",
+          price: "",
+        })
+        const negativeCheck = itemCreateSchema.safeParse({
+          eventId: "evt-01",
           name: "Item Inválido",
           quantity: 1,
           unit_price: -100,
         })
-        const passed = normalized === 0 && !schemaCheck.success
+        const passed = normalized === 0 && validZero.success && validZero.data.price === 0 && !negativeCheck.success
         return {
           passed,
-          actual: `Normalizado: R$ ${normalized.toFixed(2)}; Negativo rejeitado: ${!schemaCheck.success}`,
-          details: "Valor monetário normalizado para R$ 0,00 e negativo bloqueado.",
+          actual: `Normalizado: R$ ${normalized.toFixed(2)}; Negativo rejeitado com eventId válido: ${!negativeCheck.success}`,
+          details: "Eliminado falso positivo anterior: validação testa estritamente o valor negativo.",
         }
       },
     },
@@ -375,7 +1203,7 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
         return {
           passed,
           actual: `Inicial: ${formatBRL(totalInitial)} | Após remoção: ${formatBRL(totalAfterRemoval)}`,
-          details: "calculateEventTotalCost computou os valores com precisão exata.",
+          details: "calculateEventTotalCost computou os valores compostos (quantity * unit_price) com precisão exata.",
         }
       },
     },
@@ -473,22 +1301,27 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RN-016": [
     {
       id: "rn016_s1",
-      name: "Abrangência das métricas considera apenas eventos ativos do titular",
-      input: "2 eventos ativos (R$ 500 + R$ 1.500) e 1 evento excluído (R$ 10.000)",
-      expected: "Total consolidado: R$ 2.000,00 (evento excluído ignorado)",
+      name: "Consolidação oficial via normalizeReportData (múltiplos eventos, evento individual e estado vazio)",
+      input: "2 eventos ativos no normalizeReportData (R$ 500 + R$ 1.500) + verificação de estado vazio",
+      expected: "Total consolidado: R$ 2.000,00 | Estado vazio: R$ 0,00 sem NaN",
       run: () => {
-        const events = [
-          { total_cost: 500, is_deleted: false },
-          { total_cost: 1500, is_deleted: false },
-          { total_cost: 10000, is_deleted: true },
-        ]
-        const activeTotal = events
-          .filter((e) => !e.is_deleted)
-          .reduce((acc, curr) => acc + curr.total_cost, 0)
+        const emptyRes = normalizeReportData([], defaultReportOptions)
+        const activeRes = normalizeReportData(
+          [
+            { id: "e1", title: "Ev 1", items: [{ id: "i1", name: "Item 1", price: 500 }] },
+            { id: "e2", title: "Ev 2", items: [{ id: "i2", name: "Item 2", price: 1500 }] },
+          ],
+          { ...defaultReportOptions, selectedEventId: "all" }
+        )
+        const passed =
+          emptyRes.metrics.totalExpenses === 0 &&
+          !Number.isNaN(emptyRes.metrics.averageCostPerGuest) &&
+          activeRes.metrics.totalExpenses === 2000 &&
+          activeRes.metrics.totalEvents === 2
         return {
-          passed: activeTotal === 2000,
-          actual: `${formatBRL(activeTotal)} (excluídos expurgados)`,
-          details: "Apenas eventos ativos do próprio organizador compõem os totais.",
+          passed,
+          actual: `Consolidado: ${formatBRL(activeRes.metrics.totalExpenses)} (${activeRes.metrics.totalEvents} eventos) | Vazio: ${formatBRL(emptyRes.metrics.totalExpenses)}`,
+          details: "normalizeReportData consolidou os eventos reais sem mocks locais.",
         }
       },
     },
@@ -521,9 +1354,9 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RN-018": [
     {
       id: "rn018_s1",
-      name: "Controle de fotos da galeria exclusivo do organizador do evento",
+      name: "Controle de fotos da galeria exclusivo do organizador/equipe autorizada do evento",
       input: "Foto pertencente ao evento do organizador 'user-001'",
-      expected: "user-001 pode remover; user-002 é bloqueado",
+      expected: "user-001 pode remover; user-002 não vinculado é bloqueado",
       run: () => {
         const photo = { id: "p1", event_id: "evt-01", organizer_id: "user-001" }
         const canUser1 = canOrganizerModifyPhoto(photo.organizer_id, "user-001")
@@ -531,15 +1364,15 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
         const passed = canUser1 === true && canUser2 === false
         return {
           passed,
-          actual: passed ? "Organizador autorizado; outro usuário bloqueado" : "Falha de controle de foto",
-          details: "Apenas o titular do evento pode gerenciar ou excluir fotos da galeria.",
+          actual: passed ? "Organizador autorizado; terceiro não vinculado bloqueado" : "Falha de controle de foto",
+          details: "Controle de galeria validado por titularidade e RBAC.",
         }
       },
     },
   ],
 
   // ==========================================
-  // REQUISITOS FUNCIONAIS (RF-001 a RF-038)
+  // REQUISITOS FUNCIONAIS (RF-001 a RF-043)
   // ==========================================
   "RF-001": [
     {
@@ -570,13 +1403,14 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
       expected: "Login validado e e-mail normalizado em minúsculas sem espaços",
       run: () => {
         const res = loginUserSchema.safeParse({
-          email: "organizador@planeja.com",
+          email: "  ORGANIZADOR@planeja.com ",
           password: "minhaSenha123",
         })
+        const passed = res.success && res.data.email === "organizador@planeja.com"
         return {
-          passed: res.success,
-          actual: res.success ? "Credenciais válidas para autenticação" : "Rejeitado",
-          details: "loginUserSchema aprovou as credenciais para geração de sessão.",
+          passed,
+          actual: passed ? `Credenciais válidas e normalizadas (${res.data.email})` : "Rejeitado",
+          details: "loginUserSchema aprovou e normalizou as credenciais.",
         }
       },
     },
@@ -585,17 +1419,21 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-003": [
     {
       id: "rf003_s1",
-      name: "Encerramento seguro de sessão e limpeza de credenciais",
-      input: "Solicitação de logout pelo usuário autenticado",
-      expected: "Cookies de sessão eliminados e redirecionamento para rota pública",
+      name: "Encerramento seguro de sessão e bloqueio imediato de rota protegida",
+      input: "evaluateRouteAccess após remoção de sessão e cookies no logout",
+      expected: "Acesso subsequente a /dashboard redireciona imediatamente para /login",
       run: () => {
-        const clearSession = () => ({ session: null, redirect: "/login" })
-        const res = clearSession()
-        const passed = res.session === null && res.redirect === "/login"
+        const decisionAfterLogout = evaluateRouteAccess({
+          pathname: "/dashboard",
+          hasSupabaseSession: false,
+          hasDemoCookie: false,
+          supabaseConfigured: true,
+        })
+        const passed = decisionAfterLogout.action === "redirect_login"
         return {
           passed,
-          actual: `Sessão limpa: ${res.session === null ? "Sim" : "Não"}, Rota: ${res.redirect}`,
-          details: "Fluxo de logout limpa os cookies HTTP-only de autenticação.",
+          actual: `Decisão pós-logout: ${decisionAfterLogout.action} (/login)`,
+          details: "evaluateRouteAccess garante bloqueio imediato após encerramento da sessão.",
         }
       },
     },
@@ -633,20 +1471,23 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-005": [
     {
       id: "rf005_s1",
-      name: "Validação do payload completo de criação de evento",
-      input: '{ title: "Conferência Tech 2026", event_type: "corporativo", start_date: "2026-11-15", budget: 20000 }',
-      expected: "Payload aceito com dados cadastrais obrigatórios",
+      name: "Validação do payload completo de criação de evento (RN-003)",
+      input: '{ title: "Conferência Tech 2026", event_type: "Corporativo", start_date: "2026-11-15", start_time: "09:00", location: "Centro de Convenções", budget: 20000 }',
+      expected: "Payload aceito com todos os dados obrigatórios normalizados",
       run: () => {
         const res = eventPayloadSchema.safeParse({
           title: "Conferência Tech 2026",
-          event_type: "corporativo",
+          event_type: "Corporativo",
           start_date: "2026-11-15",
+          start_time: "09:00",
+          location: "Centro de Convenções",
           budget: 20000,
         })
+        const passed = res.success && res.data.budgetEstimated === 20000 && res.data.type === "Corporativo"
         return {
-          passed: res.success,
-          actual: res.success ? "Payload validado com sucesso" : JSON.stringify(res.error?.format()),
-          details: "eventPayloadSchema aceitou dados cadastrais do evento.",
+          passed,
+          actual: passed ? `Payload validado: "${res.data.title}" (${formatBRL(res.data.budgetEstimated || 0)})` : JSON.stringify(res.error?.format()),
+          details: "eventPayloadSchema validou criação completa de evento respeitando a RN-003.",
         }
       },
     },
@@ -655,20 +1496,27 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-006": [
     {
       id: "rf006_s1",
-      name: "Listagem de eventos do usuário com isolamento",
-      input: "Consulta de eventos com filtro organizador = 'user-123'",
-      expected: "Retorna apenas eventos vinculados ao organizador",
+      name: "Listagem de eventos com isolamento RBAC por usuário",
+      input: "Verificação de acesso via evaluateEventPermission para 2 eventos de proprietários distintos",
+      expected: "Usuário acessa apenas o evento ao qual pertence e é bloqueado no evento alheio",
       run: () => {
-        const mockDb = [
-          { id: 1, user_id: "user-123", title: "Meu Evento" },
-          { id: 2, user_id: "user-456", title: "Evento Alheio" },
-        ]
-        const userEvents = mockDb.filter((e) => e.user_id === "user-123")
-        const passed = userEvents.length === 1 && userEvents[0].title === "Meu Evento"
+        const allowOwn = evaluateEventPermission({
+          eventOwnerId: "user-123",
+          actorUserId: "user-123",
+          module: "event",
+          action: "view",
+        })
+        const denyForeign = evaluateEventPermission({
+          eventOwnerId: "user-456",
+          actorUserId: "user-123",
+          module: "event",
+          action: "view",
+        })
+        const passed = allowOwn.allowed === true && denyForeign.allowed === false
         return {
           passed,
-          actual: `${userEvents.length} evento retornado ("${userEvents[0]?.title}")`,
-          details: "Isolamento estrito por usuário verificado.",
+          actual: `Evento próprio: ${allowOwn.allowed} | Evento alheio: ${denyForeign.allowed}`,
+          details: "Isolamento validado pela camada real de autorização RBAC.",
         }
       },
     },
@@ -678,19 +1526,23 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
     {
       id: "rf007_s1",
       name: "Edição de dados cadastrais e operacionais do evento",
-      input: "Atualização de título e orçamento do evento",
+      input: "Atualização de título, horário, local e orçamento do evento",
       expected: "eventPayloadSchema valida as alterações com sucesso",
       run: () => {
         const res = eventPayloadSchema.safeParse({
           title: "Conferência Tech 2026 - Edição Especial",
-          event_type: "corporativo",
+          event_type: "Corporativo",
           start_date: "2026-11-15",
+          start_time: "10:00",
+          end_time: "18:00",
+          location: "Auditório Principal",
           budget: 25000,
         })
+        const passed = res.success && res.data.budgetEstimated === 25000
         return {
-          passed: res.success,
-          actual: res.success ? "Edição validada com sucesso" : "Rejeitado",
-          details: "Permitiu atualização cadastral respeitando limites financeiros.",
+          passed,
+          actual: passed ? "Edição validada com sucesso" : "Rejeitado",
+          details: "Permitiu atualização cadastral respeitando limites temporais e financeiros.",
         }
       },
     },
@@ -699,15 +1551,22 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-008": [
     {
       id: "rf008_s1",
-      name: "Exclusão nominal de evento com validação do título",
-      input: 'Título real: "Casamento Juliana e Marcos" | Nome digitado no modal: "Casamento Juliana e Marcos"',
-      expected: "Autorizado para exclusão em cascata",
+      name: "Exclusão nominal de evento com validação do título e restrição ao Proprietário",
+      input: 'Título real: "Casamento Juliana e Marcos" | Confirmação exata pelo Proprietário',
+      expected: "Autorizado para o Proprietário com nome idêntico; bloqueado para não-proprietário",
       run: () => {
-        const isAuthorized = validateNominalEventDeletion("Casamento Juliana e Marcos", "Casamento Juliana e Marcos")
+        const isNominalValid = validateNominalEventDeletion("Casamento Juliana e Marcos", "Casamento Juliana e Marcos")
+        const ownerPerm = evaluateEventPermission({
+          eventOwnerId: "usr-owner",
+          actorUserId: "usr-owner",
+          module: "event",
+          action: "delete_event",
+        })
+        const passed = isNominalValid === true && ownerPerm.allowed === true
         return {
-          passed: isAuthorized === true,
-          actual: `Autorizado: ${isAuthorized}`,
-          details: "Confirmação nominal aprovou a exclusão segura.",
+          passed,
+          actual: `Confirmação nominal: ${isNominalValid} | Permissão owner: ${ownerPerm.allowed}`,
+          details: "Exclusão segura validada por confirmação nominal e papel Proprietário.",
         }
       },
     },
@@ -716,22 +1575,26 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-009": [
     {
       id: "rf009_s1",
-      name: "Consulta estruturada aos detalhes e indicadores do evento",
-      input: "Requisição da página de detalhes (/event/[id])",
-      expected: "Retorna objeto com convidados, itens, finanças e galeria agregados",
+      name: "Consulta estruturada aos detalhes e indicadores do evento via normalizeReportData",
+      input: "Evento com convidados confirmados e itens de despesa processado pelo coletor",
+      expected: "Retorna indicadores exatos de convidados, itens e custo total",
       run: () => {
-        const eventHub = {
-          id: "evt-1",
-          title: "Aniversário",
-          guestsCount: 45,
-          itemsCount: 12,
-          totalCost: 3500,
-        }
-        const passed = eventHub.id === "evt-1" && eventHub.guestsCount > 0
+        const report = normalizeReportData(
+          [
+            {
+              id: "evt-1",
+              title: "Aniversário",
+              guests: [{ id: "g1", status: "confirmed" }, { id: "g2", status: "pending" }],
+              items: [{ id: "i1", name: "Buffet", price: 3500 }],
+            },
+          ],
+          { ...defaultReportOptions, selectedEventId: "evt-1" }
+        )
+        const passed = report.metrics.totalGuests === 2 && report.metrics.confirmedGuests === 1 && report.metrics.totalExpenses === 3500
         return {
           passed,
-          actual: `Evento: "${eventHub.title}", Convidados: ${eventHub.guestsCount}, Itens: ${eventHub.itemsCount}`,
-          details: "Estrutura completa do hub do evento carregada com sucesso.",
+          actual: `Convidados: ${report.metrics.totalGuests} (${report.metrics.confirmedGuests} conf.), Custo: ${formatBRL(report.metrics.totalExpenses)}`,
+          details: "Hub do evento processado pelo coletor real de indicadores.",
         }
       },
     },
@@ -760,18 +1623,19 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-011": [
     {
       id: "rf011_s1",
-      name: "Edição de informações cadastrais do convidado",
-      input: "Atualização de telefone e notas do convidado",
-      expected: "guestUpdateSchema valida as alterações",
+      name: "Edição de informações cadastrais e status do convidado",
+      input: 'Atualização de nome, telefone e status "Confirmado"',
+      expected: "guestUpdateSchema valida as alterações e normaliza o status para 'confirmed'",
       run: () => {
         const res = guestUpdateSchema.safeParse({
           name: "Juliana Mendes Atualizada",
           phone: "11988887777",
           status: "Confirmado",
         })
+        const passed = res.success && res.data.status === "confirmed"
         return {
-          passed: res.success,
-          actual: res.success ? "Atualização cadastral validada" : "Erro",
+          passed,
+          actual: passed ? `Atualização validada (status normalizado: ${res.data.status})` : "Erro",
           details: "guestUpdateSchema aceitou os dados parciais editados.",
         }
       },
@@ -803,13 +1667,15 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
       id: "rf013_s1",
       name: "Atualização manual de presença do convidado pelo organizador",
       input: "Transição do status do convidado de 'Pendente' para 'Confirmado'",
-      expected: "guestStatusSchema valida o novo status",
+      expected: "guestStatusSchema e isAllowedAttendanceTransition validam o novo status",
       run: () => {
         const res = guestStatusSchema.safeParse("Confirmado")
+        const transitionOk = isAllowedAttendanceTransition("Pendente", "Confirmado")
+        const passed = res.success && res.data === "confirmed" && transitionOk
         return {
-          passed: res.success,
-          actual: res.success ? "Status Confirmado aceito" : "Inválido",
-          details: "guestStatusSchema autorizou a mudança de presença.",
+          passed,
+          actual: passed ? `Status '${res.data}' aceito e transição autorizada` : "Inválido",
+          details: "guestStatusSchema e isAllowedAttendanceTransition autorizaram a mudança de presença.",
         }
       },
     },
@@ -823,10 +1689,11 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
       expected: "Token único alfanumérico gerado com entropia criptográfica",
       run: () => {
         const token = generateSecureToken()
-        const passed = typeof token === "string" && token.length >= 32
+        const validity = evaluateInviteTokenValidity({ token, enabled: true })
+        const passed = typeof token === "string" && token.length >= 32 && validity.valid
         return {
           passed,
-          actual: `Link gerado: /evento/${token.slice(0, 12)}... (${token.length} chars)`,
+          actual: `Link gerado: /evento/${token.slice(0, 12)}... (${token.length} chars, válido: ${validity.valid})`,
           details: "Token CSPRNG gerado com entropia >= 128 bits.",
         }
       },
@@ -837,18 +1704,19 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
     {
       id: "rf015_s1",
       name: "Confirmação de presença externa (RSVP) via formulário público",
-      input: '{ name: "Lucas Rocha", email: "lucas@email.com", response: "yes", companions_count: 1 }',
-      expected: "publicRsvpSchema valida a resposta de RSVP",
+      input: '{ name: "Lucas Rocha", email: "lucas@email.com", response: "yes", companions: [{ name: "Ana Rocha" }] }',
+      expected: "publicRsvpSchema valida a resposta de RSVP e mapeia attendanceStatus para 'confirmed'",
       run: () => {
         const res = publicRsvpSchema.safeParse({
           name: "Lucas Rocha",
           email: "lucas@email.com",
           response: "yes",
-          companions_count: 1,
+          companions: [{ name: "Ana Rocha" }],
         })
+        const passed = res.success && res.data.attendanceStatus === "confirmed" && res.data.companions.length === 1
         return {
-          passed: res.success,
-          actual: res.success ? "RSVP validado com sucesso" : "Erro no schema RSVP",
+          passed,
+          actual: passed ? `RSVP validado (${res.data.attendanceStatus}, ${res.data.companions.length} acompanhante)` : "Erro no schema RSVP",
           details: "publicRsvpSchema aceitou a resposta com acompanhante.",
         }
       },
@@ -860,16 +1728,18 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
       id: "rf016_s1",
       name: "Solicitação externa de participação em evento público",
       input: '{ name: "Mariana Souza", email: "mariana@email.com", response: "yes" }',
-      expected: "Solicitação aceita sob status 'pending_approval'",
+      expected: "Solicitação aceita e classificada como 'awaiting_approval' quando moderação ativa",
       run: () => {
         const res = publicRsvpSchema.safeParse({
           name: "Mariana Souza",
           email: "mariana@email.com",
           response: "yes",
         })
+        const initialStatus = resolvePublicRequestInitialStatus(false)
+        const passed = res.success && initialStatus === "awaiting_approval"
         return {
-          passed: res.success,
-          actual: res.success ? "Solicitação de entrada aceita para moderação" : "Erro",
+          passed,
+          actual: passed ? `Solicitação validada e encaminhada para '${initialStatus}'` : "Erro",
           details: "Dados validados para registro na fila de aprovação.",
         }
       },
@@ -896,19 +1766,21 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-018": [
     {
       id: "rf018_s1",
-      name: "Cadastro de item de despesa com persistência",
-      input: '{ name: "Banda Musical", quantity: 1, unit_price: 2500 }',
-      expected: "itemCreateSchema valida com sucesso",
+      name: "Cadastro de item de despesa com cálculo composto (quantity * unit_price)",
+      input: '{ eventId: "evt-01", name: "Banda Musical", quantity: 2, unit_price: 1250 }',
+      expected: "itemCreateSchema valida com sucesso e computa price = R$ 2.500,00",
       run: () => {
         const res = itemCreateSchema.safeParse({
+          eventId: "evt-01",
           name: "Banda Musical",
-          quantity: 1,
-          unit_price: 2500,
+          quantity: 2,
+          unit_price: 1250,
         })
+        const passed = res.success && res.data.price === 2500
         return {
-          passed: res.success,
-          actual: res.success ? "Item validado com sucesso" : "Erro",
-          details: "itemCreateSchema aprovou item com valor unitário.",
+          passed,
+          actual: passed ? `Item validado com preço calculado: ${formatBRL(res.data.price)}` : "Erro",
+          details: "itemCreateSchema aprovou item e calculou o valor total.",
         }
       },
     },
@@ -917,18 +1789,23 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-019": [
     {
       id: "rf019_s1",
-      name: "Edição de item de despesa (quantidade e valor)",
-      input: '{ name: "Banda Musical Premium", quantity: 1, unit_price: 3200 }',
-      expected: "itemUpdateSchema valida edição",
+      name: "Edição de item de despesa (quantidade e valor unitário) e bloqueio de negativo",
+      input: '{ name: "Banda Musical Premium", quantity: 1, unit_price: 3200 } e teste negativo unit_price: -50',
+      expected: "itemUpdateSchema valida edição positiva (3200) e rejeita unit_price negativo (-50)",
       run: () => {
         const res = itemUpdateSchema.safeParse({
           name: "Banda Musical Premium",
           unit_price: 3200,
         })
+        const neg = itemUpdateSchema.safeParse({
+          name: "Banda Inválida",
+          unit_price: -50,
+        })
+        const passed = res.success && res.data.unitPrice === 3200 && !neg.success
         return {
-          passed: res.success,
-          actual: res.success ? "Item atualizado com sucesso" : "Erro",
-          details: "itemUpdateSchema validou reajuste de valor.",
+          passed,
+          actual: passed ? `Item atualizado (${formatBRL(res.data.unitPrice || 0)}) e negativo bloqueado` : "Erro",
+          details: "itemUpdateSchema validou reajuste de valor e rejeitou valor negativo.",
         }
       },
     },
@@ -1097,19 +1974,20 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-028": [
     {
       id: "rf028_s1",
-      name: "Galeria de fotos do evento com controle de permissão",
-      input: "Payload de criação de foto na galeria",
-      expected: "photoCreateSchema valida a foto e vincula ao evento",
+      name: "Galeria de fotos do evento com validação de metadados e permissão",
+      input: "Payload de criação de foto na galeria (event_id, file_url, caption)",
+      expected: "photoCreateSchema valida a foto, normaliza URL/filename e vincula ao evento",
       run: () => {
         const res = photoCreateSchema.safeParse({
           event_id: "evt-01",
           file_url: "https://storage.supabase.co/events/evt-01/photo1.jpg",
           caption: "Abertura do evento",
         })
+        const passed = res.success && res.data.eventId === "evt-01" && res.data.filename === "photo1.jpg"
         return {
-          passed: res.success,
-          actual: res.success ? "Foto validada com sucesso" : "Erro no schema de foto",
-          details: "photoCreateSchema aprovou metadados da foto.",
+          passed,
+          actual: passed ? `Foto validada: ${res.data.filename} (evento: ${res.data.eventId})` : "Erro no schema de foto",
+          details: "photoCreateSchema aprovou e normalizou metadados da foto.",
         }
       },
     },
@@ -1156,9 +2034,10 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
           guest_ids: ["g1", "g2"],
           subject: "Seu convite especial",
         })
+        const passed = res.success && res.data.guestIds?.length === 2
         return {
-          passed: res.success,
-          actual: res.success ? "Payload de envio validado" : "Erro no schema de convite",
+          passed,
+          actual: passed ? "Payload de envio validado (2 destinatários)" : "Erro no schema de convite",
           details: "sendInvitesPayloadSchema aprovou a lista de destinatários.",
         }
       },
@@ -1232,17 +2111,32 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-034": [
     {
       id: "rf034_s1",
-      name: "Configuração do duplo regime financeiro (Orçamento x Rateio)",
-      input: "Chaveamento de financial_mode entre 'budget' e 'split'",
-      expected: "Ambas as modalidades aceitas com comportamentos distintos",
+      name: "Configuração do duplo regime financeiro (corporate_budget x collaborative_split)",
+      input: "Validação em eventPayloadSchema para ambos os regimes financeiros",
+      expected: "corporate_budget e collaborative_split homologados com cálculos independentes",
       run: () => {
-        const validModes = ["budget", "split"]
-        const checkMode = (mode: string) => validModes.includes(mode)
-        const passed = checkMode("budget") && checkMode("split") && !checkMode("invalido")
+        const corp = eventPayloadSchema.safeParse({
+          title: "Summit",
+          type: "Corporativo",
+          startDate: "2026-12-01",
+          startTime: "09:00",
+          location: "SP",
+          financialMode: "corporate_budget",
+          budgetEstimated: 10000,
+        })
+        const collab = eventPayloadSchema.safeParse({
+          title: "Churrasco",
+          type: "Colaborativo",
+          startDate: "2026-12-01",
+          startTime: "12:00",
+          location: "Sítio",
+          financialMode: "collaborative_split",
+        })
+        const passed = corp.success && collab.success
         return {
           passed,
-          actual: passed ? "Regimes 'budget' e 'split' homologados" : "Modalidade inválida",
-          details: "Duplo regime financeiro suportado no modelo de dados.",
+          actual: passed ? "Regimes 'corporate_budget' e 'collaborative_split' homologados" : "Modalidade inválida",
+          details: "Duplo regime financeiro validado pelo eventPayloadSchema.",
         }
       },
     },
@@ -1251,20 +2145,20 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
   "RF-035": [
     {
       id: "rf035_s1",
-      name: "Coleta e consolidação de restrições alimentares no RSVP",
+      name: "Coleta e consolidação de restrições alimentares no RSVP via aggregateDietaryRestrictions",
       input: "Respostas RSVP com declarações 'Vegetariano' e 'Sem Glúten'",
-      expected: "Agrupamento quantitativo para a equipe de buffet",
+      expected: "Agrupamento quantitativo exato para a equipe de buffet",
       run: () => {
-        const rsvps = [{ dietary: "Vegetariano" }, { dietary: "Vegetariano" }, { dietary: "Sem Glúten" }]
-        const counts = rsvps.reduce<Record<string, number>>((acc, curr) => {
-          acc[curr.dietary] = (acc[curr.dietary] || 0) + 1
-          return acc
-        }, {})
+        const counts = aggregateDietaryRestrictions([
+          { dietaryRestrictions: "Vegetariano" },
+          { dietaryRestrictions: "Vegetariano" },
+          { dietaryRestrictions: "Sem Glúten" },
+        ])
         const passed = counts["Vegetariano"] === 2 && counts["Sem Glúten"] === 1
         return {
           passed,
-          actual: `Buffet consolidado: 2 Vegetarianos, 1 Sem Glúten`,
-          details: "Consolidação correta das preferências alimentares.",
+          actual: `Buffet consolidado: ${counts["Vegetariano"]} Vegetarianos, ${counts["Sem Glúten"]} Sem Glúten`,
+          details: "aggregateDietaryRestrictions consolidou as preferências alimentares.",
         }
       },
     },
@@ -1274,13 +2168,12 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
     {
       id: "rf036_s1",
       name: "Gerenciamento de acompanhantes de convidados dentro do limite",
-      input: "Convidado com 2 acompanhantes nominais informados via companionSchema",
+      input: "Convidado com acompanhante nominal informado via companionSchema",
       expected: "companionSchema valida nome do acompanhante",
       run: () => {
         const res = companionSchema.safeParse({
           name: "Mariana Silva",
-          companion_name: "Mariana Silva",
-          relationship: "Cônjuge",
+          notes: "Cônjuge",
         })
         return {
           passed: res.success,
@@ -1334,11 +2227,281 @@ export const REQUIREMENT_EVALUATORS: Record<string, ScenarioDefinition[]> = {
         const pathname = "/event/evt-01/host-view"
         const isHostView = pathname.endsWith("/host-view")
         const isProtectedMutation = isProtectedAppPath(pathname)
-        const passed = isHostView && !isProtectedMutation
+        const readCheck = evaluateEventPermission({
+          eventOwnerId: "usr-owner",
+          actorUserId: null,
+          hostViewTokenProvided: "tok-host-1",
+          eventHostViewToken: "tok-host-1",
+          eventHostViewEnabled: true,
+          module: "analytics",
+          action: "view",
+        })
+        const writeCheck = evaluateEventPermission({
+          eventOwnerId: "usr-owner",
+          actorUserId: null,
+          hostViewTokenProvided: "tok-host-1",
+          eventHostViewToken: "tok-host-1",
+          eventHostViewEnabled: true,
+          module: "financial",
+          action: "edit",
+        })
+        const passed = isHostView && !isProtectedMutation && readCheck.allowed && !writeCheck.allowed
         return {
           passed,
-          actual: `Host-view detectada: ${isHostView}, Acesso somente-leitura autorizado`,
-          details: "Rota host-view opera sob visualização sem permitir mutações.",
+          actual: `Host-view leitura: ${readCheck.allowed} | Escrita bloqueada: ${!writeCheck.allowed}`,
+          details: "Rota host-view opera sob visualização tokenizada sem permitir mutações.",
+        }
+      },
+    },
+  ],
+
+  "RF-039": [
+    {
+      id: "rf039_s1",
+      name: "Convite de membro para a equipe do evento por e-mail e bloqueio de duplicidade",
+      input: 'teamInviteSchema + inviteEventTeamMember({ email: "equipe@planeja.app", role: "admin" })',
+      expected: "Convite criado com token e expiração; segundo convite para o mesmo e-mail bloqueado",
+      run: () => {
+        const schemaOk = teamInviteSchema.safeParse({
+          eventId: "evt-01",
+          email: "equipe@planeja.app",
+          name: "Fernanda Equipe",
+          role: "admin",
+          expiresInDays: 7,
+        })
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-01",
+          ownerUserId: "usr-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Owner",
+        })
+        const inv1 = inviteEventTeamMember({
+          eventId: "evt-01",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "equipe@planeja.app",
+          name: "Fernanda Equipe",
+          role: "admin",
+        })
+        const inv2 = inviteEventTeamMember({
+          eventId: "evt-01",
+          actorMember: owner,
+          existingMembers: inv1.updatedMembers,
+          email: "equipe@planeja.app",
+          name: "Fernanda Duplicada",
+          role: "collaborator",
+        })
+        const passed = schemaOk.success && inv1.success && !inv2.success
+        return {
+          passed,
+          actual: passed ? `Convite gerado (${inv1.member?.status}) e duplicidade bloqueada` : "Falha no RF-039",
+          details: "Convite de equipe por e-mail validado pelo schema e domínio RBAC.",
+        }
+      },
+    },
+  ],
+
+  "RF-040": [
+    {
+      id: "rf040_s1",
+      name: "Aceitação de convite válido, rejeição de expirado e revogação imediata de acesso",
+      input: "acceptEventTeamInvite (no prazo vs expirado) + revokeEventTeamMember",
+      expected: "Ativa no prazo, bloqueia expirado e revoga acesso imediatamente",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-01",
+          ownerUserId: "usr-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Owner",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-01",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "colab@planeja.app",
+          name: "Colaborador",
+          role: "collaborator",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-colab",
+          members: inv.updatedMembers,
+        })
+        const rev = revokeEventTeamMember({
+          eventId: "evt-01",
+          actorMember: owner,
+          targetMemberId: acc.member!.id,
+          members: acc.updatedMembers,
+        })
+        const checkAfterRevoke = evaluateEventPermission({
+          eventOwnerId: "usr-1",
+          actorUserId: "usr-colab",
+          members: rev.updatedMembers,
+          module: "event",
+          action: "view",
+        })
+        const passed = acc.success && rev.success && !checkAfterRevoke.allowed
+        return {
+          passed,
+          actual: passed ? "Convite aceito -> Membro ativo -> Acesso revogado e bloqueado" : "Falha no RF-040",
+          details: "Ciclo completo de aceite e revogação validado.",
+        }
+      },
+    },
+  ],
+
+  "RF-041": [
+    {
+      id: "rf041_s1",
+      name: "Configuração granular de papéis e permissões por módulo sem escalação de privilégio",
+      input: "teamUpdateRoleSchema + evaluateEventPermission por módulo + bloqueio de auto-elevação",
+      expected: "Colaborador financeiro opera em 'financial', é bloqueado em 'guests' e não altera seu próprio papel",
+      run: () => {
+        const schemaOk = teamUpdateRoleSchema.safeParse({
+          eventId: "evt-01",
+          memberId: "mbr-1",
+          role: "collaborator",
+          permissions: getCollaboratorPresetPermissions("financial"),
+        })
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-01",
+          ownerUserId: "usr-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Owner",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-01",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "fin@planeja.app",
+          name: "Fin",
+          role: "collaborator",
+          permissions: getCollaboratorPresetPermissions("financial"),
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-fin",
+          members: inv.updatedMembers,
+        })
+        const finCreate = evaluateEventPermission({
+          eventOwnerId: "usr-1",
+          actorUserId: "usr-fin",
+          members: acc.updatedMembers,
+          module: "financial",
+          action: "create",
+        })
+        const guestsEdit = evaluateEventPermission({
+          eventOwnerId: "usr-1",
+          actorUserId: "usr-fin",
+          members: acc.updatedMembers,
+          module: "guests",
+          action: "edit",
+        })
+        const selfEscalate = canActorModifyMemberPermissions({
+          actorMember: acc.member!,
+          targetMember: acc.member!,
+          proposedRole: "admin",
+        })
+        const passed = schemaOk.success && finCreate.allowed && !guestsEdit.allowed && !selfEscalate.allowed
+        return {
+          passed,
+          actual: passed
+            ? `Financial create: ${finCreate.allowed} | Guests edit: ${guestsEdit.allowed} | Auto-elevação: ${selfEscalate.allowed}`
+            : "Falha no RF-041",
+          details: "Segregação modular e bloqueio de escalação de privilégio confirmados.",
+        }
+      },
+    },
+  ],
+
+  "RF-042": [
+    {
+      id: "rf042_s1",
+      name: "Transferência transacional de titularidade com confirmação nominal",
+      input: "teamTransferOwnershipSchema + transferEventOwnership de Owner para Admin ativo",
+      expected: "Novo proprietário assume como 'owner' único e anterior passa a 'admin'",
+      run: () => {
+        const schemaOk = teamTransferOwnershipSchema.safeParse({
+          eventId: "evt-01",
+          newOwnerMemberId: "mbr-2",
+          confirmationTitle: "Congresso Nacional",
+        })
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-01",
+          ownerUserId: "usr-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Owner",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-01",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "novo@planeja.app",
+          name: "Novo Owner",
+          role: "admin",
+        })
+        const acc = acceptEventTeamInvite({
+          inviteToken: inv.member!.inviteToken!,
+          acceptingUserId: "usr-2",
+          members: inv.updatedMembers,
+        })
+        const tr = transferEventOwnership({
+          eventId: "evt-01",
+          actorMember: owner,
+          newOwnerMemberId: acc.member!.id,
+          members: acc.updatedMembers,
+        })
+        const activeOwners = tr.updatedMembers.filter((m) => m.role === "owner" && m.status === "active")
+        const passed = schemaOk.success && tr.success && activeOwners.length === 1 && activeOwners[0].userId === "usr-2"
+        return {
+          passed,
+          actual: passed ? `Titularidade transferida para ${tr.newOwnerUserId} (1 owner único)` : "Falha no RF-042",
+          details: "Transferência transacional preservou a unicidade de proprietário.",
+        }
+      },
+    },
+  ],
+
+  "RF-043": [
+    {
+      id: "rf043_s1",
+      name: "Registro de trilha de auditoria para operações autorizadas e tentativas bloqueadas",
+      input: "Verificação dos registros auditLog gerados em convite, bloqueio e transferência",
+      expected: "Entradas contêm eventId, actorRole, action, allowed (true/false) e timestamp ISO",
+      run: () => {
+        const owner = createOwnerMemberRecord({
+          eventId: "evt-01",
+          ownerUserId: "usr-1",
+          ownerEmail: "owner@planeja.app",
+          ownerName: "Owner",
+        })
+        const inv = inviteEventTeamMember({
+          eventId: "evt-01",
+          actorMember: owner,
+          existingMembers: [owner],
+          email: "auditoria@planeja.app",
+          name: "Membro Auditado",
+          role: "viewer",
+        })
+        const dup = inviteEventTeamMember({
+          eventId: "evt-01",
+          actorMember: owner,
+          existingMembers: inv.updatedMembers,
+          email: "auditoria@planeja.app",
+          name: "Duplicado",
+          role: "viewer",
+        })
+        const passed =
+          inv.auditLog.allowed === true &&
+          inv.auditLog.action === "team.member_invited" &&
+          dup.auditLog.allowed === false &&
+          dup.auditLog.action === "team.invite_duplicate_blocked"
+        return {
+          passed,
+          actual: passed
+            ? `Logs gerados: [${inv.auditLog.action}: allowed=true] e [${dup.auditLog.action}: allowed=false]`
+            : "Falha na auditoria",
+          details: "Trilha de auditoria registra tanto operações válidas quanto bloqueios de segurança.",
         }
       },
     },

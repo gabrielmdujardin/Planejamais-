@@ -24,15 +24,41 @@ export const REQUIREMENTS_CATALOG: RequirementItem[] = [
     id: "RN-002",
     category: "RN",
     number: 2,
-    title: "Titularidade do evento",
+    title: "Titularidade do evento e gerenciamento colaborativo (RBAC)",
+    previousWording:
+      "Todo evento tem exatamente um organizador, que é o usuário que o criou. Somente o organizador pode editar ou excluir o evento e consultar seus dados internos (lista de convidados, gastos, solicitações e análises).",
     description:
-      "Todo evento tem exatamente um organizador, que é o usuário que o criou. Somente o organizador pode editar ou excluir o evento e gerenciar seus dados internos (lista de convidados, acompanhantes, gastos, solicitações, fotos e análises). Quando habilitado pelo organizador por meio de link exclusivo com token, o anfitrião ou contratante externo pode apenas visualizar em modo de leitura os indicadores autorizados, sem permissão de alteração.",
+      "Todo evento deverá possuir exatamente um proprietário, inicialmente definido como o usuário responsável por sua criação. O proprietário terá controle integral sobre o evento, podendo gerenciar seus dados, convidar outros usuários, atribuir papéis, configurar permissões, transferir a titularidade e realizar sua exclusão. O sistema deverá permitir o gerenciamento colaborativo por meio da inclusão de membros da equipe, aos quais poderão ser atribuídos diferentes papéis e níveis de acesso, conforme suas responsabilidades. As permissões deverão ser individuais e vinculadas ao respectivo evento, permitindo restringir operações de visualização, criação, edição e exclusão dos dados relacionados aos diferentes módulos do sistema. Somente o proprietário poderá excluir o evento ou transferir sua titularidade. Nenhum membro poderá conceder permissões superiores às suas próprias atribuições. O anfitrião ou contratante externo deverá continuar podendo visualizar os indicadores autorizados por meio de um link exclusivo com token, sem permissão de alteração.",
     explanation:
-      "Define o princípio de posse estrita: apenas o organizador titular pode gerenciar convidados, custos e fotos do evento. Terceiros só acessam visões específicas e controladas por tokens de leitura.",
-    relatedReqs: ["RF-004", "RF-005", "RF-006", "RF-007", "RF-008", "RF-009", "RF-012", "RF-024", "RF-025", "RF-029", "RF-033", "RF-037", "RF-038"],
+      "Arquitetura RBAC por evento: garante exatamente um Proprietário com controle total, permitindo distribuir responsabilidades operacionais entre Administradores, Colaboradores por módulo e Visualizadores, além do portal externo somente-leitura para o anfitrião.",
+    relatedReqs: [
+      "RF-004",
+      "RF-005",
+      "RF-006",
+      "RF-007",
+      "RF-008",
+      "RF-009",
+      "RF-012",
+      "RF-024",
+      "RF-025",
+      "RF-029",
+      "RF-033",
+      "RF-037",
+      "RF-038",
+      "RF-039",
+      "RF-040",
+      "RF-041",
+      "RF-042",
+      "RF-043",
+    ],
     expectedBehavior:
-      "Autorizar apenas o id do usuário criador como organizador; bloquear operações de mutação de terceiros; permitir portal do anfitrião apenas como leitura via token específico.",
-    testFiles: ["tests/regras-negocio-rn001-rn018.test.js"],
+      "Validar os 20 cenários RBAC obrigatórios: proprietário único, convite e aceite de administrador/colaborador/visualizador, bloqueio de exclusão por administrador, escopo modular financeiro e de convidados, bloqueio de auto-elevação de privilégios, revogação imediata, transferência transacional de titularidade e retrocompatibilidade com eventos antigos.",
+    testFiles: [
+      "lib/domain/rbac.ts",
+      "app/api/events/[eventId]/team/route.ts",
+      "components/event-team-manager.tsx",
+      "tests/regras-negocio-rn001-rn018.test.js",
+    ],
     automated: true,
     status: "not_tested",
   },
@@ -790,6 +816,86 @@ export const REQUIREMENTS_CATALOG: RequirementItem[] = [
     automated: true,
     status: "not_tested",
   },
+  {
+    id: "RF-039",
+    category: "RF",
+    number: 39,
+    title: "Convidar membros para a equipe do evento por e-mail",
+    description:
+      "O sistema deve permitir que o proprietário ou administrador autorizado convide profissionais por e-mail para integrar a equipe do evento, definindo papel inicial (Administrador, Colaborador ou Visualizador), permissões modulares e prazo de validade do convite, bloqueando convites duplicados.",
+    explanation:
+      "Viabiliza a montagem da equipe organizadora com convites seguros, prazo de expiração e prevenção de duplicidade no mesmo evento.",
+    relatedReqs: ["RN-002", "RF-040", "RF-041"],
+    expectedBehavior:
+      "Gerar convite com token CSPRNG e data de expiração; bloquear e-mail duplicado ativo/pendente no mesmo evento; validar hierarquia do convidante.",
+    testFiles: ["lib/domain/rbac.ts", "app/api/events/[eventId]/team/route.ts", "components/event-team-manager.tsx"],
+    automated: true,
+    status: "not_tested",
+  },
+  {
+    id: "RF-040",
+    category: "RF",
+    number: 40,
+    title: "Aceitar convites de equipe e revogar acesso de colaboradores",
+    description:
+      "O sistema deve permitir que o usuário convidado aceite um convite válido dentro do prazo para tornar-se membro ativo da equipe do evento, bem como permitir que o proprietário cancele convites pendentes ou revogue imediatamente o acesso de colaboradores.",
+    explanation:
+      "Controla o ciclo de vida do vínculo do colaborador com o evento: ativação mediante token válido e revogação instantânea quando desligado da equipe.",
+    relatedReqs: ["RN-002", "RF-039"],
+    expectedBehavior:
+      "Ativar membro ao aceitar convite no prazo; rejeitar convite expirado ou revogado; bloquear acesso imediatamente após revogação.",
+    testFiles: ["lib/domain/rbac.ts", "app/api/events/[eventId]/team/route.ts", "components/event-team-manager.tsx"],
+    automated: true,
+    status: "not_tested",
+  },
+  {
+    id: "RF-041",
+    category: "RF",
+    number: 41,
+    title: "Configurar papéis e permissões granulares por módulo (RBAC)",
+    description:
+      "O sistema deve permitir definir e alterar papéis e permissões granulares por módulo (evento, convidados, solicitações, financeiro, fotos, análises, relatórios e equipe) e por operação (visualizar, criar, editar, excluir, aprovar, exportar), impedindo que qualquer membro eleve suas próprias permissões ou conceda privilégios superiores aos seus.",
+    explanation:
+      "Implementa o controle de acesso baseado em papéis (RBAC) por evento, garantindo segregação de funções (ex.: colaborador financeiro vs. recepção).",
+    relatedReqs: ["RN-002", "RN-010", "RN-018"],
+    expectedBehavior:
+      "Autorizar apenas módulos e ações concedidos; bloquear auto-elevação de privilégios; impedir que visualizador modifique dados.",
+    testFiles: ["lib/domain/rbac.ts", "app/api/events/[eventId]/team/route.ts", "components/event-team-manager.tsx"],
+    automated: true,
+    status: "not_tested",
+  },
+  {
+    id: "RF-042",
+    category: "RF",
+    number: 42,
+    title: "Transferir titularidade do evento com confirmação nominal",
+    description:
+      "O sistema deve permitir exclusivamente ao proprietário atual transferir de forma transacional a titularidade do evento para outro membro ativo da equipe mediante confirmação nominal do título do evento, mantendo a regra de proprietário único.",
+    explanation:
+      "Permite a sucessão segura de responsabilidade pelo evento sem violar a unicidade de proprietário nem exigir recriação do evento.",
+    relatedReqs: ["RN-002", "RN-015"],
+    expectedBehavior:
+      "Exigir papel 'owner' e confirmação nominal do título; promover destinatário ativo a 'owner' e converter anterior em 'admin' atomicamente.",
+    testFiles: ["lib/domain/rbac.ts", "supabase/migrations/20261117000100_event_rbac_and_audit.sql", "components/event-team-manager.tsx"],
+    automated: true,
+    status: "not_tested",
+  },
+  {
+    id: "RF-043",
+    category: "RF",
+    number: 43,
+    title: "Registrar e consultar histórico de alterações e auditoria do evento",
+    description:
+      "O sistema deve registrar em trilha de auditoria todas as alterações relevantes de equipe, permissões, transferências de titularidade e tentativas de acesso ou escalação de privilégio bloqueadas, permitindo sua consulta na seção Equipe e permissões.",
+    explanation:
+      "Garante rastreabilidade e governança sobre quem concedeu acessos, alterou permissões ou tentou executar operações não autorizadas.",
+    relatedReqs: ["RN-002", "RNF-004", "RNF-005"],
+    expectedBehavior:
+      "Registrar entradas em event_audit_logs com ator, papel, ação, status (autorizado/bloqueado) e carimbo de tempo.",
+    testFiles: ["lib/domain/rbac.ts", "supabase/migrations/20261117000100_event_rbac_and_audit.sql", "components/event-team-manager.tsx"],
+    automated: true,
+    status: "not_tested",
+  },
 
   // ==========================================
   // REQUISITOS NÃO FUNCIONAIS (RNF-001 a RNF-010) - 10 ITENS
@@ -947,7 +1053,7 @@ export const REQUIREMENTS_CATALOG: RequirementItem[] = [
       "100% das regras de negócio e requisitos funcionais validados por testes automatizados; nenhum erro de ESLint ou TypeScript no build de produção (sem ignoreBuildErrors); separação modular entre domínio, ações e componentes.",
     explanation:
       "Engenharia de software profissional: pipeline automatizado com verificação estrita de tipagem e suite de testes.",
-    relatedReqs: ["RN-001 a RN-018", "RF-001 a RF-038"],
+    relatedReqs: ["RN-001 a RN-018", "RF-001 a RF-043"],
     expectedBehavior:
       "Build de produção executado sem flags de supressão de erros (strict TypeScript e ESLint passando com zero falhas).",
     testFiles: ["tests/requisitos-nao-funcionais-rnf.test.js"],
@@ -955,4 +1061,303 @@ export const REQUIREMENTS_CATALOG: RequirementItem[] = [
     status: "not_tested",
   },
 ]
+
+const AUDIT_DIAGNOSTIC_METADATA: Record<
+  string,
+  Pick<
+    RequirementItem,
+    | "previousStatus"
+    | "problemClassification"
+    | "rootCauseAnalysis"
+    | "correctionApplied"
+    | "testedEndpoint"
+    | "databaseValidationInfo"
+  >
+> = {
+  "RN-001": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "context/auth-context.tsx (register/login/logout)",
+    databaseValidationInfo: "public.users (email TEXT NOT NULL UNIQUE, idx_users_email_unique, RLS auth.uid() = id)",
+  },
+  "RN-002": {
+    previousStatus: "needs_refinement",
+    problemClassification: "incomplete_rule",
+    rootCauseAnalysis:
+      "A regra original restringia toda gestão a um único organizador isolado, não suportando equipes profissionais, delegação modular nem hierarquia de acesso (RBAC).",
+    correctionApplied:
+      "Refinada para RBAC por evento (Proprietário único, Administrador, Colaborador modular, Visualizador e Anfitrião externo tokenizado) com 20 cenários validados, tabelas event_members e event_audit_logs e seção Equipe e permissões.",
+    testedEndpoint: "/api/events/[eventId]/team & /api/events/[eventId]/host-view",
+    databaseValidationInfo:
+      "public.event_members (idx_event_members_single_active_owner), public.event_audit_logs, função SQL has_event_permission e transfer_event_ownership",
+  },
+  "RN-003": {
+    previousStatus: "needs_refinement",
+    problemClassification: "test_error",
+    rootCauseAnalysis:
+      "O cenário rn003_s2 gerava falso positivo ao testar orçamento negativo em um payload incompleto que já falhava por ausência de horário e local.",
+    correctionApplied:
+      "Corrigido o teste para isolar exatamente a falha de orçamento negativo e término anterior ao início com payload completo e normalização snake_case/camelCase em eventPayloadSchema.",
+    testedEndpoint: "app/actions/events.ts (createEvent / updateEventDetails)",
+    databaseValidationInfo: "public.events (NOT NULL constraints e CHECK budget_estimated >= 0)",
+  },
+  "RN-004": {
+    previousStatus: "failed",
+    problemClassification: "doc_divergence",
+    rootCauseAnalysis:
+      "Reprovada anteriormente: guestStatusSchema aceitava apenas códigos em inglês ('pending', 'confirmed', 'declined'), rejeitando os termos da documentação ('Pendente', 'Confirmado', 'Recusado').",
+    correctionApplied:
+      "Implementada normalizeGuestStatus e isAllowedAttendanceTransition em lib/domain/business-rules.ts e preprocessamento em guestStatusSchema.",
+    testedEndpoint: "/api/guests/[guestId] & /api/confirm/[token]/accept|decline",
+    databaseValidationInfo: "public.guests (status CHECK in awaiting_approval, pending, confirmed, declined, expired, cancelled)",
+  },
+  "RN-005": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "app/actions/events.ts & /api/analytics",
+    databaseValidationInfo: "public.guests + public.guest_companions & materialized view public.mv_rsvp_stats",
+  },
+  "RN-006": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "/api/public-events/[token] & /api/confirm/[token]",
+    databaseValidationInfo: "public.events(public_invite_token UNIQUE) & public.guests(confirmation_token UNIQUE)",
+  },
+  "RN-007": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "/api/public-events/[token] & /api/events/[eventId]/public-info",
+    databaseValidationInfo: "Filtragem server-side via buildPublicEventPayload e RLS em public.events",
+  },
+  "RN-008": {
+    previousStatus: "needs_refinement",
+    problemClassification: "test_error",
+    rootCauseAnalysis:
+      "O teste anterior validava apenas um schema opcional sem exercitar resolvePublicRequestInitialStatus e filterEffectiveGuests.",
+    correctionApplied:
+      "Integrada validação real de moderação manual (awaiting_approval), aprovação automática configurável (pending) e exclusão de rejeitados (cancelled) da lista efetiva.",
+    testedEndpoint: "/api/public-events/[token] & /api/guests/[guestId]/approve|reject",
+    databaseValidationInfo: "public.guests (source, status, approved_at, rejected_at)",
+  },
+  "RN-009": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "/api/companions/[companionId]/approve|reject",
+    databaseValidationInfo: "public.guest_companions (status CHECK in pending, awaiting_approval, approved, rejected, cancelled)",
+  },
+  "RN-010": {
+    previousStatus: "needs_refinement",
+    problemClassification: "test_error",
+    rootCauseAnalysis:
+      "O teste de rejeição de valor negativo gerava falso positivo por omitir eventId no itemCreateSchema.",
+    correctionApplied:
+      "Corrigido itemCreateSchema para suportar cálculo composto (quantity * unitPrice) e validado bloqueio estrito de preço negativo com eventId preenchido.",
+    testedEndpoint: "app/actions/items.ts (createItemAction / updateItemAction)",
+    databaseValidationInfo: "public.items (price >= 0, unit_price >= 0, FK event_id ON DELETE CASCADE)",
+  },
+  "RN-011": {
+    previousStatus: "failed",
+    problemClassification: "implementation_error",
+    rootCauseAnalysis:
+      "Reprovada anteriormente: normalizeItemValue lia apenas price/actualCost/estimatedCost e retornava 0 quando o item informava quantity e unit_price.",
+    correctionApplied:
+      "Corrigida normalizeItemValue em lib/domain/business-rules.ts para calcular automaticamente quantity * unit_price quando price não estiver pré-multiplicado.",
+    testedEndpoint: "app/actions/items.ts & /api/analytics",
+    databaseValidationInfo: "public.items & materialized view public.mv_event_costs",
+  },
+  "RN-012": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "app/actions/events.ts & lib/reports/data-collector.ts",
+    databaseValidationInfo: "public.events (financial_mode = 'collaborative_split')",
+  },
+  "RN-013": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "app/actions/events.ts & lib/reports/data-collector.ts",
+    databaseValidationInfo: "public.events (budget_estimated >= 0 sem bloqueio de insert em public.items)",
+  },
+  "RN-014": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "app/actions/contacts.ts",
+    databaseValidationInfo: "public.contacts & public.contact_lists (RLS auth.uid() = user_id)",
+  },
+  "RN-015": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "app/actions/events.ts (deleteEventAction)",
+    databaseValidationInfo: "public.events e FKs com ON DELETE CASCADE em guests, items, event_photos, event_members",
+  },
+  "RN-016": {
+    previousStatus: "needs_refinement",
+    problemClassification: "test_error",
+    rootCauseAnalysis:
+      "O avaliador anterior usava um array mockado local em vez de invocar normalizeReportData do coletor oficial.",
+    correctionApplied:
+      "Substituído pelo uso direto de normalizeReportData validando consolidação de múltiplos eventos, filtro individual e estado vazio.",
+    testedEndpoint: "/api/analytics",
+    databaseValidationInfo: "public.events, public.mv_event_costs, public.mv_rsvp_stats",
+  },
+  "RN-017": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "/api/events/[eventId]/send-invites & /api/jobs/pending-invites",
+    databaseValidationInfo: "public.guests (status = 'pending' AND email <> '')",
+  },
+  "RN-018": {
+    previousStatus: "passed",
+    problemClassification: "none",
+    testedEndpoint: "app/actions/photos.ts (uploadEventPhotoAction / deleteEventPhotoAction)",
+    databaseValidationInfo: "public.event_photos & storage.objects (bucket event-photos)",
+  },
+  "RF-005": {
+    previousStatus: "failed",
+    problemClassification: "inconsistent_requirement",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: divergência de nomenclatura de atributos (snake_case vs camelCase) e ausência de horário/local obrigatórios da RN-003 no cenário de teste.",
+    correctionApplied:
+      "Adicionado preprocessamento compatível em eventPayloadSchema e validado payload completo com todos os campos obrigatórios da RN-003.",
+    testedEndpoint: "app/actions/events.ts (createEvent)",
+    databaseValidationInfo: "INSERT em public.events + trigger trg_ensure_event_owner_member em public.event_members",
+  },
+  "RF-007": {
+    previousStatus: "failed",
+    problemClassification: "inconsistent_requirement",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: mesmo desalinhamento de contrato em eventPayloadSchema ao validar atualização cadastral do evento.",
+    correctionApplied:
+      "Compatibilizado eventPayloadSchema e validada atualização de título, horário, local e orçamento.",
+    testedEndpoint: "app/actions/events.ts (updateEventDetails)",
+    databaseValidationInfo: "UPDATE em public.events protegido por RLS e RBAC",
+  },
+  "RF-011": {
+    previousStatus: "failed",
+    problemClassification: "doc_divergence",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: guestUpdateSchema rejeitava o status 'Confirmado' em português por falta de normalização em guestStatusSchema.",
+    correctionApplied:
+      "Integrado normalizeGuestStatus ao guestStatusSchema permitindo atualização tanto com códigos canônicos quanto rótulos em português.",
+    testedEndpoint: "/api/guests/[guestId] (PATCH)",
+    databaseValidationInfo: "UPDATE em public.guests",
+  },
+  "RF-013": {
+    previousStatus: "failed",
+    problemClassification: "doc_divergence",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: guestStatusSchema.safeParse('Confirmado') falhava ao registrar presença manual pelo organizador.",
+    correctionApplied:
+      "Normalização determinística em guestStatusSchema e validação de transição via isAllowedAttendanceTransition.",
+    testedEndpoint: "/api/guests/[guestId] (PATCH)",
+    databaseValidationInfo: "UPDATE status em public.guests",
+  },
+  "RF-015": {
+    previousStatus: "failed",
+    problemClassification: "inconsistent_requirement",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: publicRsvpSchema exigia telefone obrigatório (min 8) e não mapeava o alias response ('yes'/'no') para attendanceStatus ('confirmed'/'declined').",
+    correctionApplied:
+      "Tornado telefone opcional (validado quando preenchido) e adicionado mapeamento de response/attendanceStatus em publicRsvpSchema.",
+    testedEndpoint: "/api/confirm/[token]/accept & /api/confirm/[token]/decline",
+    databaseValidationInfo: "UPDATE em public.guests e INSERT em public.guest_companions",
+  },
+  "RF-016": {
+    previousStatus: "failed",
+    problemClassification: "inconsistent_requirement",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: publicRsvpSchema rejeitava solicitação externa sem telefone e não verificava o status inicial awaiting_approval.",
+    correctionApplied:
+      "Ajustado publicRsvpSchema e integrado resolvePublicRequestInitialStatus para validar entrada na fila de moderação.",
+    testedEndpoint: "/api/public-events/[token] & /api/events/[eventId]/public-request",
+    databaseValidationInfo: "INSERT em public.guests com source = 'public_request' e status = 'awaiting_approval'",
+  },
+  "RF-018": {
+    previousStatus: "failed",
+    problemClassification: "implementation_error",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: itemCreateSchema exigia price estrito e falhava quando o item era cadastrado informando quantity e unit_price.",
+    correctionApplied:
+      "Atualizado itemCreateSchema para calcular price = quantity * unitPrice automaticamente e aceitar eventId/event_id.",
+    testedEndpoint: "app/actions/items.ts (createItemAction)",
+    databaseValidationInfo: "INSERT em public.items com trigger sync_item_costs",
+  },
+  "RF-020": {
+    previousStatus: "failed",
+    problemClassification: "implementation_error",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: calculateEventTotalCost retornava 0 para itens com unit_price antes e depois da remoção.",
+    correctionApplied:
+      "Corrigido normalizeItemValue para considerar unit_price * quantity no cálculo e recálculo após exclusão.",
+    testedEndpoint: "app/actions/items.ts (deleteItemAction)",
+    databaseValidationInfo: "DELETE em public.items e atualização de mv_event_costs",
+  },
+  "RF-021": {
+    previousStatus: "failed",
+    problemClassification: "implementation_error",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: calculateEventTotalCost ignorava a multiplicação quantity * unit_price, retornando R$ 0,00 em vez de R$ 2.650,00.",
+    correctionApplied:
+      "Corrigido normalizeItemValue em lib/domain/business-rules.ts para multiplicar quantity * unit_price com arredondamento de centavos.",
+    testedEndpoint: "app/actions/items.ts & /api/analytics",
+    databaseValidationInfo: "public.items & public.mv_event_costs",
+  },
+  "RF-028": {
+    previousStatus: "failed",
+    problemClassification: "inconsistent_requirement",
+    rootCauseAnalysis:
+      "Reprovado anteriormente: photoCreateSchema não mapeava os aliases event_id, file_url e caption enviados pela API/teste.",
+    correctionApplied:
+      "Adicionado preprocessamento em photoCreateSchema mapeando event_id -> eventId, file_url -> url, caption -> description e derivando filename.",
+    testedEndpoint: "app/actions/photos.ts (uploadEventPhotoAction)",
+    databaseValidationInfo: "INSERT/DELETE em public.event_photos e bucket storage.objects (event-photos)",
+  },
+  "RF-039": {
+    previousStatus: "new",
+    problemClassification: "none",
+    correctionApplied: "Novo requisito funcional implementado para suportar convites de equipe por e-mail (RN-002 RBAC).",
+    testedEndpoint: "POST /api/events/[eventId]/team",
+    databaseValidationInfo: "INSERT em public.event_members (status = 'pending', invite_token, invite_expires_at)",
+  },
+  "RF-040": {
+    previousStatus: "new",
+    problemClassification: "none",
+    correctionApplied: "Novo requisito funcional implementado para aceite de convite e revogação imediata de acesso.",
+    testedEndpoint: "POST & DELETE /api/events/[eventId]/team",
+    databaseValidationInfo: "UPDATE status ('active' / 'revoked') em public.event_members",
+  },
+  "RF-041": {
+    previousStatus: "new",
+    problemClassification: "none",
+    correctionApplied: "Novo requisito funcional implementado para matriz granular de permissões por módulo e prevenção de escalação de privilégio.",
+    testedEndpoint: "PATCH /api/events/[eventId]/team",
+    databaseValidationInfo: "UPDATE role e permissions JSONB em public.event_members + função SQL has_event_permission",
+  },
+  "RF-042": {
+    previousStatus: "new",
+    problemClassification: "none",
+    correctionApplied: "Novo requisito funcional implementado para transferência transacional de titularidade com confirmação nominal.",
+    testedEndpoint: "POST /api/events/[eventId]/team (operation: transfer_ownership)",
+    databaseValidationInfo: "Função transacional public.transfer_event_ownership e índice parcial idx_event_members_single_active_owner",
+  },
+  "RF-043": {
+    previousStatus: "new",
+    problemClassification: "none",
+    correctionApplied: "Novo requisito funcional implementado para trilha de auditoria de equipe, permissões e segurança.",
+    testedEndpoint: "GET /api/events/[eventId]/team",
+    databaseValidationInfo: "INSERT e SELECT em public.event_audit_logs",
+  },
+}
+
+for (const item of REQUIREMENTS_CATALOG) {
+  const meta = AUDIT_DIAGNOSTIC_METADATA[item.id]
+  if (meta) {
+    Object.assign(item, meta)
+  } else {
+    item.previousStatus = item.previousStatus ?? "passed"
+    item.problemClassification = item.problemClassification ?? "none"
+    item.testedEndpoint = item.testedEndpoint ?? "Camada de Domínio / Server Actions / API REST"
+    item.databaseValidationInfo = item.databaseValidationInfo ?? "PostgreSQL / Supabase Schema & RLS"
+  }
+}
+
 

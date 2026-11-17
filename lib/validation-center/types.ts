@@ -1,6 +1,38 @@
 export type RequirementCategory = "RN" | "RF" | "RNF"
 
-export type RequirementStatus = "not_tested" | "running" | "passed" | "failed" | "manual"
+export type RequirementStatus =
+  | "not_tested"
+  | "running"
+  | "passed"
+  | "failed"
+  | "partial"
+  | "not_implemented"
+  | "blocked"
+  | "needs_refinement"
+  | "manual"
+
+export type ProblemClassification =
+  | "none"
+  | "implementation_error"
+  | "test_error"
+  | "incomplete_rule"
+  | "inconsistent_requirement"
+  | "not_implemented"
+  | "config_issue"
+  | "security_flaw"
+  | "doc_divergence"
+
+export const PROBLEM_CLASSIFICATION_LABELS: Record<ProblemClassification, string> = {
+  none: "Conforme (Sem divergência)",
+  implementation_error: "Erro de implementação",
+  test_error: "Erro no teste automatizado",
+  incomplete_rule: "Regra de negócio incompleta",
+  inconsistent_requirement: "Requisito funcional inconsistente",
+  not_implemented: "Funcionalidade não implementada",
+  config_issue: "Problema de configuração ou infraestrutura",
+  security_flaw: "Falha de segurança",
+  doc_divergence: "Divergência na documentação",
+}
 
 export interface ScenarioResult {
   id: string
@@ -35,6 +67,13 @@ export interface RequirementItem {
   testFiles: string[]
   automated: boolean
   status: RequirementStatus
+  previousStatus?: "passed" | "failed" | "needs_refinement" | "new"
+  problemClassification?: ProblemClassification
+  rootCauseAnalysis?: string
+  correctionApplied?: string
+  previousWording?: string
+  testedEndpoint?: string
+  databaseValidationInfo?: string
   lastRun?: {
     timestamp: string
     passed: boolean
@@ -66,10 +105,10 @@ export interface ValidationSummary {
   tested: number
   passed: number
   failed: number
+  partial?: number
   notTested: number
   manualPending: number
   progressPercent: number
   totalDurationMs: number
   lastRunTimestamp?: string
 }
-

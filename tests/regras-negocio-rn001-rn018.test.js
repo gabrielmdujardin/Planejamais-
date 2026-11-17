@@ -15,10 +15,22 @@ import {
   filterEffectiveGuests,
   filterEligibleReminderGuests,
   generateSecureToken,
+  isAllowedAttendanceTransition,
   isSafeToken,
+  normalizeGuestStatus,
   normalizeItemValue,
   validateNominalEventDeletion,
 } from "../lib/domain/business-rules.ts"
+import {
+  acceptEventTeamInvite,
+  canActorModifyMemberPermissions,
+  createOwnerMemberRecord,
+  evaluateEventPermission,
+  getCollaboratorPresetPermissions,
+  inviteEventTeamMember,
+  revokeEventTeamMember,
+  transferEventOwnership,
+} from "../lib/domain/rbac.ts"
 import { normalizeReportData } from "../lib/reports/data-collector.ts"
 import { evaluateRouteAccess, isProtectedAppPath } from "../lib/security/route-guard.ts"
 import {
@@ -82,10 +94,11 @@ test("RN-001: Unicidade da conta de usuário, formato de e-mail e senha mínima 
   )
 })
 
-test("RN-002: Titularidade exclusiva do evento pelo organizador", () => {
-  // Políticas RLS exigem auth.uid() = user_id na tabela events
+test("RN-002: Titularidade do evento e gerenciamento colaborativo RBAC (20 cenários)", () => {
+  // Políticas RLS e tabelas RBAC no schema
   assert.match(schemaSql, /ALTER TABLE public\.events ENABLE ROW LEVEL SECURITY/i)
-  assert.match(schemaSql, /auth\.uid\(\)\s*=\s*user_id/i)
+  assert.match(schemaSql, /ALTER TABLE public\.event_members ENABLE ROW LEVEL SECURITY/i)
+  assert.match(schemaSql, /idx_event_members_single_active_owner/i)
 
   // Rotas de gestão do evento exigem sessão autenticada
   assert.equal(isProtectedAppPath("/event/ev-123"), true)
@@ -96,9 +109,313 @@ test("RN-002: Titularidade exclusiva do evento pelo organizador", () => {
     supabaseConfigured: true,
   })
   assert.equal(unauthDecision.action, "redirect_login")
-
-  // Job de limpeza não pode excluir eventos do organizador sem sua ação
   assert.equal(cleanupJobSource.includes('.from("events").delete()'), false)
+
+  // 1. Proprietário cria um evento
+  const owner = createOwnerMemberRecord({
+    eventId: "ev-rbac-1",
+    ownerUserId: "usr-owner-1",
+    ownerEmail: "owner@planeja.app",
+    ownerName: "Proprietário",
+  })
+  assert.equal(owner.role, "owner")
+  assert.equal(owner.status, "active")
+
+  // 2. Proprietário convida um administrador
+  const inviteAdmin = inviteEventTeamMember({
+    eventId: "ev-rbac-1",
+    actorMember: owner,
+    existingMembers: [owner],
+    email: "admin@planeja.app",
+    name: "Carlos Admin",
+    role: "admin",
+  })
+  assert.equal(inviteAdmin.success, true)
+  assert.equal(inviteAdmin.member?.status, "pending")
+
+  // 3. Usuário aceita o convite
+  const acceptAdmin = acceptEventTeamInvite({
+    inviteToken: inviteAdmin.member.inviteToken,
+    acceptingUserId: "usr-admin-1",
+    acceptingEmail: "admin@planeja.app",
+    members: inviteAdmin.updatedMembers,
+  })
+  assert.equal(acceptAdmin.success, true)
+  assert.equal(acceptAdmin.member?.status, "active")
+
+  let teamMembers = acceptAdmin.updatedMembers
+
+  // 4. Administrador edita o evento
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-admin-1",
+      members: teamMembers,
+      module: "event",
+      action: "edit",
+    }).allowed,
+    true
+  )
+
+  // 5. Administrador tenta excluir o evento e é impedido
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-admin-1",
+      members: teamMembers,
+      module: "event",
+      action: "delete_event",
+    }).allowed,
+    false
+  )
+
+  // 6. Colaborador financeiro registra um gasto autorizado
+  const invFin = inviteEventTeamMember({
+    eventId: "ev-rbac-1",
+    actorMember: owner,
+    existingMembers: teamMembers,
+    email: "fin@planeja.app",
+    name: "Financeiro",
+    role: "collaborator",
+    permissions: getCollaboratorPresetPermissions("financial"),
+  })
+  const accFin = acceptEventTeamInvite({
+    inviteToken: invFin.member.inviteToken,
+    acceptingUserId: "usr-fin-1",
+    members: invFin.updatedMembers,
+  })
+  teamMembers = accFin.updatedMembers
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-fin-1",
+      members: teamMembers,
+      module: "financial",
+      action: "create",
+    }).allowed,
+    true
+  )
+
+  // 7. Colaborador sem permissão financeira tenta acessar os gastos e é impedido
+  const invRsvp = inviteEventTeamMember({
+    eventId: "ev-rbac-1",
+    actorMember: owner,
+    existingMembers: teamMembers,
+    email: "rsvp@planeja.app",
+    name: "Recepção",
+    role: "collaborator",
+    permissions: getCollaboratorPresetPermissions("guests_rsvp"),
+  })
+  const accRsvp = acceptEventTeamInvite({
+    inviteToken: invRsvp.member.inviteToken,
+    acceptingUserId: "usr-rsvp-1",
+    members: invRsvp.updatedMembers,
+  })
+  teamMembers = accRsvp.updatedMembers
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-rsvp-1",
+      members: teamMembers,
+      module: "financial",
+      action: "view",
+    }).allowed,
+    false
+  )
+
+  // 8. Colaborador gerencia convidados quando autorizado
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-rsvp-1",
+      members: teamMembers,
+      module: "guests",
+      action: "edit",
+    }).allowed,
+    true
+  )
+
+  // 9. Colaborador tenta alterar suas próprias permissões e é impedido
+  assert.equal(
+    canActorModifyMemberPermissions({
+      actorMember: accRsvp.member,
+      targetMember: accRsvp.member,
+      proposedRole: "admin",
+    }).allowed,
+    false
+  )
+
+  // 10. Visualizador tenta modificar dados e é impedido
+  const invViewer = inviteEventTeamMember({
+    eventId: "ev-rbac-1",
+    actorMember: owner,
+    existingMembers: teamMembers,
+    email: "viewer@planeja.app",
+    name: "Visualizador",
+    role: "viewer",
+  })
+  const accViewer = acceptEventTeamInvite({
+    inviteToken: invViewer.member.inviteToken,
+    acceptingUserId: "usr-viewer-1",
+    members: invViewer.updatedMembers,
+  })
+  teamMembers = accViewer.updatedMembers
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-viewer-1",
+      members: teamMembers,
+      module: "guests",
+      action: "view",
+    }).allowed,
+    true
+  )
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-viewer-1",
+      members: teamMembers,
+      module: "guests",
+      action: "create",
+    }).allowed,
+    false
+  )
+
+  // 11. Usuário externo acessa indicadores autorizados
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: null,
+      hostViewTokenProvided: "host-tok-99",
+      eventHostViewToken: "host-tok-99",
+      eventHostViewEnabled: true,
+      module: "analytics",
+      action: "view",
+    }).allowed,
+    true
+  )
+
+  // 12. Usuário externo tenta modificar dados e é impedido
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: null,
+      hostViewTokenProvided: "host-tok-99",
+      eventHostViewToken: "host-tok-99",
+      eventHostViewEnabled: true,
+      module: "financial",
+      action: "create",
+    }).allowed,
+    false
+  )
+
+  // 13. Usuário tenta acessar um evento ao qual não pertence
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-estranho-999",
+      members: teamMembers,
+      module: "event",
+      action: "view",
+    }).allowed,
+    false
+  )
+
+  // 14. Proprietário revoga o acesso de um colaborador
+  const revokeRes = revokeEventTeamMember({
+    eventId: "ev-rbac-1",
+    actorMember: owner,
+    targetMemberId: accRsvp.member.id,
+    members: teamMembers,
+  })
+  assert.equal(revokeRes.success, true)
+  teamMembers = revokeRes.updatedMembers
+
+  // 15. Colaborador removido tenta acessar novamente o evento
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-owner-1",
+      actorUserId: "usr-rsvp-1",
+      members: teamMembers,
+      module: "guests",
+      action: "view",
+    }).allowed,
+    false
+  )
+
+  // 16. Proprietário transfere a titularidade
+  const transferRes = transferEventOwnership({
+    eventId: "ev-rbac-1",
+    actorMember: owner,
+    newOwnerMemberId: acceptAdmin.member.id,
+    members: teamMembers,
+  })
+  assert.equal(transferRes.success, true)
+  assert.equal(transferRes.newOwnerUserId, "usr-admin-1")
+  assert.equal(
+    transferRes.updatedMembers.filter((m) => m.role === "owner" && m.status === "active").length,
+    1
+  )
+
+  // 17. Convite expirado é rejeitado
+  const newOwnerRecord = transferRes.updatedMembers.find((m) => m.role === "owner")
+  const invExp = inviteEventTeamMember({
+    eventId: "ev-rbac-1",
+    actorMember: newOwnerRecord,
+    existingMembers: transferRes.updatedMembers,
+    email: "expirado@planeja.app",
+    name: "Expirado",
+    role: "collaborator",
+    expiresInDays: 1,
+  })
+  const accExp = acceptEventTeamInvite({
+    inviteToken: invExp.member.inviteToken,
+    acceptingUserId: "usr-exp",
+    members: invExp.updatedMembers,
+    now: new Date(Date.now() + 5 * 86400000),
+  })
+  assert.equal(accExp.success, false)
+
+  // 18. Convite duplicado é tratado corretamente
+  const dupAttempt = inviteEventTeamMember({
+    eventId: "ev-rbac-1",
+    actorMember: newOwnerRecord,
+    existingMembers: transferRes.updatedMembers,
+    email: "FIN@planeja.app",
+    name: "Duplicado",
+    role: "collaborator",
+  })
+  assert.equal(dupAttempt.success, false)
+
+  // 19. Permissões distintas são respeitadas em diferentes eventos
+  const otherEventOwner = createOwnerMemberRecord({
+    eventId: "ev-rbac-2",
+    ownerUserId: "usr-other-owner",
+    ownerEmail: "other@planeja.app",
+    ownerName: "Outro Owner",
+  })
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-other-owner",
+      actorUserId: "usr-admin-1",
+      members: [otherEventOwner],
+      module: "event",
+      action: "edit",
+    }).allowed,
+    false
+  )
+
+  // 20. Eventos antigos continuam funcionando após a atualização do banco
+  assert.equal(
+    evaluateEventPermission({
+      eventOwnerId: "usr-legacy-owner",
+      actorUserId: "usr-legacy-owner",
+      members: [],
+      module: "event",
+      action: "delete_event",
+    }).allowed,
+    true
+  )
 })
 
 test("RN-003: Dados obrigatórios do evento, horário final posterior e orçamento não negativo", () => {

@@ -1,5 +1,27 @@
 import { z } from "zod"
-import { normalizeGuestStatus } from "./domain/business-rules"
+
+const GUEST_STATUS_MAP: Record<string, string> = {
+  pendente: "pending",
+  pending: "pending",
+  confirmado: "confirmed",
+  confirmed: "confirmed",
+  recusado: "declined",
+  declined: "declined",
+  rejected: "declined",
+  aguardando_aprovacao: "awaiting_approval",
+  awaiting_approval: "awaiting_approval",
+  pending_approval: "awaiting_approval",
+  expirado: "expired",
+  expired: "expired",
+  cancelado: "cancelled",
+  cancelled: "cancelled",
+  canceled: "cancelled",
+}
+
+function normalizeGuestStatus(status: unknown): string | null {
+  if (typeof status !== "string") return null
+  return GUEST_STATUS_MAP[status.trim().toLowerCase()] ?? null
+}
 
 export function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

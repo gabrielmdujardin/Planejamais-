@@ -52,7 +52,20 @@ import {
   publicRsvpSchema,
   registerUserSchema,
   rejectionDecisionSchema,
+  teamInviteSchema,
+  teamTransferOwnershipSchema,
+  teamUpdateRoleSchema,
 } from "../lib/validation.ts"
+import {
+  acceptEventTeamInvite,
+  canActorModifyMemberPermissions,
+  createOwnerMemberRecord,
+  evaluateEventPermission,
+  getCollaboratorPresetPermissions,
+  inviteEventTeamMember,
+  revokeEventTeamMember,
+  transferEventOwnership,
+} from "../lib/domain/rbac.ts"
 
 const defaultSections = {
   generalInfo: true,
@@ -652,4 +665,85 @@ test("RF-033, RF-034, RF-035, RF-036 e RF-038: Lote CSV, Duplo Regime, Restriç�
   const hostRouteSrc = fs.readFileSync(path.resolve("app/api/events/[eventId]/host-view/route.ts"), "utf8")
   assert.match(hostRouteSrc, /isSafeToken/)
   assert.equal(hostRouteSrc.includes("financial_notes"), false, "Portal do anfitrião não expõe notas financeiras")
+})
+
+test("RF-039 a RF-043: Gestão Colaborativa de Equipe, Permissões RBAC, Transferência de Titularidade e Auditoria", () => {
+  const owner = createOwnerMemberRecord({
+    eventId: "ev-team-1",
+    ownerUserId: "usr-owner-1",
+    ownerEmail: "owner@planeja.app",
+    ownerName: "Mariana Proprietária",
+  })
+
+  // RF-039: Convite por e-mail
+  assert.equal(
+    teamInviteSchema.safeParse({
+      eventId: "ev-team-1",
+      email: "admin@planeja.app",
+      name: "Carlos Admin",
+      role: "admin",
+      expiresInDays: 7,
+    }).success,
+    true
+  )
+  const invite = inviteEventTeamMember({
+    eventId: "ev-team-1",
+    actorMember: owner,
+    existingMembers: [owner],
+    email: "admin@planeja.app",
+    name: "Carlos Admin",
+    role: "admin",
+  })
+  assert.equal(invite.success, true)
+
+  // RF-040: Aceite e revogação
+  const accepted = acceptEventTeamInvite({
+    inviteToken: invite.member.inviteToken,
+    acceptingUserId: "usr-admin-2",
+    members: invite.updatedMembers,
+  })
+  assert.equal(accepted.success, true)
+
+  // RF-041: Controle granular de papéis e permissões sem auto-elevação
+  assert.equal(
+    teamUpdateRoleSchema.safeParse({
+      eventId: "ev-team-1",
+      memberId: accepted.member.id,
+      role: "collaborator",
+      permissions: getCollaboratorPresetPermissions("financial"),
+    }).success,
+    true
+  )
+  assert.equal(
+    canActorModifyMemberPermissions({
+      actorMember: accepted.member,
+      targetMember: accepted.member,
+      proposedRole: "owner",
+    }).allowed,
+    false
+  )
+
+  // RF-042: Transferência transacional de titularidade
+  assert.equal(
+    teamTransferOwnershipSchema.safeParse({
+      eventId: "ev-team-1",
+      newOwnerMemberId: accepted.member.id,
+      confirmationTitle: "Congresso 2026",
+    }).success,
+    true
+  )
+  const transferred = transferEventOwnership({
+    eventId: "ev-team-1",
+    actorMember: owner,
+    newOwnerMemberId: accepted.member.id,
+    members: accepted.updatedMembers,
+  })
+  assert.equal(transferred.success, true)
+  assert.equal(transferred.newOwnerUserId, "usr-admin-2")
+
+  // RF-043: Histórico de auditoria e verificação da seção Equipe e permissões na UI
+  assert.equal(transferred.auditLog.action, "team.ownership_transferred")
+  assert.equal(transferred.auditLog.allowed, true)
+  const eventPageSrc = fs.readFileSync(path.resolve("app/event/[id]/page.tsx"), "utf8")
+  assert.match(eventPageSrc, /Equipe e permissões/)
 })

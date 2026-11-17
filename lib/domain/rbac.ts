@@ -4,7 +4,18 @@
  * com permissões granulares vinculadas individualmente a cada evento.
  */
 
-import { generateSecureToken, isValidEmail } from "./business-rules"
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function isValidEmail(email: unknown): boolean {
+  return typeof email === "string" && EMAIL_REGEX.test(email.trim())
+}
+
+function generateSecureToken(byteLength = 16): string {
+  const safeLength = Math.max(16, byteLength)
+  const bytes = new Uint8Array(safeLength)
+  crypto.getRandomValues(bytes)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("")
+}
 
 export type EventRole = "owner" | "admin" | "collaborator" | "viewer" | "external_host"
 

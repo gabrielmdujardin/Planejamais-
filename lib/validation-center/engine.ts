@@ -1,12 +1,12 @@
 import { REQUIREMENTS_CATALOG } from "./catalog"
 import { REQUIREMENT_EVALUATORS } from "./evaluators"
-import { RequirementItem, ScenarioResult, ValidationSummary } from "./types"
+import { RequirementItem, RequirementStatus, ScenarioResult, ValidationSummary } from "./types"
 
 export interface RequirementRunResult {
   id: string
   category: "RN" | "RF" | "RNF"
   title: string
-  status: "passed" | "failed" | "manual" | "not_tested"
+  status: RequirementStatus
   durationMs: number
   timestamp: string
   scenarios: ScenarioResult[]
@@ -123,10 +123,15 @@ export async function runRequirementTest(id: string): Promise<RequirementRunResu
   }
 
   const durationMs = Math.round((performance.now() - startTime) * 100) / 100
-  const status: "passed" | "failed" | "manual" = !req.automated
+  const passedScenariosCount = scenarioResults.filter((s) => s.passed).length
+  const status: RequirementStatus = !req.automated
     ? "manual"
-    : allPassed
+    : scenarioResults.length === 0
+    ? "not_tested"
+    : allPassed && passedScenariosCount === scenarioResults.length
     ? "passed"
+    : passedScenariosCount > 0
+    ? "partial"
     : "failed"
 
   logs.push(`Resultado final para ${req.id}: ${status.toUpperCase()} (${durationMs}ms total)`)
