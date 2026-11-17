@@ -20,16 +20,16 @@ Após a conclusão das pendências de persistência no Supabase (`items`, `conta
 | **Não Verificado** | 0 | 0,00% | — |
 | **Total Original** | **32** | **100,00%** | `RF-001` a `RF-032` |
 
-### 1.2 Novos Requisitos Implementados em 2026 (`RF-033` a `RF-038` — denominador = `6`)
+### 1.2 Novos Requisitos Implementados em 2026 (`RF-033` a `RF-043` — denominador = `11`)
 
-| Status Revisado | Quantidade | Percentual (base: 6 novos RFs) | Identificadores |
+| Status Revisado | Quantidade | Percentual (base: 11 novos RFs) | Identificadores |
 |---|---:|---:|---|
-| **Finalizado** | **6** | **100,00%** | `RF-033`, `RF-034`, `RF-035`, `RF-036`, `RF-037`, `RF-038` |
+| **Finalizado** | **11** | **100,00%** | `RF-033`, `RF-034`, `RF-035`, `RF-036`, `RF-037`, `RF-038`, `RF-039`, `RF-040`, `RF-041`, `RF-042`, `RF-043` |
 | **Em Andamento** | 0 | 0,00% | — |
 
 ---
 
-## 2. Tabela Obrigatória Consolidada (`RF-001` a `RF-038`)
+## 2. Tabela Obrigatória Consolidada (`RF-001` a `RF-043`)
 
 | ID | Requisito | Status anterior | Status revisado | Evidência verificável (Código, Banco e Testes) | Observações técnicas |
 |---|---|---|---|---|---|
@@ -71,6 +71,11 @@ Após a conclusão das pendências de persistência no Supabase (`items`, `conta
 | **RF-036** | Gerenciar acompanhantes de convidados | Em Andamento | **Finalizado** | `supabase/schema.sql` (`public.guest_companions`); `app/api/public-events/[token]/route.ts`; `app/api/confirm/[token]/accept/route.ts`; `components/pending-requests-list.tsx`; `app/api/companions/[companionId]/approve|reject/route.ts`; `tests/requisitos-funcionais-rf001-rf038.test.js`. | Controle de limite `max_companions`, aprovação/rejeição individual e cômputo automático em `RN-005`. |
 | **RF-037** | Exportar relatórios gerenciais em PDF e CSV | Em Andamento | **Finalizado** | `components/reports/**`; `lib/reports/{types,data-collector,pdf-exporter}.ts` (sanitização XSS com `escapeHtml` no `iframe` A4 e 4 modelos); `components/guest-list.tsx`; `app/dashboard/analytics/page.tsx`; `tests/s06-relatorios-pdf.test.js` e `tests/requisitos-funcionais-rf001-rf038.test.js`. | Emite dossiês PDF A4 vetoriais e planilhas CSV consistentes com os dados persistidos no Supabase. |
 | **RF-038** | Disponibilizar portal somente-leitura do anfitrião | Em Andamento | **Finalizado** | `app/event/[id]/host-view/page.tsx`; `app/api/events/[eventId]/host-view/route.ts` (`GET` validado por `host_view_token` + rate limit e `POST` autenticado para o organizador gerar/revogar o link); `app/event/[id]/page.tsx`; `tests/requisitos-funcionais-rf001-rf038.test.js`. | Anfitriões/clientes externos acessam indicadores de presença, buffet e resumo financeiro sem login e sem exposição de notas privadas. |
+| **RF-039** | Convidar colaborador para equipe do evento | Novo (2026) | **Finalizado** | `components/event-team-manager.tsx`; `app/api/events/[eventId]/team/route.ts` (`POST`); `lib/domain/rbac.ts` (`inviteEventTeamMember`); `supabase/migrations/20261117000100_event_rbac_and_audit.sql` (`public.event_members`); `tests/requisitos-funcionais-rf001-rf038.test.js`. | Convite por e-mail com token CSPRNG, expiração configurável, bloqueio de duplicidade e definição de papel (`admin`, `collaborator`, `viewer`) e preset de módulo. |
+| **RF-040** | Gerenciar papéis e permissões de colaboradores | Novo (2026) | **Finalizado** | `components/event-team-manager.tsx`; `app/api/events/[eventId]/team/route.ts` (`PATCH`); `lib/domain/rbac.ts` (`canActorModifyMemberPermissions`, `evaluateEventPermission`); `tests/requisitos-funcionais-rf001-rf038.test.js`. | Configuração granular de leitura/escrita por módulo (`event`, `guests`, `requests`, `financial`, `photos`, `analytics`, `reports`, `team`) com proteção contra auto-elevação de privilégios. |
+| **RF-041** | Revogar acesso de colaborador do evento | Novo (2026) | **Finalizado** | `components/event-team-manager.tsx`; `app/api/events/[eventId]/team/route.ts` (`DELETE`); `lib/domain/rbac.ts` (`revokeEventTeamMember`); `tests/requisitos-funcionais-rf001-rf038.test.js`. | Revoga imediatamente o acesso (`status = 'revoked'`) mantendo os convidados, despesas e fotos criados pelo ex-colaborador e bloqueando a remoção do proprietário. |
+| **RF-042** | Aceitar ou recusar convite de colaboração | Novo (2026) | **Finalizado** | `components/event-team-manager.tsx`; `app/api/events/[eventId]/team/route.ts` (`PATCH action=accept_invite`); `lib/domain/rbac.ts` (`acceptEventTeamInvite`); `tests/requisitos-funcionais-rf001-rf038.test.js`. | Valida expiração do token e correspondência estrita do e-mail autenticado antes de ativar o membro (`status = 'active'`). |
+| **RF-043** | Transferir titularidade do evento | Novo (2026) | **Finalizado** | `components/event-team-manager.tsx`; `app/api/events/[eventId]/team/route.ts` (`PATCH action=transfer_ownership`); `lib/domain/rbac.ts` (`transferEventOwnership`); `supabase/migrations/20261117000100_event_rbac_and_audit.sql` (`public.transfer_event_ownership`); `tests/requisitos-funcionais-rf001-rf038.test.js`. | Transfere atomicamente o papel `owner` mediante confirmação nominal do título do evento, rebaixando o antigo proprietário para `admin` e mantendo exatamente 1 proprietário ativo. |
 
 ---
 

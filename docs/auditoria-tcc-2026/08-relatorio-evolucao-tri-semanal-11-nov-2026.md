@@ -93,3 +93,4 @@ npm run dev
    *(Permite buscar qualquer ID, rodar testes individuais ao vivo e emitir o Laudo A4).*
 2. **Simulador de Jornada E2E Real:** `http://localhost:3000/simulator`  
    *(Marque a caixa "Janela Visível (Headed)" e clique em Executar para ver o Chromium rodando na sua tela).*
+

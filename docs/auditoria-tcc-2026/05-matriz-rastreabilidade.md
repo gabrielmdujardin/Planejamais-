@@ -13,7 +13,7 @@
 | Regra de Negócio | Requisitos Relacionados | Módulos Principais (Código e Banco) | Suíte(s) de Teste Verificada(s) | Status |
 |---|---|---|---|---|
 | **RN-001** — Unicidade da conta de usuário | `RF-001`, `RF-002`, `RF-003`, `RF-004`, `RNF-004`, `RNF-005` | `lib/validation.ts`; `context/auth-context.tsx`; `app/register/page.tsx`; `supabase/schema.sql` (`public.users.email UNIQUE`, RLS) | `tests/regras-negocio-rn001-rn018.test.js`, `tests/s04-auth-landing.test.js` | **Conforme** |
-| **RN-002** — Titularidade do evento | `RF-004` a `RF-009`, `RF-012`, `RF-024`, `RF-025`, `RF-029`, `RF-033`, `RF-037`, `RF-038`, `RNF-004`, `RNF-005` | `lib/domain/business-rules.ts` (`isEventOwner`); `app/actions/events.ts`; `app/api/events/[eventId]/host-view/route.ts`; `supabase/schema.sql` (RLS `events`) | `tests/regras-negocio-rn001-rn018.test.js`, `tests/requisitos-funcionais-rf001-rf038.test.js` | **Conforme** |
+| **RN-002** — Titularidade e controle de acesso do evento (RBAC) | `RF-004` a `RF-009`, `RF-012`, `RF-024`, `RF-025`, `RF-029`, `RF-033`, `RF-037`, `RF-038`, `RF-039`, `RF-040`, `RF-041`, `RF-042`, `RF-043`, `RNF-004`, `RNF-005` | `lib/domain/rbac.ts`; `app/api/events/[eventId]/team/route.ts`; `components/event-team-manager.tsx`; `supabase/migrations/20261117000100_event_rbac_and_audit.sql` (`event_members`, `event_audit_logs`, RLS) | `tests/regras-negocio-rn001-rn018.test.js` (20 cenários RN-002), `tests/requisitos-funcionais-rf001-rf038.test.js` | **Conforme** |
 | **RN-003** — Dados obrigatórios do evento | `RF-005`, `RF-007`, `RNF-006` | `lib/domain/business-rules.ts` (`validateEventRequiredData`); `lib/validation.ts` (`eventInputSchema`); `app/create-event/page.tsx`; `components/edit-event-dialog.tsx` | `tests/regras-negocio-rn001-rn018.test.js`, `tests/requisitos-funcionais-rf001-rf038.test.js` | **Conforme** |
 | **RN-004** — Status de presença do convidado | `RF-010`, `RF-011`, `RF-013`, `RF-015`, `RF-016`, `RF-017`, `RF-033` | `lib/domain/business-rules.ts` (`normalizeAttendanceStatus`, `isAllowedAttendanceTransition`); `app/api/guests/[guestId]/route.ts`; `components/guest-list.tsx` | `tests/regras-negocio-rn001-rn018.test.js`, `tests/requisitos-funcionais-rf001-rf038.test.js` | **Conforme** |
 | **RN-005** — Contagem de participantes confirmados | `RF-006`, `RF-009`, `RF-013`, `RF-026`, `RF-036`, `RF-037`, `RNF-007` | `lib/domain/business-rules.ts` (`calculateConfirmedParticipants`, `calculateAttendanceSummary`); `app/actions/events.ts`; `lib/reports/data-collector.ts`; `mv_rsvp_stats` | `tests/regras-negocio-rn001-rn018.test.js`, `tests/requisitos-nao-funcionais-rnf.test.js` | **Conforme** |
@@ -33,12 +33,12 @@
 
 ---
 
-### 1.2 Mapa Consolidado das 9 Suítes Automatizadas (`79` Testes Aprovados)
+### 1.2 Mapa Consolidado das 9 Suítes Automatizadas (`80` Testes Aprovados)
 
 | Arquivo de Teste | Escopo Verificado | Quantidade de Testes | Resultado |
 |---|---|---:|---|
-| `tests/regras-negocio-rn001-rn018.test.js` | Cobertura individual 1:1 das `18` Regras de Negócio (`RN-001` a `RN-018`) | 18 | **18/18 Pass** |
-| `tests/requisitos-funcionais-rf001-rf038.test.js` | Fluxos funcionais completos de `RF-001` a `RF-038` (Auth, Eventos, Convidados, RSVP, Itens, Contatos, Calendário, ICS, Analytics, PDF, Fotos, E-mail, Jobs Cron e Portal Anfitrião) | 11 | **11/11 Pass** |
+| `tests/regras-negocio-rn001-rn018.test.js` | Cobertura individual 1:1 das `18` Regras de Negócio (`RN-001` a `RN-018`, incluindo os 20 cenários RBAC da `RN-002`) | 18 | **18/18 Pass** |
+| `tests/requisitos-funcionais-rf001-rf038.test.js` | Fluxos funcionais completos de `RF-001` a `RF-043` (Auth, Eventos, Convidados, RSVP, Itens, Contatos, Calendário, ICS, Analytics, PDF, Fotos, E-mail, Jobs Cron, Portal Anfitrião e Equipe RBAC) | 12 | **12/12 Pass** |
 | `tests/requisitos-nao-funcionais-rnf.test.js` | Validação automatizada de `RNF-002`, `RNF-004`, `RNF-005`, `RNF-006`, `RNF-007` e `RNF-010` | 6 | **6/6 Pass** |
 | `tests/s06-relatorios-pdf.test.js` | Motor documental PDF A4, Curva de Pareto 80/20, cenários, comparativo e formatação PT-BR (`RF-037`, `RNF-007`) | 9 | **9/9 Pass** |
 | `tests/fases-2-3-4.test.js` | Terminologia adaptativa, governança financeira dupla, parser CSV/TSV, exclusão nominal e restrições de buffet (`RF-008`, `RF-033` a `RF-035`) | 12 | **12/12 Pass** |
@@ -46,7 +46,7 @@
 | `tests/design-system.test.js` | Variantes, tokens semânticos e acessibilidade dos componentes base (`RNF-002`, `RNF-010`) | 7 | **7/7 Pass** |
 | `tests/s05-dashboard-executivo.test.js` | Segregação financeira executiva e SLA de processamento em memória para 500 eventos (`RF-026`, `RNF-003`, `RNF-007`) | 5 | **5/5 Pass** |
 | `tests/s04-auth-landing.test.js` | Metadados SSR/SEO da Landing Page e padrões das telas de Login/Cadastro (`RF-001`, `RF-002`, `RNF-003`) | 4 | **4/4 Pass** |
-| **Total Verificado (`npm test`)** | **Cobertura integral do catálogo de regras e requisitos** | **79** | **79/79 Pass (`0` falhas)** |
+| **Total Verificado (`npm test`)** | **Cobertura integral do catálogo de 71 regras e requisitos** | **80** | **80/80 Pass (`0` falhas)** |
 
 ---
 

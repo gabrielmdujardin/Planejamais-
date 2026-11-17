@@ -10,9 +10,9 @@ As regras de negócio a seguir descrevem as políticas e restrições do domíni
 
 | ID | Título | Requisitos Relacionados |
 |---|---|---|
-| RN-002 | Titularidade do evento | RF-004, RF-005, RF-006, RF-007, RF-008, RF-009, RF-012, RF-024, RF-025, RF-029, RF-033, RF-037, RF-038 |
+| RN-002 | Titularidade e controle de acesso do evento | RF-004, RF-005, RF-006, RF-007, RF-008, RF-009, RF-012, RF-024, RF-025, RF-029, RF-033, RF-037, RF-038, RF-039, RF-040, RF-041, RF-042, RF-043 |
 
-**Detalhamento:** Todo evento tem exatamente um organizador, que é o usuário que o criou. Somente o organizador pode editar ou excluir o evento e gerenciar seus dados internos (lista de convidados, acompanhantes, gastos, solicitações, fotos e análises). Quando habilitado pelo organizador por meio de link exclusivo com token, o anfitrião ou contratante externo pode apenas visualizar em modo de leitura os indicadores autorizados, sem permissão de alteração.
+**Detalhamento:** Todo evento possui exatamente um organizador proprietário (`owner`), que é o usuário que o criou ou aquele para quem a titularidade foi formalmente transferida. O proprietário detém controle total sobre o evento, incluindo sua exclusão e a gestão de membros da equipe. O proprietário e os administradores autorizados podem convidar usuários colaboradores vinculados ao evento, atribuindo-lhes papéis de acesso (Administrador, Colaborador ou Visualizador) e permissões específicas de leitura ou edição por módulo (dados do evento, convidados e acompanhantes, solicitações públicas, financeiro e gastos, fotos, análises e relatórios). Nenhum colaborador pode alterar permissões acima do próprio nível nem excluir o evento. Quando habilitado por meio de link exclusivo com token, o anfitrião ou contratante externo acessa apenas em modo somente-leitura os indicadores autorizados, sem permissão de alteração.
 
 | ID | Título | Requisitos Relacionados |
 |---|---|---|
@@ -341,6 +341,36 @@ As regras de negócio a seguir descrevem as políticas e restrições do domíni
 | RF-038 | Disponibilizar portal somente-leitura do anfitrião | Finalizado | Baixa |
 
 **Detalhamento:** O sistema deve permitir que o organizador compartilhe um link exclusivo em modo somente-leitura para acompanhamento de presença, restrições e resumo financeiro pelo anfitrião ou contratante.
+
+| ID | Título | Status | Prioridade |
+|---|---|---|---|
+| RF-039 | Convidar colaborador para equipe do evento | Finalizado | Alta |
+
+**Detalhamento:** O sistema deve permitir ao proprietário ou administrador autorizado convidar usuários por e-mail para atuar na equipe de um evento específico, gerando token único de convite com prazo de expiração e definindo papel inicial (`Administrador`, `Colaborador` ou `Visualizador`) e escopo modular.
+
+| ID | Título | Status | Prioridade |
+|---|---|---|---|
+| RF-040 | Gerenciar papéis e permissões de colaboradores | Finalizado | Alta |
+
+**Detalhamento:** O sistema deve permitir ao proprietário ou administrador autorizado configurar e alterar o papel e as permissões granulares de leitura, criação, edição, exclusão, aprovação e exportação de cada membro da equipe por módulo funcional do evento, bloqueando auto-elevação de privilégios.
+
+| ID | Título | Status | Prioridade |
+|---|---|---|---|
+| RF-041 | Revogar acesso de colaborador do evento | Finalizado | Alta |
+
+**Detalhamento:** O sistema deve permitir revogar imediatamente o acesso de qualquer colaborador ou cancelar convites pendentes de um evento, preservando o histórico de registros criados pelo ex-colaborador e impedindo a remoção do proprietário titular.
+
+| ID | Título | Status | Prioridade |
+|---|---|---|---|
+| RF-042 | Aceitar ou recusar convite de colaboração | Finalizado | Média |
+
+**Detalhamento:** O sistema deve permitir que o usuário convidado aceite ou recuse o convite de participação na equipe do evento mediante validação do token e correspondência do e-mail autenticado dentro do prazo de validade.
+
+| ID | Título | Status | Prioridade |
+|---|---|---|---|
+| RF-043 | Transferir titularidade do evento | Finalizado | Baixa |
+
+**Detalhamento:** O sistema deve permitir exclusivamente ao proprietário atual transferir a titularidade do evento para outro membro ativo da equipe mediante confirmação nominal do título do evento, convertendo o proprietário anterior em administrador e garantindo a existência de um único proprietário ativo.
 
 ---
 
