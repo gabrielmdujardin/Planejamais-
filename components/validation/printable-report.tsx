@@ -136,16 +136,16 @@ export function PrintableReport({ items, summary, onClose }: PrintableReportProp
 
             <p className="text-xs text-muted-foreground print:text-gray-600 leading-relaxed pt-1">
               <strong>Nota Metodológica:</strong> Todas as 18 Regras de Negócio (RN-001 a RN-018) e todos os
-              38 Requisitos Funcionais (RF-001 a RF-038) foram integralmente validados por cenários reais de
+              43 Requisitos Funcionais (RF-001 a RF-043) foram integralmente validados por cenários reais de
               código executados em ambiente de testes. Os Requisitos Não Funcionais (RNF-001 a RNF-010) possuem 6
               itens testados automaticamente em código e 4 itens medidos por protocolos externos de telemetria e usabilidade.
             </p>
           </div>
 
-          {/* Tabela Completa de Requisitos (66 itens) */}
+          {/* Tabela Completa de Requisitos (71 itens) */}
           <div className="space-y-3">
             <h2 className="text-sm font-bold uppercase tracking-wider text-foreground print:text-black border-b border-border pb-1">
-              2. Matriz Completa de Validação de Requisitos (66 Itens)
+              2. Matriz Completa de Validação de Requisitos ({items.length} Itens)
             </h2>
 
             <div className="overflow-x-auto">
@@ -162,21 +162,29 @@ export function PrintableReport({ items, summary, onClose }: PrintableReportProp
                 </thead>
                 <tbody className="divide-y divide-border/60 print:divide-gray-300">
                   {items.map((it) => {
-                    const statusText = {
+                    const statusText: Record<string, string> = {
                       passed: "APROVADO",
                       failed: "REPROVADO",
+                      partial: "PARCIAL",
+                      not_implemented: "NÃO IMPL.",
+                      blocked: "BLOQUEADO",
+                      needs_refinement: "REFINAR",
                       running: "EXECUTANDO",
                       not_tested: "PENDENTE",
                       manual: "AFERIÇÃO EXT.",
-                    }[it.status]
+                    }
 
-                    const statusClass = {
+                    const statusClass: Record<string, string> = {
                       passed: "text-emerald-700 dark:text-emerald-300 font-bold print:text-emerald-800",
                       failed: "text-red-700 dark:text-red-300 font-bold print:text-red-800",
+                      partial: "text-amber-700 font-bold",
+                      not_implemented: "text-slate-700 font-bold",
+                      blocked: "text-orange-700 font-bold",
+                      needs_refinement: "text-indigo-700 font-bold",
                       running: "text-blue-700 font-bold",
                       not_tested: "text-muted-foreground",
                       manual: "text-amber-700 dark:text-amber-300 font-bold print:text-amber-800",
-                    }[it.status]
+                    }
 
                     const evidenceSummary =
                       it.lastRun?.scenarios.map((s) => s.details || s.actual).join("; ") ||
@@ -195,8 +203,8 @@ export function PrintableReport({ items, summary, onClose }: PrintableReportProp
                         <td className="py-2 px-3 font-medium text-foreground print:text-black">
                           {it.title}
                         </td>
-                        <td className={`py-2 px-2.5 text-center font-mono text-[11px] ${statusClass}`}>
-                          {statusText}
+                        <td className={`py-2 px-2.5 text-center font-mono text-[11px] ${statusClass[it.status] || ""}`}>
+                          {statusText[it.status] || it.status}
                         </td>
                         <td className="py-2 px-2.5 text-center font-mono text-[11px] text-muted-foreground print:text-gray-700">
                           {it.lastRun ? `${it.lastRun.durationMs}ms` : "—"}

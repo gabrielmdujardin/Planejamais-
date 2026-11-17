@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { RequirementItem } from "@/lib/validation-center/types"
+import { PROBLEM_CLASSIFICATION_LABELS, RequirementItem } from "@/lib/validation-center/types"
 import {
   CheckCircle2,
   XCircle,
@@ -16,6 +16,11 @@ import {
   AlertTriangle,
   Layers,
   Sparkles,
+  Wrench,
+  Database,
+  Server,
+  History,
+  Bug,
 } from "lucide-react"
 
 interface RequirementCardProps {
@@ -63,10 +68,10 @@ export function RequirementCard({
     },
   }[item.category]
 
-  // Cores por status
+  // Cores por status (todos os status da taxonomia oficial)
   const statusConfig = {
     not_tested: {
-      label: "Não Testado",
+      label: "Não Executado",
       icon: Clock,
       pillClass: "bg-muted text-muted-foreground border-border",
     },
@@ -85,14 +90,68 @@ export function RequirementCard({
       icon: XCircle,
       pillClass: "bg-red-500/15 text-red-700 dark:text-red-300 border-red-500/30",
     },
+    partial: {
+      label: "Parcialmente Atendido",
+      icon: AlertTriangle,
+      pillClass: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
+    },
+    not_implemented: {
+      label: "Não Implementado",
+      icon: XCircle,
+      pillClass: "bg-slate-500/15 text-slate-700 dark:text-slate-300 border-slate-500/30",
+    },
+    blocked: {
+      label: "Bloqueado por Dependência",
+      icon: AlertTriangle,
+      pillClass: "bg-orange-500/15 text-orange-700 dark:text-orange-300 border-orange-500/30",
+    },
+    needs_refinement: {
+      label: "Necessita Refinamento",
+      icon: Wrench,
+      pillClass: "bg-indigo-500/15 text-indigo-700 dark:text-indigo-300 border-indigo-500/30",
+    },
     manual: {
       label: "Aferição Externa",
       icon: AlertTriangle,
       pillClass: "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30",
     },
-  }[item.status]
+  }[item.status] || {
+    label: "Não Executado",
+    icon: Clock,
+    pillClass: "bg-muted text-muted-foreground border-border",
+  }
 
   const StatusIcon = statusConfig.icon
+
+  // Badge de evolução na auditoria
+  const auditBadge = (() => {
+    if (item.previousStatus === "failed") {
+      return {
+        text: "Corrigido após Reprovação",
+        className: "bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-500/30",
+      }
+    }
+    if (item.previousStatus === "needs_refinement") {
+      return {
+        text: "Refinado / Falso Positivo Eliminado",
+        className: "bg-indigo-500/15 text-indigo-800 dark:text-indigo-300 border-indigo-500/30",
+      }
+    }
+    if (item.previousStatus === "new") {
+      return {
+        text: "Novo Requisito (RBAC RN-002)",
+        className: "bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/30",
+      }
+    }
+    return null
+  })()
+
+  const previousStatusLabel: Record<string, string> = {
+    passed: "Aprovado",
+    failed: "Reprovado (Corrigido nesta auditoria)",
+    needs_refinement: "Aprovado com limitação conceitual / falso positivo (Refinado)",
+    new: "Novo requisito funcional (RBAC RN-002)",
+  }
 
   return (
     <div
@@ -127,13 +186,25 @@ export function RequirementCard({
               <span className="text-xs text-muted-foreground hidden md:inline">
                 • {categoryConfig.label}
               </span>
+              {auditBadge && (
+                <span
+                  className={`text-[10px] font-semibold px-2 py-0.5 rounded-full border ${auditBadge.className}`}
+                >
+                  {auditBadge.text}
+                </span>
+              )}
+              {item.problemClassification && item.problemClassification !== "none" && (
+                <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-muted text-muted-foreground border border-border">
+                  {PROBLEM_CLASSIFICATION_LABELS[item.problemClassification]}
+                </span>
+              )}
             </div>
 
             {/* Requisitos Relacionados */}
             {item.relatedReqs.length > 0 && (
               <div className="flex items-center gap-1.5 mt-1 flex-wrap">
                 <span className="text-[11px] text-muted-foreground">Relacionados:</span>
-                {item.relatedReqs.slice(0, 5).map((rel) => (
+                {item.relatedReqs.slice(0, 6).map((rel) => (
                   <span
                     key={rel}
                     className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-muted/80 text-muted-foreground border border-border/50"
@@ -141,9 +212,9 @@ export function RequirementCard({
                     {rel}
                   </span>
                 ))}
-                {item.relatedReqs.length > 5 && (
+                {item.relatedReqs.length > 6 && (
                   <span className="text-[10px] text-muted-foreground">
-                    +{item.relatedReqs.length - 5}
+                    +{item.relatedReqs.length - 6}
                   </span>
                 )}
               </div>
@@ -204,17 +275,43 @@ export function RequirementCard({
 
       {/* Conteúdo Expandido */}
       {expanded && (
-        <div className="px-4 pb-5 pt-1 border-t border-border/60 bg-muted/20 space-y-4 text-sm">
+        <div className="px-4 pb-5 pt-2 border-t border-border/60 bg-muted/20 space-y-4 text-sm">
+          {/* Comparativo Antes vs Depois se a regra foi refinada (ex: RN-002) */}
+          {item.previousWording && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="p-3 rounded-lg border border-amber-500/30 bg-amber-500/5">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 mb-1 flex items-center gap-1.5">
+                  <History className="w-3.5 h-3.5" />
+                  Redação Anterior (Antes do Refinamento)
+                </h4>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {item.previousWording}
+                </p>
+              </div>
+              <div className="p-3 rounded-lg border border-emerald-500/30 bg-emerald-500/5">
+                <h4 className="text-[11px] font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300 mb-1 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5" />
+                  Nova Redação Oficial (RBAC por Evento)
+                </h4>
+                <p className="text-xs text-foreground leading-relaxed font-medium">
+                  {item.description}
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Descrição Oficial */}
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
-              <Info className="w-3.5 h-3.5" />
-              Descrição Oficial da Documentação (TCC 2026)
-            </h4>
-            <p className="text-foreground/90 leading-relaxed text-sm bg-card p-3 rounded-lg border border-border/60">
-              {item.description}
-            </p>
-          </div>
+          {!item.previousWording && (
+            <div>
+              <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1 flex items-center gap-1.5">
+                <Info className="w-3.5 h-3.5" />
+                Descrição Oficial Atualizada (TCC 2026)
+              </h4>
+              <p className="text-foreground/90 leading-relaxed text-sm bg-card p-3 rounded-lg border border-border/60">
+                {item.description}
+              </p>
+            </div>
+          )}
 
           {/* Explicação Prática */}
           <div>
@@ -225,6 +322,83 @@ export function RequirementCard({
             <p className="text-foreground/80 leading-relaxed text-sm bg-card p-3 rounded-lg border border-border/60">
               {item.explanation}
             </p>
+          </div>
+
+          {/* Diagnóstico Técnico de Auditoria (Causa Raiz, Classificação, Correção, Endpoint e Banco) */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="p-3 rounded-lg border border-border/70 bg-card space-y-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                  <Bug className="w-3.5 h-3.5 text-primary" />
+                  Diagnóstico & Causa Raiz
+                </span>
+                {item.problemClassification && (
+                  <span className="px-2 py-0.5 rounded bg-primary/10 text-primary font-semibold text-[11px]">
+                    {PROBLEM_CLASSIFICATION_LABELS[item.problemClassification]}
+                  </span>
+                )}
+              </div>
+              {item.previousStatus && (
+                <div>
+                  <span className="text-muted-foreground font-medium">Situação anterior: </span>
+                  <span className="font-semibold text-foreground">
+                    {previousStatusLabel[item.previousStatus] || item.previousStatus}
+                  </span>
+                </div>
+              )}
+              {item.rootCauseAnalysis && (
+                <div>
+                  <span className="text-muted-foreground font-medium">Análise de causa raiz: </span>
+                  <span className="text-foreground/90">{item.rootCauseAnalysis}</span>
+                </div>
+              )}
+              {item.correctionApplied && (
+                <div>
+                  <span className="text-muted-foreground font-medium">Correção / Refinamento aplicado: </span>
+                  <span className="text-emerald-700 dark:text-emerald-300 font-medium">
+                    {item.correctionApplied}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 rounded-lg border border-border/70 bg-card space-y-2 text-xs">
+              <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-primary" />
+                Rastreabilidade Técnica (Endpoint, Banco e Arquivos)
+              </span>
+              {item.testedEndpoint && (
+                <div className="flex items-start gap-1.5">
+                  <Server className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-muted-foreground font-medium">Endpoint / Camada testada: </span>
+                    <code className="font-mono text-[11px] text-foreground bg-muted px-1.5 py-0.5 rounded">
+                      {item.testedEndpoint}
+                    </code>
+                  </div>
+                </div>
+              )}
+              {item.databaseValidationInfo && (
+                <div className="flex items-start gap-1.5">
+                  <Database className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <div>
+                    <span className="text-muted-foreground font-medium">Validação no Banco / Persistência: </span>
+                    <span className="text-foreground/90 font-mono text-[11px]">
+                      {item.databaseValidationInfo}
+                    </span>
+                  </div>
+                </div>
+              )}
+              <div className="flex items-start gap-1.5">
+                <FileCode className="w-3.5 h-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <span className="text-muted-foreground font-medium">Arquivos relacionados: </span>
+                  <span className="font-mono text-[11px] text-foreground break-all">
+                    {item.testFiles.join(", ")}
+                  </span>
+                </div>
+              </div>
+            </div>
           </div>
 
           {/* Cenários de Teste Reais */}
@@ -255,7 +429,7 @@ export function RequirementCard({
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 font-mono text-[11px]">
                       <div className="p-2 rounded bg-muted/60 border border-border/40">
                         <span className="text-muted-foreground block text-[10px] uppercase font-sans">
-                          Valor Esperado:
+                          Resultado Esperado:
                         </span>
                         <span className="text-foreground">{sc.expected}</span>
                       </div>
@@ -267,7 +441,7 @@ export function RequirementCard({
                         }`}
                       >
                         <span className="text-muted-foreground block text-[10px] uppercase font-sans">
-                          Valor Obtido (Execução Real):
+                          Resultado Obtido (Execução Real):
                         </span>
                         <span>{sc.actual}</span>
                       </div>
@@ -328,4 +502,3 @@ export function RequirementCard({
     </div>
   )
 }
-

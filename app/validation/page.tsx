@@ -19,18 +19,13 @@ import {
   Layers,
   CheckCircle2,
   XCircle,
-  Clock,
   AlertTriangle,
   X,
-  FileCheck2,
   Cpu,
-  BarChart3,
-  ShieldCheck,
-  ChevronRight,
 } from "lucide-react"
 
 export default function ValidationCenterPage() {
-  // Estado principal dos 66 requisitos
+  // Estado principal dos 71 requisitos (18 RN + 43 RF + 10 RNF)
   const [items, setItems] = useState<RequirementItem[]>(() =>
     REQUIREMENTS_CATALOG.map((r) => ({ ...r }))
   )
@@ -39,8 +34,17 @@ export default function ValidationCenterPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<"all" | "RN" | "RF" | "RNF">("all")
   const [statusFilter, setStatusFilter] = useState<
-    "all" | "passed" | "failed" | "not_tested" | "manual"
+    | "all"
+    | "passed"
+    | "failed"
+    | "partial"
+    | "not_implemented"
+    | "not_tested"
+    | "blocked"
+    | "needs_refinement"
+    | "manual"
   >("all")
+  const [problemFilter, setProblemFilter] = useState<string>("all")
 
   // Modos e Modais
   const [presentationOpen, setPresentationOpen] = useState(false)
@@ -55,7 +59,7 @@ export default function ValidationCenterPage() {
     current: number
     total: number
     currentReqId?: string
-  }>({ current: 0, total: 66 })
+  }>({ current: 0, total: REQUIREMENTS_CATALOG.length })
 
   const searchInputRef = useRef<HTMLInputElement>(null)
 
@@ -88,7 +92,15 @@ export default function ValidationCenterPage() {
     const passed = items.filter((i) => i.status === "passed").length
     const failed = items.filter((i) => i.status === "failed").length
     const manualPending = items.filter((i) => i.status === "manual").length
-    const notTested = items.filter((i) => i.status === "not_tested" || i.status === "running").length
+    const notTested = items.filter(
+      (i) =>
+        i.status === "not_tested" ||
+        i.status === "running" ||
+        i.status === "partial" ||
+        i.status === "not_implemented" ||
+        i.status === "blocked" ||
+        i.status === "needs_refinement"
+    ).length
     const tested = passed + failed
     const progressPercent = total > 0 ? Math.round(((tested + manualPending) / total) * 100) : 0
     const totalDurationMs = items.reduce(
@@ -122,7 +134,7 @@ export default function ValidationCenterPage() {
           body: JSON.stringify({
             id,
             headed: customHeaded ?? isHeaded,
-            e2e: true,
+            e2e: false,
           }),
         })
 
@@ -183,11 +195,15 @@ export default function ValidationCenterPage() {
 
     try {
       const response = await fetch("/api/validation/run?stream=true", {
-        headers: { Accept: "text/event-stream" },
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({ all: true, stream: true }),
       })
 
       if (!response.ok || !response.body) {
-        // Fallback para POST tradicional se streaming não suportado
         const postRes = await fetch("/api/validation/run", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -310,7 +326,7 @@ export default function ValidationCenterPage() {
     )
   }
 
-  // Filtragem instantânea dos 66 requisitos
+  // Filtragem instantânea dos 71 requisitos
   const filteredItems = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
 
@@ -322,10 +338,21 @@ export default function ValidationCenterPage() {
 
       // Filtro de Status
       if (statusFilter !== "all") {
-        if (statusFilter === "passed" && it.status !== "passed") return false
-        if (statusFilter === "failed" && it.status !== "failed") return false
-        if (statusFilter === "not_tested" && it.status !== "not_tested") return false
-        if (statusFilter === "manual" && it.status !== "manual") return false
+        if (it.status !== statusFilter) return false
+      }
+
+      // Filtro por Tipo de Problema / Evolução da Auditoria
+      if (problemFilter !== "all") {
+        if (problemFilter === "reproved_fixed" && it.previousStatus !== "failed") return false
+        if (problemFilter === "refined" && it.previousStatus !== "needs_refinement") return false
+        if (problemFilter === "new_req" && it.previousStatus !== "new") return false
+        if (
+          problemFilter !== "reproved_fixed" &&
+          problemFilter !== "refined" &&
+          problemFilter !== "new_req" &&
+          it.problemClassification !== problemFilter
+        )
+          return false
       }
 
       // Busca por código, título, descrição ou palavras-chave
@@ -335,12 +362,13 @@ export default function ValidationCenterPage() {
         const matchesDesc = it.description.toLowerCase().includes(q)
         const matchesExp = it.explanation.toLowerCase().includes(q)
         const matchesRel = it.relatedReqs.some((r) => r.toLowerCase().includes(q))
-        return matchesId || matchesTitle || matchesDesc || matchesExp || matchesRel
+        const matchesRoot = (it.rootCauseAnalysis || "").toLowerCase().includes(q)
+        return matchesId || matchesTitle || matchesDesc || matchesExp || matchesRel || matchesRoot
       }
 
       return true
     })
-  }, [items, searchQuery, categoryFilter, statusFilter])
+  }, [items, searchQuery, categoryFilter, statusFilter, problemFilter])
 
   // Abrir apresentação a partir de um requisito específico
   const openPresentationAt = (reqId: string) => {
@@ -348,6 +376,10 @@ export default function ValidationCenterPage() {
     setPresentationIndex(idx >= 0 ? idx : 0)
     setPresentationOpen(true)
   }
+
+  const rnCount = useMemo(() => items.filter((i) => i.category === "RN").length, [items])
+  const rfCount = useMemo(() => items.filter((i) => i.category === "RF").length, [items])
+  const rnfCount = useMemo(() => items.filter((i) => i.category === "RNF").length, [items])
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col font-sans">
@@ -364,7 +396,7 @@ export default function ValidationCenterPage() {
                   Planeja+ • TCC 2026
                 </span>
                 <span className="text-xs text-muted-foreground font-mono">
-                  Ambiente de Demonstração & Auditoria
+                  Auditoria Completa • RBAC Colaborativo RN-002
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground">
@@ -372,9 +404,10 @@ export default function ValidationCenterPage() {
               </h1>
               <p className="text-sm sm:text-base text-muted-foreground max-w-3xl leading-relaxed">
                 Painel interativo para apresentação à banca avaliadora. Executa os testes reais
-                do sistema para todas as <strong>18 Regras de Negócio</strong>,{" "}
-                <strong>38 Requisitos Funcionais</strong> e{" "}
-                <strong>10 Requisitos Não Funcionais</strong> (66 requisitos oficiais).
+                do sistema para todas as <strong>{rnCount} Regras de Negócio</strong> (incluindo o
+                modelo RBAC colaborativo da RN-002 com 20 cenários),{" "}
+                <strong>{rfCount} Requisitos Funcionais</strong> (RF-001 a RF-043) e{" "}
+                <strong>{rnfCount} Requisitos Não Funcionais</strong> ({items.length} requisitos oficiais).
               </p>
             </div>
 
@@ -491,7 +524,7 @@ export default function ValidationCenterPage() {
                 {summary.total}
               </div>
               <div className="text-xs text-muted-foreground mt-0.5">
-                18 RN • 38 RF • 10 RNF
+                {rnCount} RN • {rfCount} RF • {rnfCount} RNF
               </div>
             </div>
 
@@ -554,7 +587,7 @@ export default function ValidationCenterPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Digite o código (ex: RN-005, RF-014, RNF-002) ou palavra-chave (orçamento, convites, rateio, segurança)..."
+              placeholder="Digite o código (ex: RN-002, RF-039, RNF-002) ou palavra-chave (RBAC, equipe, orçamento, convites, rateio)..."
               className="w-full pl-12 pr-12 py-3.5 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground text-sm sm:text-base focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all shadow-sm"
             />
             {searchQuery ? (
@@ -572,10 +605,10 @@ export default function ValidationCenterPage() {
             )}
           </div>
 
-          {/* Abas e Filtros de Categoria */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Abas e Filtros de Categoria, Status e Tipo de Problema */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
             {/* Categorias */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
               <button
                 type="button"
                 onClick={() => setCategoryFilter("all")}
@@ -585,7 +618,7 @@ export default function ValidationCenterPage() {
                     : "bg-card border border-border hover:bg-muted text-foreground"
                 }`}
               >
-                Todos (66)
+                Todos ({items.length})
               </button>
               <button
                 type="button"
@@ -596,7 +629,7 @@ export default function ValidationCenterPage() {
                     : "bg-card border border-border hover:bg-muted text-foreground"
                 }`}
               >
-                Regras de Negócio (18)
+                Regras de Negócio ({rnCount})
               </button>
               <button
                 type="button"
@@ -607,7 +640,7 @@ export default function ValidationCenterPage() {
                     : "bg-card border border-border hover:bg-muted text-foreground"
                 }`}
               >
-                Requisitos Funcionais (38)
+                Requisitos Funcionais ({rfCount})
               </button>
               <button
                 type="button"
@@ -618,12 +651,30 @@ export default function ValidationCenterPage() {
                     : "bg-card border border-border hover:bg-muted text-foreground"
                 }`}
               >
-                Não Funcionais (10)
+                Não Funcionais ({rnfCount})
               </button>
             </div>
 
-            {/* Filtros de Status */}
-            <div className="flex items-center gap-2 self-end sm:self-auto text-xs text-muted-foreground">
+            {/* Filtros de Status e Tipo de Problema */}
+            <div className="flex flex-wrap items-center gap-2 self-end lg:self-auto text-xs text-muted-foreground">
+              <span>Diagnóstico:</span>
+              <select
+                value={problemFilter}
+                onChange={(e) => setProblemFilter(e.target.value)}
+                className="px-2.5 py-1 rounded-md border border-border bg-card text-foreground font-medium text-xs outline-none"
+              >
+                <option value="all">Todos os diagnósticos</option>
+                <option value="reproved_fixed">12 Reprovados Corrigidos</option>
+                <option value="refined">Regras Refinadas & Falsos Positivos</option>
+                <option value="new_req">Novos Requisitos RBAC (RF-039 a RF-043)</option>
+                <option value="implementation_error">Erro de implementação</option>
+                <option value="incomplete_rule">Regra de negócio incompleta</option>
+                <option value="inconsistent_requirement">Requisito funcional inconsistente</option>
+                <option value="test_error">Erro no teste automatizado</option>
+                <option value="doc_divergence">Divergência na documentação</option>
+                <option value="security_flaw">Falha de segurança</option>
+              </select>
+
               <span>Status:</span>
               <select
                 value={statusFilter}
@@ -631,16 +682,20 @@ export default function ValidationCenterPage() {
                 className="px-2.5 py-1 rounded-md border border-border bg-card text-foreground font-medium text-xs outline-none"
               >
                 <option value="all">Todos os status</option>
-                <option value="passed">Aprovados</option>
-                <option value="failed">Reprovados</option>
-                <option value="not_tested">Não Testados</option>
+                <option value="passed">Aprovado</option>
+                <option value="failed">Reprovado</option>
+                <option value="partial">Parcialmente atendido</option>
+                <option value="not_implemented">Não implementado</option>
+                <option value="not_tested">Não executado</option>
+                <option value="blocked">Bloqueado por dependência</option>
+                <option value="needs_refinement">Necessita refinamento</option>
                 <option value="manual">Aferição Externa</option>
               </select>
 
               <button
                 type="button"
                 onClick={handleResetAll}
-                className="text-xs text-muted-foreground hover:text-foreground underline ml-2"
+                className="text-xs text-muted-foreground hover:text-foreground underline ml-1"
                 title="Redefinir status dos testes"
               >
                 Limpar
@@ -656,15 +711,19 @@ export default function ValidationCenterPage() {
               Exibindo <strong>{filteredItems.length}</strong> de{" "}
               <strong>{items.length}</strong> requisitos
             </span>
-            {searchQuery && (
+            {(searchQuery || problemFilter !== "all" || statusFilter !== "all") && (
               <span>
-                Filtro ativo: &ldquo;{searchQuery}&rdquo; •{" "}
+                Filtros ativos •{" "}
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("")
+                    setProblemFilter("all")
+                    setStatusFilter("all")
+                  }}
                   className="text-primary hover:underline"
                 >
-                  Limpar busca
+                  Limpar filtros
                 </button>
               </span>
             )}
@@ -690,12 +749,12 @@ export default function ValidationCenterPage() {
             <div className="py-16 text-center rounded-2xl border border-dashed border-border bg-card p-6 space-y-3">
               <Search className="w-10 h-10 text-muted-foreground/40 mx-auto" />
               <h3 className="font-bold text-foreground text-base">
-                Nenhum requisito encontrado para &ldquo;{searchQuery}&rdquo;
+                Nenhum requisito encontrado para os filtros aplicados
               </h3>
               <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                Tente buscar pelo código exato (ex: <code>RN-005</code>, <code>RF-014</code>,{" "}
-                <code>RNF-002</code>) ou palavras como <em>orçamento</em>, <em>convite</em>,{" "}
-                <em>presença</em>.
+                Tente buscar pelo código exato (ex: <code>RN-002</code>, <code>RF-039</code>,{" "}
+                <code>RNF-002</code>) ou palavras como <em>equipe</em>, <em>orçamento</em>,{" "}
+                <em>convite</em>.
               </p>
               <button
                 type="button"
@@ -703,6 +762,7 @@ export default function ValidationCenterPage() {
                   setSearchQuery("")
                   setCategoryFilter("all")
                   setStatusFilter("all")
+                  setProblemFilter("all")
                 }}
                 className="px-4 py-2 rounded-lg bg-primary text-primary-foreground text-xs font-semibold"
               >
@@ -741,4 +801,3 @@ export default function ValidationCenterPage() {
     </div>
   )
 }
-

@@ -1,3 +1,4 @@
+import { REQUIREMENTS_CATALOG } from "@/lib/validation-center/catalog"
 import { executeE2ETest } from "@/lib/validation-center/e2e-bridge"
 import { runAllRequirements, runRequirementTest } from "@/lib/validation-center/engine"
 import { NextRequest, NextResponse } from "next/server"
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify(payload)}\n\n`))
           }
 
-          send({ type: "start", total: 66, timestamp: new Date().toISOString() })
+          send({ type: "start", total: REQUIREMENTS_CATALOG.length, timestamp: new Date().toISOString() })
 
           try {
             const { results, summary } = await runAllRequirements((result, index, total) => {

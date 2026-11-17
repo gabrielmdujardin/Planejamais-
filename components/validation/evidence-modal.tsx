@@ -1,17 +1,19 @@
 "use client"
 
 import { useState } from "react"
-import { RequirementItem } from "@/lib/validation-center/types"
+import { PROBLEM_CLASSIFICATION_LABELS, RequirementItem } from "@/lib/validation-center/types"
 import {
   X,
   FileCode,
   Terminal,
-  Clock,
   CheckCircle2,
   XCircle,
   Copy,
   Check,
   Code2,
+  Bug,
+  Database,
+  Server,
 } from "lucide-react"
 
 interface EvidenceModalProps {
@@ -42,7 +44,7 @@ export function EvidenceModal({ item, onClose }: EvidenceModalProps) {
                 Evidência Técnica — {item.title}
               </h3>
               <p className="text-xs text-muted-foreground">
-                Relatório de execução, logs de console e comparação formal de resultados
+                Relatório de execução, diagnóstico de causa raiz, endpoint testado e validação em banco
               </p>
             </div>
           </div>
@@ -62,7 +64,7 @@ export function EvidenceModal({ item, onClose }: EvidenceModalProps) {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div className="p-3 rounded-lg bg-muted/40 border border-border/60">
               <span className="text-[10px] uppercase font-bold text-muted-foreground block">
-                Status
+                Status Atual
               </span>
               <span
                 className={`font-semibold text-xs ${
@@ -103,6 +105,67 @@ export function EvidenceModal({ item, onClose }: EvidenceModalProps) {
                 {item.lastRun ? new Date(item.lastRun.timestamp).toLocaleTimeString("pt-BR") : "—"}
               </span>
             </div>
+          </div>
+
+          {/* Diagnóstico de Auditoria, Endpoint e Banco de Dados */}
+          <div className="p-4 rounded-xl border border-border bg-muted/20 space-y-3 text-xs">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <h4 className="font-bold uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <Bug className="w-4 h-4 text-primary" />
+                Diagnóstico de Auditoria & Rastreabilidade
+              </h4>
+              {item.problemClassification && (
+                <span className="px-2.5 py-0.5 rounded-full bg-primary/15 text-primary font-semibold text-[11px]">
+                  {PROBLEM_CLASSIFICATION_LABELS[item.problemClassification]}
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+              {item.previousStatus && (
+                <div className="p-2.5 rounded bg-card border border-border/60">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                    Situação Anterior na Auditoria
+                  </span>
+                  <span className="font-semibold text-foreground">{item.previousStatus}</span>
+                </div>
+              )}
+              {item.testedEndpoint && (
+                <div className="p-2.5 rounded bg-card border border-border/60">
+                  <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1">
+                    <Server className="w-3 h-3" /> Endpoint / Camada Testada
+                  </span>
+                  <code className="font-mono text-[11px] text-foreground">{item.testedEndpoint}</code>
+                </div>
+              )}
+            </div>
+
+            {item.rootCauseAnalysis && (
+              <div className="p-2.5 rounded bg-card border border-border/60">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground block mb-0.5">
+                  Causa Raiz Identificada
+                </span>
+                <p className="text-foreground/90 leading-relaxed">{item.rootCauseAnalysis}</p>
+              </div>
+            )}
+
+            {item.correctionApplied && (
+              <div className="p-2.5 rounded bg-emerald-500/5 border border-emerald-500/20">
+                <span className="text-[10px] uppercase font-bold text-emerald-700 dark:text-emerald-300 block mb-0.5">
+                  Correção ou Refinamento Implementado
+                </span>
+                <p className="text-foreground/90 leading-relaxed">{item.correctionApplied}</p>
+              </div>
+            )}
+
+            {item.databaseValidationInfo && (
+              <div className="p-2.5 rounded bg-card border border-border/60">
+                <span className="text-[10px] uppercase font-bold text-muted-foreground flex items-center gap-1 mb-0.5">
+                  <Database className="w-3 h-3" /> Validação no Banco de Dados (Supabase / PostgreSQL)
+                </span>
+                <p className="font-mono text-[11px] text-foreground/90">{item.databaseValidationInfo}</p>
+              </div>
+            )}
           </div>
 
           {/* Evidências do Navegador Real (Screenshots e Auditoria de 3 Camadas) */}
@@ -172,7 +235,7 @@ export function EvidenceModal({ item, onClose }: EvidenceModalProps) {
           <div className="p-3 rounded-lg bg-card border border-border/80">
             <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1 flex items-center gap-1.5">
               <FileCode className="w-3.5 h-3.5 text-primary" />
-              Arquivos de Teste Associados
+              Arquivos Relacionados (Código e Suítes de Teste)
             </h4>
             <div className="font-mono text-xs text-foreground space-y-1">
               {item.testFiles.map((f) => (
@@ -284,4 +347,3 @@ export function EvidenceModal({ item, onClose }: EvidenceModalProps) {
     </div>
   )
 }
-
