@@ -36,6 +36,7 @@ import AddGuestDialog from "@/components/add-guest-dialog"
 import AddItemDialog from "@/components/add-item-dialog"
 import EditEventDialog from "@/components/edit-event-dialog"
 import EventGallery from "@/components/event-gallery"
+import EventTeamManager from "@/components/event-team-manager"
 import GuestList from "@/components/guest-list"
 import ItemsList from "@/components/items-list"
 import PendingRequestsList from "@/components/pending-requests-list"
@@ -405,6 +406,9 @@ export default function EventPage() {
             <Button size="sm" variant="outline" onClick={() => setActiveTab("requests")}><Mail className="mr-2 h-4 w-4" /> Ver solicitacoes</Button>
             <Button size="sm" variant="outline" onClick={() => setActiveTab("photos")}><ImageIcon className="mr-2 h-4 w-4" /> Galeria</Button>
             <Button size="sm" variant="outline" onClick={() => setActiveTab("analytics")}><BarChart3 className="mr-2 h-4 w-4" /> Analises do evento</Button>
+            <Button size="sm" variant="outline" onClick={() => setActiveTab("team")} className="border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/10">
+              <Users className="mr-2 h-4 w-4" /> Equipe e permissões
+            </Button>
           </CardContent>
         </Card>
 
@@ -416,6 +420,7 @@ export default function EventPage() {
             <TabsTrigger value="expenses">Custos / Fornecedores ({stats.itemCount})</TabsTrigger>
             <TabsTrigger value="photos">Fotos ({stats.photoCount})</TabsTrigger>
             <TabsTrigger value="analytics">Analises</TabsTrigger>
+            <TabsTrigger value="team">Equipe e permissões</TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview">
@@ -577,6 +582,10 @@ export default function EventPage() {
                 <InfoBox label="Fotos" value={String(stats.photoCount)} />
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="team">
+            <EventTeamManager event={event} />
           </TabsContent>
         </Tabs>
 

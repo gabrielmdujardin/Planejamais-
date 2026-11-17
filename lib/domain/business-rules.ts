@@ -46,6 +46,118 @@ export const VALID_GUEST_STATUSES = [
 
 export type ValidGuestStatus = (typeof VALID_GUEST_STATUSES)[number]
 
+export function isValidEmail(email: unknown): boolean {
+  return typeof email === "string" && EMAIL_REGEX.test(email.trim())
+}
+
+const GUEST_STATUS_ALIASES: Record<string, ValidGuestStatus> = {
+  pendente: "pending",
+  pending: "pending",
+  confirmado: "confirmed",
+  confirmed: "confirmed",
+  recusado: "declined",
+  declined: "declined",
+  rejected: "declined",
+  aguardando_aprovacao: "awaiting_approval",
+  awaiting_approval: "awaiting_approval",
+  pending_approval: "awaiting_approval",
+  expirado: "expired",
+  expired: "expired",
+  cancelado: "cancelled",
+  cancelled: "cancelled",
+  canceled: "cancelled",
+}
+
+/**
+ * RN-004, RF-011, RF-013: Normaliza rótulos em português ("Pendente", "Confirmado", "Recusado")
+ * ou códigos técnicos para o conjunto canônico de status de presença do convidado.
+ */
+export function normalizeGuestStatus(status: unknown): ValidGuestStatus | null {
+  if (typeof status !== "string") return null
+  const key = status.trim().toLowerCase()
+  return GUEST_STATUS_ALIASES[key] ?? null
+}
+
+/**
+ * RN-004: Verifica se uma transição de status de presença do convidado é válida.
+ */
+export function isAllowedAttendanceTransition(
+  fromStatus: unknown,
+  toStatus: unknown,
+  allowResponseEdit = true
+): boolean {
+  const from = normalizeGuestStatus(fromStatus)
+  const to = normalizeGuestStatus(toStatus)
+  if (!from || !to) return false
+  if (from === "expired" || from === "cancelled") return false
+  if ((from === "confirmed" || from === "declined") && !allowResponseEdit && from !== to) {
+    return false
+  }
+  return ["pending", "confirmed", "declined", "awaiting_approval", "cancelled"].includes(to)
+}
+
+/**
+ * RN-006: Avalia validade de token de convite público ou individual considerando habilitação e prazo limite.
+ */
+export function evaluateInviteTokenValidity(params: {
+  token?: string | null
+  enabled?: boolean
+  expiresAt?: string | null
+  rsvpDeadline?: string | null
+  now?: Date
+}): { valid: boolean; reason: string } {
+  const currentNow = params.now || new Date()
+  if (params.enabled === false) {
+    return { valid: false, reason: "Convite público desabilitado pelo organizador." }
+  }
+  if (!isSafeToken(params.token)) {
+    return { valid: false, reason: "Formato de token inválido ou inseguro." }
+  }
+  if (params.expiresAt) {
+    const exp = new Date(params.expiresAt)
+    if (!Number.isNaN(exp.getTime()) && exp.getTime() < currentNow.getTime()) {
+      return { valid: false, reason: "Token de convite expirado." }
+    }
+  }
+  if (params.rsvpDeadline) {
+    const deadlineEnd = new Date(`${params.rsvpDeadline.slice(0, 10)}T23:59:59.999Z`)
+    if (!Number.isNaN(deadlineEnd.getTime()) && deadlineEnd.getTime() < currentNow.getTime()) {
+      return { valid: false, reason: "Prazo limite de confirmação de presença encerrado." }
+    }
+  }
+  return { valid: true, reason: "Token válido e ativo." }
+}
+
+/**
+ * RN-008 & RF-016: Define o status inicial de uma solicitação pública de participação conforme configuração do evento.
+ */
+export function resolvePublicRequestInitialStatus(autoApprovePublicGuests = false): "pending" | "awaiting_approval" {
+  return autoApprovePublicGuests ? "pending" : "awaiting_approval"
+}
+
+/**
+ * RN-009 & RF-036: Define o status inicial de um acompanhante indicado no RSVP conforme configuração de moderação.
+ */
+export function resolveCompanionInitialStatus(companionsRequireApproval = true): "approved" | "awaiting_approval" {
+  return companionsRequireApproval ? "awaiting_approval" : "approved"
+}
+
+/**
+ * RF-035: Consolida restrições alimentares declaradas pelos convidados confirmados para planejamento de buffet.
+ */
+export function aggregateDietaryRestrictions(guests: any[] | null | undefined): Record<string, number> {
+  if (!Array.isArray(guests)) return {}
+  const counts: Record<string, number> = {}
+  for (const g of guests) {
+    if (!g) continue
+    const raw = g.dietaryRestrictions ?? g.dietary_restrictions ?? g.dietary ?? ""
+    const text = String(raw || "").trim()
+    if (!text) continue
+    counts[text] = (counts[text] || 0) + 1
+  }
+  return counts
+}
+
 /**
  * RN-006 / RNF-004: Gera token criptograficamente seguro com pelo menos 128 bits (16 bytes = 32 chars hex).
  */
@@ -198,14 +310,16 @@ export function calculateAttendanceSummary(guests: any[] | null | undefined) {
 }
 
 /**
- * RN-010: Valor não pode ser negativo; item sem valor informado conta como R$ 0,00; itens cancelados não compõem o custo ativo.
+ * RN-010 & RN-011: Valor não pode ser negativo; item sem valor informado conta como R$ 0,00;
+ * itens cancelados não compõem o custo ativo.
+ * Suporta tanto valor total direto (price / actualCost / estimatedCost) quanto composição (quantity * unitPrice / unit_price).
  */
 export function normalizeItemValue(item: any): number {
   if (!item || typeof item !== "object") return 0
   const paymentStatus = item.paymentStatus ?? item.payment_status ?? "pending"
   if (paymentStatus === "cancelled") return 0
 
-  const raw =
+  const directRaw =
     item.price !== undefined && item.price !== null && item.price !== ""
       ? item.price
       : item.actualCost !== undefined && item.actualCost !== null && item.actualCost !== ""
@@ -214,11 +328,24 @@ export function normalizeItemValue(item: any): number {
       ? item.estimated_cost
       : item.estimatedCost !== undefined && item.estimatedCost !== null && item.estimatedCost !== ""
       ? item.estimatedCost
-      : 0
+      : undefined
 
-  const num = Number(raw)
-  if (!Number.isFinite(num) || num < 0) return 0
-  return Math.round(num * 100) / 100
+  if (directRaw !== undefined) {
+    const num = Number(directRaw)
+    if (!Number.isFinite(num) || num < 0) return 0
+    return Math.round(num * 100) / 100
+  }
+
+  const rawUnitPrice = item.unit_price ?? item.unitPrice
+  if (rawUnitPrice !== undefined && rawUnitPrice !== null && rawUnitPrice !== "") {
+    const unitNum = Number(rawUnitPrice)
+    if (!Number.isFinite(unitNum) || unitNum < 0) return 0
+    const rawQty = item.quantity !== undefined && item.quantity !== null && item.quantity !== "" ? Number(item.quantity) : 1
+    const qty = Number.isFinite(rawQty) && rawQty > 0 ? rawQty : 1
+    return Math.round(unitNum * qty * 100) / 100
+  }
+
+  return 0
 }
 
 /**

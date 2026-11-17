@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { normalizeGuestStatus } from "./domain/business-rules"
 
 export function isValidEmail(email: string): boolean {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -67,7 +68,7 @@ const nullableNonNegativeNumber = z.preprocess(
   z.number({ message: "Valor numérico inválido" }).min(0, "O valor não pode ser negativo").nullable()
 )
 
-export const eventPayloadSchema = z
+const eventPayloadObjectSchema = z
   .object({
     title: z.string().trim().min(1, "Nome do evento é obrigatório").max(160, "Nome muito longo"),
     type: z.string().trim().min(1, "Tipo do evento é obrigatório").max(80),
@@ -166,6 +167,22 @@ export const eventPayloadSchema = z
     }
   })
 
+export const eventPayloadSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== "object") return raw
+  const input = raw as Record<string, any>
+  return {
+    ...input,
+    type: input.type ?? input.event_type,
+    startDate: input.startDate ?? input.start_date,
+    startTime: input.startTime ?? input.start_time,
+    endDate: input.endDate ?? input.end_date,
+    endTime: input.endTime ?? input.end_time,
+    eventMode: input.eventMode ?? input.event_mode,
+    meetingUrl: input.meetingUrl ?? input.meeting_url,
+    budgetEstimated: input.budgetEstimated ?? input.budget_estimated ?? input.budget,
+  }
+}, eventPayloadObjectSchema)
+
 /**
  * Zod Schema para validação de acompanhantes em convites públicos
  */
@@ -179,10 +196,16 @@ export const companionSchema = z.object({
 /**
  * Zod Schema para validação de payload de RSVP / Convite Público
  */
-export const publicRsvpSchema = z.object({
+const publicRsvpObjectSchema = z.object({
   name: z.string().trim().min(2, "Nome é obrigatório e deve ter pelo menos 2 caracteres").max(100, "Nome muito longo"),
   email: z.string().trim().email("Formato de e-mail inválido").max(255),
-  phone: z.string().trim().min(8, "Telefone inválido").max(30),
+  phone: z
+    .string()
+    .trim()
+    .max(30)
+    .refine((v) => v === "" || v.length >= 8, "Telefone inválido")
+    .optional()
+    .default(""),
   attendanceStatus: z.enum(["confirmed", "declined"]).default("confirmed"),
   notes: z.string().trim().max(500, "Observações devem ter no máximo 500 caracteres").optional().or(z.literal("")),
   dietaryRestrictions: z.string().trim().max(500, "Restrições alimentares devem ter no máximo 500 caracteres").optional().or(z.literal("")),
@@ -190,19 +213,42 @@ export const publicRsvpSchema = z.object({
   companions: z.array(companionSchema).max(10, "Número de acompanhantes excede o limite").optional().default([]),
 })
 
+export const publicRsvpSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== "object") return raw
+  const input = raw as Record<string, any>
+  let mappedStatus = input.attendanceStatus
+  if (mappedStatus === undefined && input.response !== undefined) {
+    const resp = String(input.response).trim().toLowerCase()
+    if (resp === "yes" || resp === "sim" || resp === "confirmed" || resp === "confirmado") {
+      mappedStatus = "confirmed"
+    } else if (resp === "no" || resp === "nao" || resp === "não" || resp === "declined" || resp === "recusado") {
+      mappedStatus = "declined"
+    } else {
+      mappedStatus = input.response
+    }
+  }
+  return {
+    ...input,
+    attendanceStatus: mappedStatus ?? "confirmed",
+  }
+}, publicRsvpObjectSchema)
+
 export type PublicRsvpInput = z.infer<typeof publicRsvpSchema>
 
 /**
  * RN-004, RF-010, RF-011, RF-013, RF-033, RF-035: Convidados e Aprovação
  */
-export const guestStatusSchema = z.enum([
-  "awaiting_approval",
-  "pending",
-  "confirmed",
-  "declined",
-  "expired",
-  "cancelled",
-])
+export const guestStatusSchema = z.preprocess(
+  (val) => normalizeGuestStatus(val) ?? val,
+  z.enum([
+    "awaiting_approval",
+    "pending",
+    "confirmed",
+    "declined",
+    "expired",
+    "cancelled",
+  ])
+)
 
 export const guestSingleCreateSchema = z.object({
   name: z.string().trim().min(1, "Nome do convidado é obrigatório").max(120),
@@ -252,6 +298,7 @@ export const confirmInviteAcceptSchema = z.object({
 })
 
 export const approvalDecisionSchema = z.object({
+  decision: z.enum(["approve", "reject"]).optional(),
   approvedCompanionIds: z.array(z.string().trim()).optional(),
   rejectedCompanionIds: z.array(z.string().trim()).optional(),
   confirmationDeadlineDays: z.coerce.number().int().min(1).max(365).optional().default(7),
@@ -301,7 +348,7 @@ export const itemAssignedToSchema = z
   ])
   .optional()
 
-export const itemCreateSchema = z.object({
+const itemCreateObjectSchema = z.object({
   eventId: z.string().trim().min(1, "Evento é obrigatório"),
   name: z.string().trim().min(1, "O nome do item é obrigatório").max(160),
   price: itemPricePreprocessor,
@@ -320,7 +367,27 @@ export const itemCreateSchema = z.object({
   assignedTo: itemAssignedToSchema,
 })
 
-export const itemUpdateSchema = z.object({
+export const itemCreateSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== "object") return raw
+  const input = raw as Record<string, any>
+  const rawUnitPrice = input.unitPrice ?? input.unit_price
+  const rawQty = input.quantity !== undefined && input.quantity !== null && input.quantity !== "" ? Number(input.quantity) : 1
+  const computedPrice =
+    input.price !== undefined
+      ? input.price
+      : rawUnitPrice !== undefined && rawUnitPrice !== null && rawUnitPrice !== ""
+      ? Number(rawUnitPrice) * (Number.isFinite(rawQty) && rawQty > 0 ? rawQty : 1)
+      : 0
+
+  return {
+    ...input,
+    eventId: input.eventId ?? input.event_id,
+    unitPrice: rawUnitPrice,
+    price: computedPrice,
+  }
+}, itemCreateObjectSchema)
+
+const itemUpdateObjectSchema = z.object({
   name: z.string().trim().min(1, "O nome do item é obrigatório").max(160).optional(),
   price: itemPricePreprocessor.optional(),
   unitPrice: itemPricePreprocessor.optional(),
@@ -334,6 +401,16 @@ export const itemUpdateSchema = z.object({
   image: z.string().trim().max(2000000).nullable().optional(),
   assignedTo: itemAssignedToSchema,
 })
+
+export const itemUpdateSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== "object") return raw
+  const input = raw as Record<string, any>
+  const rawUnitPrice = input.unitPrice ?? input.unit_price
+  return {
+    ...input,
+    ...(rawUnitPrice !== undefined ? { unitPrice: rawUnitPrice } : {}),
+  }
+}, itemUpdateObjectSchema)
 
 /**
  * RN-014, RF-022: Contatos e Listas de Contatos
@@ -363,7 +440,7 @@ export const contactListSchema = z.object({
 /**
  * RN-018, RF-028: Fotos da Galeria do Evento
  */
-export const photoCreateSchema = z.object({
+const photoCreateObjectSchema = z.object({
   eventId: z.string().trim().min(1, "Evento é obrigatório"),
   url: z.string().trim().min(1, "URL ou imagem é obrigatória").max(5000000),
   filename: z.string().trim().min(1, "Nome do arquivo é obrigatório").max(255),
@@ -371,11 +448,64 @@ export const photoCreateSchema = z.object({
   tags: z.array(z.string().trim().max(50)).optional().default([]),
 })
 
+export const photoCreateSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== "object") return raw
+  const input = raw as Record<string, any>
+  const resolvedUrl = String(input.url ?? input.file_url ?? "").trim()
+  const derivedFilename =
+    input.filename ??
+    (resolvedUrl ? resolvedUrl.split("/").pop()?.split("?")[0] || "foto.jpg" : "")
+
+  return {
+    ...input,
+    eventId: input.eventId ?? input.event_id,
+    url: resolvedUrl,
+    filename: derivedFilename,
+    description: input.description ?? input.caption,
+  }
+}, photoCreateObjectSchema)
+
 /**
  * RN-017, RF-030: Envio de Convites e Lembretes
  */
-export const sendInvitesPayloadSchema = z.object({
+export const sendInvitesPayloadSchema = z.preprocess((raw) => {
+  if (!raw || typeof raw !== "object") return raw
+  const input = raw as Record<string, any>
+  return {
+    ...input,
+    guestIds: input.guestIds ?? input.guest_ids,
+  }
+}, z.object({
+  eventId: z.string().trim().optional(),
   guestIds: z.array(z.string().trim()).optional(),
   onlyPending: z.boolean().optional().default(true),
   confirmationDeadlineDays: z.coerce.number().int().min(1).max(365).optional().default(7),
+  subject: z.string().trim().max(200).optional(),
+}))
+
+/**
+ * RN-002, RF-039 a RF-043: Gestão Colaborativa de Equipe e Permissões (RBAC por Evento)
+ */
+export const eventRoleSchema = z.enum(["owner", "admin", "collaborator", "viewer"])
+
+export const teamInviteSchema = z.object({
+  eventId: z.string().trim().min(1, "Identificador do evento é obrigatório"),
+  email: z.string().trim().toLowerCase().email("E-mail do colaborador inválido").max(255),
+  name: z.string().trim().min(2, "Nome do colaborador deve ter no mínimo 2 caracteres").max(120),
+  role: z.enum(["admin", "collaborator", "viewer"]),
+  permissions: z.record(z.string(), z.array(z.string())).optional(),
+  expiresInDays: z.coerce.number().int().min(1).max(90).optional().default(7),
+})
+
+export const teamUpdateRoleSchema = z.object({
+  eventId: z.string().trim().min(1),
+  memberId: z.string().trim().min(1),
+  role: z.enum(["admin", "collaborator", "viewer"]),
+  permissions: z.record(z.string(), z.array(z.string())).optional(),
+})
+
+export const teamTransferOwnershipSchema = z.object({
+  eventId: z.string().trim().min(1),
+  newOwnerMemberId: z.string().trim().min(1),
+  confirmationTitle: z.string().trim().min(1, "Confirmação nominal do título é obrigatória"),
 })

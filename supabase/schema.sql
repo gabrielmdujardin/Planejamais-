@@ -809,3 +809,55 @@ alter default privileges in schema public
 
 alter default privileges in schema public
   grant all on routines to service_role;
+
+-- Gerenciamento Colaborativo RBAC por Evento e Auditoria (RN-002, RF-039 a RF-043)
+create table if not exists public.event_members (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.events(id) on delete cascade,
+  user_id uuid references auth.users(id) on delete cascade,
+  email text not null,
+  name text not null default '',
+  role text not null default 'collaborator'
+    check (role in ('owner', 'admin', 'collaborator', 'viewer')),
+  status text not null default 'pending'
+    check (status in ('pending', 'active', 'revoked', 'expired', 'declined')),
+  permissions jsonb not null default '{}'::jsonb,
+  invited_by uuid references auth.users(id) on delete set null,
+  invite_token text unique,
+  invite_expires_at timestamptz,
+  accepted_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists idx_event_members_event_email_unique
+  on public.event_members (event_id, lower(email));
+
+create unique index if not exists idx_event_members_event_user_unique
+  on public.event_members (event_id, user_id)
+  where user_id is not null;
+
+create unique index if not exists idx_event_members_single_active_owner
+  on public.event_members (event_id)
+  where role = 'owner' and status = 'active';
+
+create table if not exists public.event_audit_logs (
+  id uuid primary key default gen_random_uuid(),
+  event_id uuid not null references public.events(id) on delete cascade,
+  actor_user_id uuid references auth.users(id) on delete set null,
+  actor_name text not null default '',
+  actor_role text not null default 'anonymous',
+  action text not null,
+  target_type text,
+  target_id text,
+  allowed boolean not null default true,
+  reason text,
+  details jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now()
+);
+
+alter table public.event_members enable row level security;
+alter table public.event_audit_logs enable row level security;
+
+grant select, insert, update, delete on public.event_members, public.event_audit_logs to authenticated;

@@ -1,6 +1,7 @@
 "use client"
 
 import { calculateConfirmedParticipants, filterEffectiveGuests } from "@/lib/domain/business-rules"
+import type { EventAuditLogEntry, EventMemberRecord } from "@/lib/domain/rbac"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 
@@ -117,6 +118,9 @@ export interface Event {
   items: Item[]
   guests: Guest[]
   photos: EventPhoto[]
+  ownerId?: string
+  members?: EventMemberRecord[]
+  auditLogs?: EventAuditLogEntry[]
   createdAt: string
   updatedAt: string
 }
@@ -154,6 +158,10 @@ interface EventStore {
   addPhoto: (eventId: string, photo: Omit<EventPhoto, "id" | "uploadedAt"> & { id?: string; uploadedAt?: string }) => void
   removePhoto: (eventId: string, photoId: string) => void
   updatePhoto: (eventId: string, photoId: string, updates: Partial<EventPhoto>) => void
+
+  // Equipe e Permissões (RBAC)
+  setEventMembers: (eventId: string, members: EventMemberRecord[], newOwnerId?: string) => void
+  appendEventAuditLog: (eventId: string, log: EventAuditLogEntry) => void
 }
 
 export const useEventStore = create<EventStore>()(
@@ -336,6 +344,33 @@ export const useEventStore = create<EventStore>()(
                   photos: (event.photos || []).map((photo) =>
                     photo.id === photoId ? { ...photo, ...updates } : photo
                   ),
+                  updatedAt: new Date().toISOString(),
+                }
+              : event
+          ),
+        })),
+
+      setEventMembers: (eventId, members, newOwnerId) =>
+        set((state) => ({
+          events: state.events.map((event) =>
+            event.id === eventId
+              ? {
+                  ...event,
+                  members,
+                  ownerId: newOwnerId ?? event.ownerId,
+                  updatedAt: new Date().toISOString(),
+                }
+              : event
+          ),
+        })),
+
+      appendEventAuditLog: (eventId, log) =>
+        set((state) => ({
+          events: state.events.map((event) =>
+            event.id === eventId
+              ? {
+                  ...event,
+                  auditLogs: [log, ...(event.auditLogs || [])].slice(0, 200),
                   updatedAt: new Date().toISOString(),
                 }
               : event
