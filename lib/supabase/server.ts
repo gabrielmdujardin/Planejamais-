@@ -1,27 +1,26 @@
-import { createServerClient } from "@supabase/ssr"
+import { SESSION_COOKIE_NAME } from "@/lib/auth/auth-service"
+import { createLocalPgClient } from "@/lib/db/pg-client"
 import { cookies } from "next/headers"
 
+/**
+ * Cliente de banco de dados do servidor conectado diretamente ao PostgreSQL local (planeja_plus).
+ * Independente do Supabase (Seções 5, 6, 7 e 16).
+ */
 export async function createClient() {
-  const cookieStore = await cookies()
+  let sessionToken: string | null = null
+  let demoUserCookie = false
 
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "https://example.supabase.co",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "dummy-anon-key",
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          try {
-            cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options))
-          } catch {
-            // The `setAll` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing
-            // user sessions.
-          }
-        },
-      },
-    },
-  )
+  try {
+    const cookieStore = await cookies()
+    sessionToken = cookieStore.get(SESSION_COOKIE_NAME)?.value || null
+    demoUserCookie = Boolean(cookieStore.get("planeja_demo_user")?.value)
+  } catch {
+    // Execução fora de contexto HTTP do Next.js (ex: testes ou jobs diretos)
+  }
+
+  return createLocalPgClient({
+    sessionToken,
+    demoUserCookie,
+    role: "authenticated",
+  })
 }

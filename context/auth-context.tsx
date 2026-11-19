@@ -4,7 +4,6 @@ import { updateUserProfileAction } from "@/app/actions/profile"
 import { createClient } from "@/lib/supabase/client"
 import { useContactStore } from "@/stores/contact-store"
 import { useEventStore } from "@/stores/event-store"
-import type { AuthChangeEvent, Session } from "@supabase/supabase-js"
 import { useRouter } from "next/navigation"
 import type React from "react"
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
@@ -31,58 +30,19 @@ export interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-function isSupabaseConfigured() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  return Boolean(
-    url &&
-      key &&
-      !url.includes("example.supabase.co") &&
-      !url.includes("your-project.supabase.co") &&
-      !key.includes("dummy") &&
-      !key.includes("your-supabase")
-  )
-}
-
-function supabaseConfigError() {
-  return new Error(
-    "Supabase não está configurado. Use demo@planeja.app / demo123 para entrar no modo demo local ou configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY reais no .env.local."
-  )
-}
-
-function normalizeAuthError(error: unknown) {
-  if (error instanceof TypeError && error.message === "Failed to fetch") {
-    return new Error(
-      "Não foi possível conectar ao Supabase. Verifique NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY e reinicie o servidor."
-    )
-  }
-
-  return error
-}
-
 function toUser(authUser: any): User {
   return {
     id: authUser.id,
     email: authUser.email || "",
     name:
+      authUser.name ||
       authUser.user_metadata?.name ||
       authUser.user_metadata?.full_name ||
       authUser.email?.split("@")[0] ||
       "Usuário",
-    phone: authUser.user_metadata?.phone || "",
-    location: authUser.user_metadata?.location || "",
-    avatar: authUser.user_metadata?.avatar_url || undefined,
-  }
-}
-
-function demoUser(email = "demo@planeja.app"): User {
-  return {
-    id: "demo",
-    email,
-    name: email.split("@")[0] || "demo",
-    phone: "",
-    location: "",
+    phone: authUser.phone || authUser.user_metadata?.phone || "",
+    location: authUser.location || authUser.user_metadata?.location || "",
+    avatar: authUser.avatar || authUser.user_metadata?.avatar_url || undefined,
   }
 }
 
@@ -90,26 +50,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const router = useRouter()
-  const supabase = useMemo(() => createClient(), [])
+  const authClient = useMemo(() => createClient(), [])
   const isDemoMode = user?.id === "demo"
 
   useEffect(() => {
     const loadSession = async () => {
-      if (!isSupabaseConfigured()) {
-        const storedUser = localStorage.getItem("user")
-        setUser(storedUser ? JSON.parse(storedUser) : null)
-        setIsLoading(false)
-        return
-      }
-
       try {
         const {
           data: { user: authUser },
-        } = await supabase.auth.getUser()
+        } = await authClient.auth.getUser()
 
-        setUser(authUser ? toUser(authUser) : null)
+        if (authUser) {
+          const u = toUser(authUser)
+          setUser(u)
+          localStorage.setItem("user", JSON.stringify(u))
+          setIsLoading(false)
+          return
+        }
+
+        const storedUser = localStorage.getItem("user")
+        setUser(storedUser ? JSON.parse(storedUser) : null)
       } catch {
-        setUser(null)
+        const storedUser = localStorage.getItem("user")
+        setUser(storedUser ? JSON.parse(storedUser) : null)
       } finally {
         setIsLoading(false)
       }
@@ -117,41 +80,31 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     loadSession()
 
-    if (!isSupabaseConfigured()) return
-
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
+    } = authClient.auth.onAuthStateChange((_event: string, session: { user: any } | null) => {
       const authUser = session?.user
       setUser(authUser ? toUser(authUser) : null)
       setIsLoading(false)
     })
 
     return () => subscription.unsubscribe()
-  }, [supabase])
+  }, [authClient])
 
   const login = async (email: string, password: string) => {
     const normalizedEmail = email.trim().toLowerCase()
-    if (!isSupabaseConfigured()) {
-      if (normalizedEmail === "demo@planeja.app" && password === "demo123") {
-        const u = demoUser(normalizedEmail)
-        setUser(u)
-        localStorage.setItem("user", JSON.stringify(u))
-        if (typeof document !== "undefined") {
-          document.cookie = "planeja_demo_user=true; path=/; max-age=604800; SameSite=Lax"
-        }
-        return
-      }
+    const { data, error } = await authClient.auth.signInWithPassword({
+      email: normalizedEmail,
+      password,
+    })
 
-      throw supabaseConfigError()
+    if (error || !data.user) {
+      throw error || new Error("Credenciais inválidas.")
     }
 
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email: normalizedEmail, password })
-      if (error) throw error
-    } catch (error) {
-      throw normalizeAuthError(error)
-    }
+    const u = toUser(data.user)
+    setUser(u)
+    localStorage.setItem("user", JSON.stringify(u))
   }
 
   const register = async (email: string, password: string, name: string) => {
@@ -160,52 +113,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error("A senha deve ter no mínimo 6 caracteres")
     }
 
-    if (!isSupabaseConfigured()) {
-      const u = { ...demoUser(normalizedEmail), name: name.trim() || normalizedEmail.split("@")[0] || "demo" }
-      setUser(u)
-      localStorage.setItem("user", JSON.stringify(u))
-      if (typeof document !== "undefined") {
-        document.cookie = "planeja_demo_user=true; path=/; max-age=604800; SameSite=Lax"
-      }
-      return
+    const { data, error } = await authClient.auth.signUp({
+      email: normalizedEmail,
+      password,
+      options: {
+        data: { name: name.trim() },
+      },
+    })
+
+    if (error || !data.user) {
+      throw error || new Error("Não foi possível criar a conta.")
     }
 
-    try {
-      const { error } = await supabase.auth.signUp({
-        email: normalizedEmail,
-        password,
-        options: {
-          data: { name: name.trim() },
-        },
-      })
-      if (error) throw error
-    } catch (error) {
-      throw normalizeAuthError(error)
-    }
+    const u = toUser(data.user)
+    setUser(u)
+    localStorage.setItem("user", JSON.stringify(u))
   }
 
   const updateUser = async (updates: Partial<Omit<User, "id">>) => {
     if (!user) return
-
-    if (!isSupabaseConfigured() || user.id === "demo") {
-      const updatedUser: User = { ...user, ...updates }
-      setUser(updatedUser)
-      localStorage.setItem("user", JSON.stringify(updatedUser))
-      return
-    }
 
     const result = await updateUserProfileAction(updates)
     if (result.error) {
       throw new Error(result.error)
     }
 
-    setUser((prev) => (prev ? { ...prev, ...updates } : prev))
+    const nextUser = { ...user, ...updates }
+    setUser(nextUser)
+    localStorage.setItem("user", JSON.stringify(nextUser))
   }
 
   const logout = async () => {
-    if (isSupabaseConfigured()) {
-      await supabase.auth.signOut()
-    }
+    await authClient.auth.signOut()
 
     // RF-003 & RNF-005: Limpa integralmente estado e caches locais ao encerrar a sessão
     setUser(null)

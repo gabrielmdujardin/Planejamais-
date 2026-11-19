@@ -42,7 +42,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ guests: [] })
     }
 
-    const guestIds = guests.map((guest) => guest.id)
+    const guestIds = guests.map((guest: any) => guest.id)
     const { data: companions, error: companionsError } = await admin
       .from("guest_companions")
       .select("*")
@@ -51,7 +51,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     if (companionsError) throw companionsError
 
     const companionsByGuestId = (companions || []).reduce(
-      (acc, companion) => {
+      (acc: Record<string, Array<Record<string, unknown>>>, companion: any) => {
         if (!acc[companion.guest_id]) acc[companion.guest_id] = []
         acc[companion.guest_id].push({
           id: companion.id,
@@ -69,7 +69,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       {} as Record<string, Array<Record<string, unknown>>>
     )
 
-    const formattedGuests = guests.map((guest) => ({
+    const formattedGuests = guests.map((guest: any) => ({
       id: guest.id,
       eventId: guest.event_id,
       name: guest.name,

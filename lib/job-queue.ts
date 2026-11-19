@@ -1,4 +1,4 @@
-import { createClient } from "@supabase/supabase-js"
+import { createLocalPgClient } from "./db/pg-client.ts"
 
 export interface JobRun {
   id: string
@@ -41,19 +41,7 @@ export class JobQueue {
       return this.customClient
     }
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error("Missing Supabase environment variables for JobQueue")
-    }
-
-    return createClient(supabaseUrl, serviceRoleKey, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    })
+    return createLocalPgClient({ role: "service_role" })
   }
 
   async startJob(jobName: string, metadata: Record<string, any> = {}): Promise<string> {
@@ -61,9 +49,9 @@ export class JobQueue {
       throw new Error(`Job ${jobName} is already running`)
     }
 
-    const supabase = this.getClient()
+    const db = this.getClient()
     const startedAt = new Date().toISOString()
-    const { data, error } = await supabase
+    const { data, error } = await db
       .from("job_runs")
       .insert({
         job_name: jobName,
@@ -74,15 +62,15 @@ export class JobQueue {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) throw new Error(error.message || String(error))
 
     this.runningJobs.add(jobName)
     return data.id
   }
 
   async completeJob(jobRunId: string, success = true, errorMessage?: string): Promise<void> {
-    const supabase = this.getClient()
-    const { data: jobRun } = await supabase
+    const db = this.getClient()
+    const { data: jobRun } = await db
       .from("job_runs")
       .select("job_name, started_at")
       .eq("id", jobRunId)
@@ -91,7 +79,7 @@ export class JobQueue {
     if (jobRun) {
       const duration = Math.max(0, Date.now() - new Date(jobRun.started_at).getTime())
 
-      await supabase
+      await db
         .from("job_runs")
         .update({
           status: success ? "completed" : "failed",
@@ -111,8 +99,8 @@ export class JobQueue {
     message: string,
     metadata: Record<string, any> = {}
   ): Promise<void> {
-    const supabase = this.getClient()
-    await supabase.from("job_logs").insert({
+    const db = this.getClient()
+    await db.from("job_logs").insert({
       job_run_id: jobRunId,
       level,
       message,
@@ -121,26 +109,26 @@ export class JobQueue {
   }
 
   async getRecentJobs(limit = 50): Promise<JobRun[]> {
-    const supabase = this.getClient()
-    const { data, error } = await supabase
+    const db = this.getClient()
+    const { data, error } = await db
       .from("job_runs")
       .select("*")
       .order("started_at", { ascending: false })
       .limit(limit)
 
-    if (error) throw error
+    if (error) throw new Error(error.message || String(error))
     return data || []
   }
 
   async getJobLogs(jobRunId: string): Promise<JobLog[]> {
-    const supabase = this.getClient()
-    const { data, error } = await supabase
+    const db = this.getClient()
+    const { data, error } = await db
       .from("job_logs")
       .select("*")
       .eq("job_run_id", jobRunId)
       .order("created_at", { ascending: true })
 
-    if (error) throw error
+    if (error) throw new Error(error.message || String(error))
     return data || []
   }
 }

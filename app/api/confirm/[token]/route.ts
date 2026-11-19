@@ -111,7 +111,7 @@ export async function GET(
         accessibilityNeeds: guest.accessibility_needs,
       },
       event: publicEvent,
-      companions: (companions || []).map((c) => ({
+      companions: (companions || []).map((c: any) => ({
         id: c.id,
         name: c.name,
         status: c.status,

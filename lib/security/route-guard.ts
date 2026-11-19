@@ -1,5 +1,6 @@
 /**
  * Regras puras de proteção de rotas privadas, públicas e Rate Limiting (RF-004, RNF-004).
+ * Atualizado para infraestrutura própria com PostgreSQL local (planeja_plus).
  */
 
 export const PUBLIC_EXACT_PATHS = [
@@ -16,7 +17,18 @@ export const PUBLIC_EXACT_PATHS = [
   "/simulator",
 ]
 
-export function isSupabaseEnvConfigured(env: Record<string, string | undefined> = process.env): boolean {
+export function isDatabaseConfigured(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  if (env.DB_PROVIDER === "postgresql" || Boolean(env.DATABASE_URL)) {
+    return true
+  }
+
+  // No ambiente Node.js padrão do Planeja+, o PostgreSQL 16 local está sempre ativo
+  if (env === process.env && env.DB_PROVIDER !== "disabled") {
+    return true
+  }
+
   const url = env.NEXT_PUBLIC_SUPABASE_URL
   const key = env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
@@ -28,6 +40,15 @@ export function isSupabaseEnvConfigured(env: Record<string, string | undefined> 
       !key.includes("dummy") &&
       !key.includes("your-supabase")
   )
+}
+
+/**
+ * Alias mantido para retrocompatibilidade com Server Actions e suítes de testes.
+ */
+export function isSupabaseEnvConfigured(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return isDatabaseConfigured(env)
 }
 
 /**
@@ -57,6 +78,9 @@ export function isAuthEntryPath(pathname: string): boolean {
 export function isPublicAppOrInvitePath(pathname: string): boolean {
   return (
     PUBLIC_EXACT_PATHS.includes(pathname) ||
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/health") ||
+    pathname.startsWith("/api/storage/") ||
     pathname.startsWith("/confirm/") ||
     pathname.startsWith("/confirm-invitation") ||
     pathname.startsWith("/convite") ||
@@ -89,7 +113,7 @@ export function isPublicRateLimitedEndpoint(pathname: string, method: string): b
 
 /**
  * Determina a decisão de controle de acesso da rota.
- * O cookie `planeja_demo_user` só é aceito quando o Supabase NÃO está configurado (modo demonstração offline).
+ * O cookie `planeja_demo_user` só é aceito quando o banco principal NÃO exige sessão estrita.
  */
 export function evaluateRouteAccess(params: {
   pathname: string
@@ -113,4 +137,3 @@ export function evaluateRouteAccess(params: {
 
   return { isAuthenticated, action: "allow" }
 }
-

@@ -1,18 +1,11 @@
-import { createClient } from "@supabase/supabase-js"
+import { createLocalPgClient } from "../db/pg-client.ts"
 
-// Função para criar cliente admin sob demanda (evita erros no build)
+/**
+ * Cliente administrativo de banco de dados conectado ao PostgreSQL local (planeja_plus)
+ * com privilégio service_role para rotas públicas tokenizadas, jobs e migrações.
+ */
 export function createAdminClient() {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-  if (!supabaseUrl || !supabaseServiceKey) {
-    throw new Error("Missing Supabase environment variables")
-  }
-
-  return createClient(supabaseUrl, supabaseServiceKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
+  return createLocalPgClient({
+    role: "service_role",
   })
 }

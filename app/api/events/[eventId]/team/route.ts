@@ -7,6 +7,7 @@ import {
   createAuditEntry,
   createOwnerMemberRecord,
   evaluateEventPermission,
+  EVENT_ROLE_LABELS,
   inviteEventTeamMember,
   revokeEventTeamMember,
   sanitizePermissionsForRole,
@@ -22,6 +23,7 @@ import {
   teamUpdateRoleSchema,
 } from "@/lib/validation"
 import { validateNominalEventDeletion } from "@/lib/domain/business-rules"
+import { EmailService } from "@/src/services/email.service"
 
 function mapDbMember(row: any): EventMemberRecord {
   return {
@@ -32,7 +34,9 @@ function mapDbMember(row: any): EventMemberRecord {
     name: row.name || row.email?.split("@")[0] || "Colaborador",
     role: (row.role || "collaborator") as EventRole,
     status: row.status || "pending",
-    permissions: (typeof row.permissions === "object" && row.permissions !== null ? row.permissions : {}) as ModulePermissionMap,
+    permissions: (typeof row.permissions === "object" && row.permissions !== null
+      ? row.permissions
+      : {}) as ModulePermissionMap,
     invitedBy: row.invited_by || null,
     inviteToken: row.invite_token || null,
     inviteExpiresAt: row.invite_expires_at || null,
@@ -67,22 +71,19 @@ export async function GET(
   const { eventId } = await context.params
 
   if (!isSupabaseEnvConfigured()) {
-    return NextResponse.json(
-      { members: [], auditLogs: [], mode: "local" },
-      { status: 200 }
-    )
+    return NextResponse.json({ members: [], auditLogs: [], mode: "local" }, { status: 200 })
   }
 
-  const supabase = await createClient()
+  const db = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await db.auth.getUser()
 
   if (!user) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 })
   }
 
-  const { data: event } = await supabase
+  const { data: event } = await db
     .from("events")
     .select("id, user_id, title")
     .eq("id", eventId)
@@ -92,14 +93,14 @@ export async function GET(
     return NextResponse.json({ error: "Evento não encontrado." }, { status: 404 })
   }
 
-  const { data: rawMembers } = await supabase
+  const { data: rawMembers } = await db
     .from("event_members")
     .select("*")
     .eq("event_id", eventId)
     .order("created_at", { ascending: true })
 
   let members = (rawMembers || []).map(mapDbMember)
-  if (!members.some((m) => m.role === "owner" && m.status === "active")) {
+  if (!members.some((m: EventMemberRecord) => m.role === "owner" && m.status === "active")) {
     members = [
       createOwnerMemberRecord({
         eventId,
@@ -123,7 +124,7 @@ export async function GET(
     return NextResponse.json({ error: access.reason }, { status: 403 })
   }
 
-  const { data: rawLogs } = await supabase
+  const { data: rawLogs } = await db
     .from("event_audit_logs")
     .select("*")
     .eq("event_id", eventId)
@@ -150,7 +151,7 @@ export async function POST(
 
   const actionType = body.operation || "invite"
 
-  // Modo de validação / simulação isolada de domínio ou persistência Supabase
+  // Modo de validação direta com estado fornecido ou persistência PostgreSQL
   if (body.actorMember && Array.isArray(body.existingMembers)) {
     const actorMember = body.actorMember as EventMemberRecord
     const existingMembers = body.existingMembers as EventMemberRecord[]
@@ -213,14 +214,10 @@ export async function POST(
     }
   }
 
-  if (!isSupabaseEnvConfigured()) {
-    return NextResponse.json({ error: "Supabase não configurado." }, { status: 400 })
-  }
-
-  const supabase = await createClient()
+  const db = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await db.auth.getUser()
 
   if (!user) {
     return NextResponse.json({ error: "Não autenticado." }, { status: 401 })
@@ -234,7 +231,7 @@ export async function POST(
     )
   }
 
-  const { data: event } = await supabase
+  const { data: event } = await db
     .from("events")
     .select("id, user_id, title")
     .eq("id", eventId)
@@ -244,14 +241,14 @@ export async function POST(
     return NextResponse.json({ error: "Evento não encontrado." }, { status: 404 })
   }
 
-  const { data: rawMembers } = await supabase
+  const { data: rawMembers } = await db
     .from("event_members")
     .select("*")
     .eq("event_id", eventId)
 
   const existingMembers = (rawMembers || []).map(mapDbMember)
   const actorMember =
-    existingMembers.find((m) => m.userId === user.id) ||
+    existingMembers.find((m: EventMemberRecord) => m.userId === user.id) ||
     (event.user_id === user.id
       ? createOwnerMemberRecord({
           eventId,
@@ -281,31 +278,31 @@ export async function POST(
   }
 
   const m = inviteResult.member
-  const { data: inserted, error: insertError } = await supabase
+  await db.from("event_members").delete().eq("event_id", eventId).eq("email", m.email)
+
+  const { data: inserted, error: insertError } = await db
     .from("event_members")
-    .upsert(
-      {
-        event_id: eventId,
-        user_id: m.userId,
-        email: m.email,
-        name: m.name,
-        role: m.role,
-        status: m.status,
-        permissions: m.permissions,
-        invited_by: user.id,
-        invite_token: m.inviteToken,
-        invite_expires_at: m.inviteExpiresAt,
-      },
-      { onConflict: "event_id,email" }
-    )
+    .insert({
+      id: m.id,
+      event_id: eventId,
+      user_id: m.userId,
+      email: m.email,
+      name: m.name,
+      role: m.role,
+      status: m.status,
+      permissions: m.permissions,
+      invited_by: user.id,
+      invite_token: m.inviteToken,
+      invite_expires_at: m.inviteExpiresAt,
+    })
     .select("*")
     .single()
 
-  if (insertError) {
-    return NextResponse.json({ error: insertError.message }, { status: 500 })
+  if (insertError || !inserted) {
+    return NextResponse.json({ error: insertError?.message || "Erro ao registrar membro" }, { status: 500 })
   }
 
-  await supabase.from("event_audit_logs").insert({
+  await db.from("event_audit_logs").insert({
     event_id: eventId,
     actor_user_id: user.id,
     actor_name: actorMember.name,
@@ -317,11 +314,29 @@ export async function POST(
     details: inviteResult.auditLog.details || {},
   })
 
-  return NextResponse.json({
-    success: true,
-    member: mapDbMember(inserted),
-    auditLog: inviteResult.auditLog,
-  })
+  if (m.inviteToken) {
+    await EmailService.sendTeamInvitationEmail({
+      to: m.email,
+      inviteeName: m.name,
+      inviterName: actorMember.name,
+      eventTitle: event.title,
+      eventId,
+      roleLabel: EVENT_ROLE_LABELS[m.role] || m.role,
+      inviteToken: m.inviteToken,
+      expiresAt: m.inviteExpiresAt
+        ? new Date(m.inviteExpiresAt).toLocaleDateString("pt-BR")
+        : "7 dias",
+    }).catch(() => {})
+  }
+
+  return NextResponse.json(
+    {
+      success: true,
+      member: mapDbMember(inserted),
+      auditLog: inviteResult.auditLog,
+    },
+    { status: 201 }
+  )
 }
 
 export async function PATCH(

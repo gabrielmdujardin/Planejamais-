@@ -2,6 +2,10 @@
 
 import { canOrganizerModifyPhoto } from "@/lib/domain/business-rules"
 import { isSupabaseEnvConfigured } from "@/lib/security/route-guard"
+import {
+  deleteFileFromLocalStorage,
+  saveFileToLocalStorage,
+} from "@/lib/storage/local-storage"
 import { createClient } from "@/lib/supabase/server"
 import { photoCreateSchema } from "@/lib/validation"
 import { revalidatePath } from "next/cache"
@@ -17,16 +21,16 @@ export async function uploadEventPhotoAction(rawInput: unknown) {
     return { data: null, localOnly: true, error: null }
   }
 
-  const supabase = await createClient()
+  const db = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await db.auth.getUser()
 
   if (!user) {
     return { data: null, error: "Usuário não autenticado" }
   }
 
-  const { data: event } = await supabase
+  const { data: event } = await db
     .from("events")
     .select("id, user_id")
     .eq("id", input.eventId)
@@ -36,18 +40,59 @@ export async function uploadEventPhotoAction(rawInput: unknown) {
     return { data: null, error: "Apenas o organizador pode adicionar fotos ao evento" }
   }
 
+  // Salva a imagem em volume persistente local (/storage/uploads/event-photos) e registra metadados
+  let storedPublicUrl = input.url
+  let storedMeta: Record<string, any> = {}
+
+  try {
+    const saved = saveFileToLocalStorage({
+      bucket: "event-photos",
+      filename: input.filename,
+      content: input.url,
+      eventId: input.eventId,
+      userId: user.id,
+    })
+    storedPublicUrl = saved.publicUrl
+    storedMeta = {
+      storedFileId: saved.id,
+      checksumSha256: saved.checksumSha256,
+      sizeBytes: saved.sizeBytes,
+      mimeType: saved.mimeType,
+    }
+
+    await db.from("stored_files").insert({
+      id: saved.id,
+      event_id: input.eventId,
+      user_id: user.id,
+      bucket: "event-photos",
+      filename: saved.filename,
+      original_name: saved.originalName,
+      mime_type: saved.mimeType,
+      size_bytes: saved.sizeBytes,
+      storage_path: saved.storagePath,
+      public_url: saved.publicUrl,
+      checksum_sha256: saved.checksumSha256,
+    })
+  } catch (err: unknown) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : "Falha ao armazenar arquivo da foto",
+    }
+  }
+
   const uploadedBy =
     user.user_metadata?.name || user.user_metadata?.full_name || user.email?.split("@")[0] || "Organizador"
 
-  const { data: photo, error } = await supabase
+  const { data: photo, error } = await db
     .from("event_photos")
     .insert({
       event_id: input.eventId,
-      url: input.url,
+      url: storedPublicUrl,
       filename: input.filename,
       uploaded_by: uploadedBy,
       description: input.description || null,
       tags: input.tags || [],
+      metadata: storedMeta,
     })
     .select()
     .single()
@@ -76,16 +121,16 @@ export async function deleteEventPhotoAction(eventId: string, photoId: string) {
     return { success: true, localOnly: true, error: null }
   }
 
-  const supabase = await createClient()
+  const db = await createClient()
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await db.auth.getUser()
 
   if (!user) {
     return { success: false, error: "Usuário não autenticado" }
   }
 
-  const { data: event } = await supabase
+  const { data: event } = await db
     .from("events")
     .select("id, user_id")
     .eq("id", eventId)
@@ -95,7 +140,14 @@ export async function deleteEventPhotoAction(eventId: string, photoId: string) {
     return { success: false, error: "Somente o organizador do evento pode remover fotos" }
   }
 
-  const { error } = await supabase
+  const { data: existingPhoto } = await db
+    .from("event_photos")
+    .select("id, url")
+    .eq("id", photoId)
+    .eq("event_id", eventId)
+    .maybeSingle()
+
+  const { error } = await db
     .from("event_photos")
     .delete()
     .eq("id", photoId)
@@ -105,7 +157,10 @@ export async function deleteEventPhotoAction(eventId: string, photoId: string) {
     return { success: false, error: error.message }
   }
 
+  if (existingPhoto?.url) {
+    deleteFileFromLocalStorage("event-photos", existingPhoto.url)
+  }
+
   revalidatePath(`/event/${eventId}`)
   return { success: true, error: null }
 }
-

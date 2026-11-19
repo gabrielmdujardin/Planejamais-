@@ -1,13 +1,14 @@
+import { verifySessionJwt } from "@/lib/auth/password"
 import { checkRateLimit } from "@/lib/rate-limit"
 import {
   evaluateRouteAccess,
   isPublicAppOrInvitePath,
   isPublicRateLimitedEndpoint,
-  isSupabaseEnvConfigured,
 } from "@/lib/security/route-guard"
-import { createServerClient } from "@supabase/ssr"
 import { NextResponse } from "next/server"
 import type { NextRequest } from "next/server"
+
+const SESSION_COOKIE_NAME = "planeja_session_token"
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -45,55 +46,18 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 3. Verificação de sessão
-  let response = NextResponse.next({
-    request: {
-      headers: request.headers,
-    },
-  })
-
-  const supabaseConfigured = isSupabaseEnvConfigured()
-  let user = null
+  // 3. Verificação de sessão própria (JWT HMAC-SHA256 emitido pelo backend PostgreSQL local)
+  const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
+  const verifiedJwt = verifySessionJwt(sessionToken)
   const hasDemoCookie = Boolean(request.cookies.get("planeja_demo_user")?.value)
-
-  if (supabaseConfigured) {
-    try {
-      const supabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-        {
-          cookies: {
-            getAll() {
-              return request.cookies.getAll()
-            },
-            setAll(cookiesToSet) {
-              cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
-              response = NextResponse.next({
-                request: {
-                  headers: request.headers,
-                },
-              })
-              cookiesToSet.forEach(({ name, value, options }) =>
-                response.cookies.set(name, value, options)
-              )
-            },
-          },
-        }
-      )
-
-      const { data } = await supabase.auth.getUser()
-      user = data.user
-    } catch {
-      user = null
-    }
-  }
+  const strictAuthOnly = process.env.STRICT_AUTH_ONLY === "true"
 
   // 4. Avaliar regra de acesso (RF-004, RNF-004)
   const decision = evaluateRouteAccess({
     pathname,
-    hasSupabaseSession: Boolean(user),
+    hasSupabaseSession: verifiedJwt.valid,
     hasDemoCookie,
-    supabaseConfigured,
+    supabaseConfigured: strictAuthOnly,
   })
 
   if (decision.action === "redirect_login") {
@@ -107,10 +71,10 @@ export async function middleware(request: NextRequest) {
   }
 
   if (isPublicAppOrInvitePath(pathname)) {
-    return response
+    return NextResponse.next()
   }
 
-  return response
+  return NextResponse.next()
 }
 
 export const config = {
