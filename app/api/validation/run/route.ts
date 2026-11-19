@@ -1,6 +1,7 @@
 import { REQUIREMENTS_CATALOG } from "@/lib/validation-center/catalog"
 import { executeE2ETest } from "@/lib/validation-center/e2e-bridge"
 import { runAllRequirements, runRequirementTest } from "@/lib/validation-center/engine"
+import { runHomologationJourneys } from "@/lib/validation-center/journeys"
 import { NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
@@ -8,13 +9,26 @@ export const maxDuration = 120 // 120 segundos para automação E2E real
 
 export async function POST(request: NextRequest) {
   try {
+    // Seção 22: Proteção contra execução acidental de testes com escrita contra banco de produção bloqueado
+    if (process.env.PROTECT_PRODUCTION_DB === "true") {
+      return NextResponse.json(
+        {
+          error:
+            "A execução de testes automatizados com escrita está bloqueada porque PROTECT_PRODUCTION_DB=true está ativo neste ambiente.",
+        },
+        { status: 403 }
+      )
+    }
+
     let body: {
       id?: string
+      ids?: string[]
       all?: boolean
       stream?: boolean
       e2e?: boolean
       headed?: boolean
       journey?: boolean
+      homologationJourneys?: boolean
     } = {}
 
     try {
@@ -23,11 +37,31 @@ export async function POST(request: NextRequest) {
       body = {}
     }
 
-    const { id, all, stream, e2e, headed, journey } = body
+    const { id, ids, all, stream, e2e, headed, journey, homologationJourneys } = body
     const isStreamRequested =
       stream === true ||
       request.headers.get("accept")?.includes("text/event-stream") ||
       request.nextUrl.searchParams.get("stream") === "true"
+
+    // 0. Execução das 5 Jornadas Integradas de Homologação PostgreSQL (Jornadas A, B, C, D e E — Seção 14 e 15)
+    if (homologationJourneys) {
+      const journeys = await runHomologationJourneys()
+      return NextResponse.json({
+        journeys,
+        passed: journeys.every((j) => j.passed),
+        timestamp: new Date().toISOString(),
+      })
+    }
+
+    // 0.1 Execução de subconjunto de requisitos (ex: por módulo ou apenas reprovados — Seção 22)
+    if (Array.isArray(ids) && ids.length > 0) {
+      const results = []
+      for (const reqId of ids) {
+        const res = await runRequirementTest(reqId)
+        results.push(res)
+      }
+      return NextResponse.json({ results })
+    }
 
     // 1. Execução da Jornada Completa E2E via Streaming SSE
     if (journey && isStreamRequested) {
@@ -90,7 +124,6 @@ export async function POST(request: NextRequest) {
           })
           return NextResponse.json({ result: e2eResult })
         } catch (e2eErr) {
-          // Se o requisito específico não estiver mapeado no suite do browser, usa o validador de domínio
           console.warn(`Fallback para evaluator para ${id}:`, e2eErr)
           const result = await runRequirementTest(id)
           return NextResponse.json({ result })
@@ -152,7 +185,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: 'Parâmetro "id" ou "all: true" ou "journey: true" obrigatório.' },
+      { error: 'Parâmetro "id", "ids", "all: true", "journey: true" ou "homologationJourneys: true" obrigatório.' },
       { status: 400 }
     )
   } catch (error: unknown) {

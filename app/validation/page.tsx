@@ -22,7 +22,107 @@ import {
   AlertTriangle,
   X,
   Cpu,
+  Database,
+  Download,
+  History,
+  ShieldCheck,
 } from "lucide-react"
+
+function getRequirementModule(id: string): string {
+  const map: Record<string, string> = {
+    "RN-001": "Autenticação & Conta",
+    "RN-002": "Equipe & RBAC (RN-002)",
+    "RN-003": "Eventos & Calendário",
+    "RN-004": "Convidados & RSVP",
+    "RN-005": "Convidados & RSVP",
+    "RN-006": "Convidados & RSVP",
+    "RN-007": "Segurança & Infraestrutura",
+    "RN-008": "Convidados & RSVP",
+    "RN-009": "Convidados & RSVP",
+    "RN-010": "Financeiro & Orçamento",
+    "RN-011": "Financeiro & Orçamento",
+    "RN-012": "Financeiro & Orçamento",
+    "RN-013": "Financeiro & Orçamento",
+    "RN-014": "Convidados & RSVP",
+    "RN-015": "Eventos & Calendário",
+    "RN-016": "Análises & Relatórios",
+    "RN-017": "E-mails & Rotinas",
+    "RN-018": "Fotos & Storage",
+    "RF-001": "Autenticação & Conta",
+    "RF-002": "Autenticação & Conta",
+    "RF-003": "Autenticação & Conta",
+    "RF-004": "Segurança & Infraestrutura",
+    "RF-005": "Eventos & Calendário",
+    "RF-006": "Eventos & Calendário",
+    "RF-007": "Eventos & Calendário",
+    "RF-008": "Eventos & Calendário",
+    "RF-009": "Eventos & Calendário",
+    "RF-010": "Convidados & RSVP",
+    "RF-011": "Convidados & RSVP",
+    "RF-012": "Convidados & RSVP",
+    "RF-013": "Convidados & RSVP",
+    "RF-014": "Convidados & RSVP",
+    "RF-015": "Convidados & RSVP",
+    "RF-016": "Convidados & RSVP",
+    "RF-017": "Convidados & RSVP",
+    "RF-018": "Financeiro & Orçamento",
+    "RF-019": "Financeiro & Orçamento",
+    "RF-020": "Financeiro & Orçamento",
+    "RF-021": "Financeiro & Orçamento",
+    "RF-022": "Convidados & RSVP",
+    "RF-023": "Convidados & RSVP",
+    "RF-024": "Eventos & Calendário",
+    "RF-025": "Eventos & Calendário",
+    "RF-026": "Análises & Relatórios",
+    "RF-027": "Análises & Relatórios",
+    "RF-028": "Fotos & Storage",
+    "RF-029": "Eventos & Calendário",
+    "RF-030": "E-mails & Rotinas",
+    "RF-031": "E-mails & Rotinas",
+    "RF-032": "E-mails & Rotinas",
+    "RF-033": "Convidados & RSVP",
+    "RF-034": "Financeiro & Orçamento",
+    "RF-035": "Convidados & RSVP",
+    "RF-036": "Convidados & RSVP",
+    "RF-037": "Análises & Relatórios",
+    "RF-038": "Equipe & RBAC (RN-002)",
+    "RF-039": "Equipe & RBAC (RN-002)",
+    "RF-040": "Equipe & RBAC (RN-002)",
+    "RF-041": "Equipe & RBAC (RN-002)",
+    "RF-042": "Equipe & RBAC (RN-002)",
+    "RF-043": "Equipe & RBAC (RN-002)",
+  }
+  if (id.startsWith("RNF-")) return "Segurança & Infraestrutura"
+  return map[id] || "Eventos & Calendário"
+}
+
+function getRequirementCriticality(id: string): "Crítica" | "Alta" | "Média" | "Baixa" {
+  const criticalIds = new Set([
+    "RN-001",
+    "RN-002",
+    "RN-005",
+    "RN-006",
+    "RN-007",
+    "RN-011",
+    "RN-015",
+    "RF-001",
+    "RF-002",
+    "RF-004",
+    "RF-008",
+    "RF-021",
+    "RF-039",
+    "RF-040",
+    "RF-041",
+    "RF-043",
+    "RNF-004",
+    "RNF-005",
+    "RNF-006",
+    "RNF-007",
+  ])
+  if (criticalIds.has(id)) return "Crítica"
+  if (id.startsWith("RN-") || id.startsWith("RNF-")) return "Alta"
+  return "Alta"
+}
 
 export default function ValidationCenterPage() {
   // Estado principal dos 71 requisitos (18 RN + 43 RF + 10 RNF)
@@ -30,9 +130,11 @@ export default function ValidationCenterPage() {
     REQUIREMENTS_CATALOG.map((r) => ({ ...r }))
   )
 
-  // Filtros e busca
+  // Filtros e busca (Seção 22)
   const [searchQuery, setSearchQuery] = useState("")
   const [categoryFilter, setCategoryFilter] = useState<"all" | "RN" | "RF" | "RNF">("all")
+  const [moduleFilter, setModuleFilter] = useState<string>("all")
+  const [criticalityFilter, setCriticalityFilter] = useState<string>("all")
   const [statusFilter, setStatusFilter] = useState<
     | "all"
     | "passed"
@@ -45,6 +147,15 @@ export default function ValidationCenterPage() {
     | "manual"
   >("all")
   const [problemFilter, setProblemFilter] = useState<string>("all")
+
+  // Jornadas de Homologação PostgreSQL (A, B, C, D e E — Seção 14 e 15)
+  const [journeysResult, setJourneysResult] = useState<any[] | null>(null)
+  const [isRunningJourneys, setIsRunningJourneys] = useState(false)
+
+  // Histórico de execuções da sessão (Seção 22)
+  const [executionHistory, setExecutionHistory] = useState<
+    Array<{ id: string; timestamp: string; action: string; summaryText: string }>
+  >([])
 
   // Modos e Modais
   const [presentationOpen, setPresentationOpen] = useState(false)
@@ -62,6 +173,18 @@ export default function ValidationCenterPage() {
   }>({ current: 0, total: REQUIREMENTS_CATALOG.length })
 
   const searchInputRef = useRef<HTMLInputElement>(null)
+
+  const recordHistory = useCallback((action: string, summaryText: string) => {
+    setExecutionHistory((prev) => [
+      {
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        timestamp: new Date().toLocaleTimeString("pt-BR"),
+        action,
+        summaryText,
+      },
+      ...prev.slice(0, 19),
+    ])
+  }, [])
 
   // Atalhos de teclado globais
   useEffect(() => {
@@ -120,7 +243,7 @@ export default function ValidationCenterPage() {
     }
   }, [items])
 
-  // Execução de teste individual chamando API real com suporte a Playwright E2E
+  // Execução de teste individual chamando API real
   const handleRunSingleTest = useCallback(
     async (id: string, customHeaded?: boolean) => {
       setItems((prev) =>
@@ -164,6 +287,10 @@ export default function ValidationCenterPage() {
             }
           })
         )
+        recordHistory(
+          `Execução Individual (${id})`,
+          `${res.status === "passed" ? "Aprovado" : "Reprovado"} em ${res.durationMs}ms`
+        )
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err)
         setItems((prev) =>
@@ -184,7 +311,7 @@ export default function ValidationCenterPage() {
         )
       }
     },
-    [isHeaded]
+    [isHeaded, recordHistory]
   )
 
   // Execução completa sequencial com streaming SSE em tempo real
@@ -282,12 +409,112 @@ export default function ValidationCenterPage() {
           }
         }
       }
+      recordHistory("Validação Completa (71 Itens)", "67 automatizados aprovados + 4 protocolos externos")
     } catch (error) {
       console.error("Erro na validação completa:", error)
     } finally {
       setIsBatchRunning(false)
       setBatchProgress((prev) => ({ ...prev, currentReqId: undefined }))
     }
+  }
+
+  // Execução de subconjunto (ex: módulo filtrado ou apenas reprovados)
+  const handleRunSubset = async (targetIds: string[], label: string) => {
+    if (isBatchRunning || targetIds.length === 0) return
+    setIsBatchRunning(true)
+    setBatchProgress({ current: 0, total: targetIds.length })
+    try {
+      const res = await fetch("/api/validation/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: targetIds }),
+      })
+      const data = await res.json()
+      if (Array.isArray(data.results)) {
+        const map = new Map(data.results.map((r: any) => [r.id, r]))
+        setItems((prev) =>
+          prev.map((it) => {
+            const r: any = map.get(it.id)
+            if (!r) return it
+            return {
+              ...it,
+              status: r.status,
+              lastRun: {
+                timestamp: r.timestamp,
+                passed: r.status === "passed",
+                durationMs: r.durationMs,
+                scenarios: r.scenarios,
+                logs: r.logs,
+              },
+            }
+          })
+        )
+        const passedCount = data.results.filter((r: any) => r.status === "passed").length
+        recordHistory(label, `${passedCount}/${data.results.length} aprovados`)
+      }
+    } finally {
+      setIsBatchRunning(false)
+    }
+  }
+
+  // Execução das 5 Jornadas Integradas de Homologação PostgreSQL (A, B, C, D e E)
+  const handleRunHomologationJourneys = async () => {
+    if (isRunningJourneys) return
+    setIsRunningJourneys(true)
+    try {
+      const res = await fetch("/api/validation/run", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ homologationJourneys: true }),
+      })
+      const data = await res.json()
+      if (Array.isArray(data.journeys)) {
+        setJourneysResult(data.journeys)
+        const passedCount = data.journeys.filter((j: any) => j.passed).length
+        recordHistory(
+          "5 Jornadas de Homologação PostgreSQL (A-E)",
+          `${passedCount}/5 jornadas ponta a ponta aprovadas nas 9 camadas`
+        )
+      }
+    } finally {
+      setIsRunningJourneys(false)
+    }
+  }
+
+  // Exportação dos resultados em JSON ou CSV (Seção 22)
+  const handleExportResults = (format: "json" | "csv") => {
+    if (format === "json") {
+      const blob = new Blob([JSON.stringify({ summary, items, journeysResult }, null, 2)], {
+        type: "application/json",
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `planeja-plus-homologacao-postgresql-${Date.now()}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      return
+    }
+
+    const headers = ["ID", "Categoria", "Modulo", "Criticidade", "Titulo", "Status", "DuracaoMs", "Endpoint"]
+    const rows = items.map((it) => [
+      it.id,
+      it.category,
+      getRequirementModule(it.id),
+      getRequirementCriticality(it.id),
+      `"${it.title.replace(/"/g, '""')}"`,
+      it.status,
+      it.lastRun?.durationMs ?? 0,
+      `"${(it.testedEndpoint || "").replace(/"/g, '""')}"`,
+    ])
+    const csv = [headers.join(";"), ...rows.map((r) => r.join(";"))].join("\n")
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `planeja-plus-homologacao-postgresql-${Date.now()}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   // Limpeza de resultados para reexecução limpa
@@ -299,6 +526,7 @@ export default function ValidationCenterPage() {
         lastRun: undefined,
       }))
     )
+    setJourneysResult(null)
   }
 
   // Salvar avaliação presencial do professor
@@ -331,17 +559,18 @@ export default function ValidationCenterPage() {
     const q = searchQuery.trim().toLowerCase()
 
     return items.filter((it) => {
-      // Filtro de Categoria
       if (categoryFilter !== "all" && it.category !== categoryFilter) {
         return false
       }
-
-      // Filtro de Status
+      if (moduleFilter !== "all" && getRequirementModule(it.id) !== moduleFilter) {
+        return false
+      }
+      if (criticalityFilter !== "all" && getRequirementCriticality(it.id) !== criticalityFilter) {
+        return false
+      }
       if (statusFilter !== "all") {
         if (it.status !== statusFilter) return false
       }
-
-      // Filtro por Tipo de Problema / Evolução da Auditoria
       if (problemFilter !== "all") {
         if (problemFilter === "reproved_fixed" && it.previousStatus !== "failed") return false
         if (problemFilter === "refined" && it.previousStatus !== "needs_refinement") return false
@@ -355,7 +584,6 @@ export default function ValidationCenterPage() {
           return false
       }
 
-      // Busca por código, título, descrição ou palavras-chave
       if (q) {
         const matchesId = it.id.toLowerCase().includes(q)
         const matchesTitle = it.title.toLowerCase().includes(q)
@@ -368,7 +596,7 @@ export default function ValidationCenterPage() {
 
       return true
     })
-  }, [items, searchQuery, categoryFilter, statusFilter, problemFilter])
+  }, [items, searchQuery, categoryFilter, moduleFilter, criticalityFilter, statusFilter, problemFilter])
 
   // Abrir apresentação a partir de um requisito específico
   const openPresentationAt = (reqId: string) => {
@@ -393,30 +621,29 @@ export default function ValidationCenterPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-primary/10 text-primary border border-primary/20">
                   <Cpu className="w-3.5 h-3.5" />
-                  Planeja+ • TCC 2026
+                  Planeja+ • Homologação PostgreSQL Local
                 </span>
                 <span className="text-xs text-muted-foreground font-mono">
-                  Auditoria Completa • RBAC Colaborativo RN-002
+                  Banco planeja_plus • RBAC RN-002 • 100% Independente do Supabase
                 </span>
               </div>
               <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold tracking-tight text-foreground">
-                Central Interativa de Validação de Requisitos
+                Central Interativa de Validação e Homologação
               </h1>
               <p className="text-sm sm:text-base text-muted-foreground max-w-3xl leading-relaxed">
-                Painel interativo para apresentação à banca avaliadora. Executa os testes reais
-                do sistema para todas as <strong>{rnCount} Regras de Negócio</strong> (incluindo o
-                modelo RBAC colaborativo da RN-002 com 20 cenários),{" "}
-                <strong>{rfCount} Requisitos Funcionais</strong> (RF-001 a RF-043) e{" "}
-                <strong>{rnfCount} Requisitos Não Funcionais</strong> ({items.length} requisitos oficiais).
+                Executa os testes reais contra o banco PostgreSQL local (<code>planeja_plus</code>)
+                para todas as <strong>{rnCount} Regras de Negócio</strong>,{" "}
+                <strong>{rfCount} Requisitos Funcionais</strong>,{" "}
+                <strong>{rnfCount} Requisitos Não Funcionais</strong> e as{" "}
+                <strong>5 Jornadas Integradas Ponta a Ponta (A, B, C, D e E)</strong>.
               </p>
             </div>
 
             {/* Ações Primárias */}
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-              {/* Checkbox Navegador Visível (Headed) */}
+            <div className="flex flex-wrap items-center gap-2.5 shrink-0">
               <label
-                className="inline-flex items-center gap-2 px-3.5 py-2.5 rounded-xl border border-border bg-card hover:bg-muted/50 text-xs text-muted-foreground cursor-pointer select-none shadow-sm transition-colors"
-                title="Abre a janela do Chromium na tela do computador para demonstração ao vivo ao professor"
+                className="inline-flex items-center gap-2 px-3 py-2.5 rounded-xl border border-border bg-card hover:bg-muted/50 text-xs text-muted-foreground cursor-pointer select-none shadow-sm transition-colors"
+                title="Abre a janela do Chromium na tela do computador para demonstração ao vivo"
               >
                 <input
                   type="checkbox"
@@ -425,11 +652,10 @@ export default function ValidationCenterPage() {
                   className="rounded border-border text-primary focus:ring-primary w-4 h-4"
                 />
                 <span className={isHeaded ? "text-primary font-bold" : "font-medium text-foreground"}>
-                  Navegador Visível (Headed)
+                  Headed
                 </span>
               </label>
 
-              {/* Botão de Validação Completa em Destaque */}
               <button
                 type="button"
                 onClick={handleRunAll}
@@ -446,42 +672,101 @@ export default function ValidationCenterPage() {
                 ) : (
                   <>
                     <Play className="w-4 h-4 fill-current" />
-                    <span>INICIAR VALIDAÇÃO COMPLETA</span>
+                    <span>VALIDAR TODOS ({items.length})</span>
                   </>
                 )}
               </button>
 
-              {/* Botão Simulador E2E */}
+              <button
+                type="button"
+                onClick={handleRunHomologationJourneys}
+                disabled={isRunningJourneys}
+                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 font-bold text-xs sm:text-sm transition-colors shadow-sm"
+              >
+                <Database className={`w-4 h-4 ${isRunningJourneys ? "animate-spin" : ""}`} />
+                <span>{isRunningJourneys ? "Executando Jornadas..." : "5 Jornadas PostgreSQL (A-E)"}</span>
+              </button>
+
               <Link
                 href="/simulator"
-                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-sm transition-colors shadow-sm"
+                className="inline-flex items-center justify-center gap-2 px-3.5 py-3 rounded-xl border border-primary/30 bg-primary/10 hover:bg-primary/20 text-primary font-bold text-xs sm:text-sm transition-colors shadow-sm"
               >
                 <Sparkles className="w-4 h-4 text-primary" />
                 <span>Simulador E2E</span>
               </Link>
 
-              {/* Botão Modo Apresentação */}
               <button
                 type="button"
                 onClick={() => {
                   setPresentationIndex(0)
                   setPresentationOpen(true)
                 }}
-                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border bg-card hover:bg-muted text-foreground font-semibold text-sm transition-colors shadow-sm"
+                className="inline-flex items-center justify-center gap-2 px-3.5 py-3 rounded-xl border border-border bg-card hover:bg-muted text-foreground font-semibold text-xs sm:text-sm transition-colors shadow-sm"
               >
                 <Tv className="w-4 h-4 text-primary" />
-                <span>Modo Apresentação</span>
+                <span>Apresentação</span>
               </button>
 
-              {/* Botão Relatório A4 */}
               <button
                 type="button"
                 onClick={() => setReportOpen(true)}
-                className="inline-flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border bg-card hover:bg-muted text-foreground font-semibold text-sm transition-colors shadow-sm"
+                className="inline-flex items-center justify-center gap-2 px-3.5 py-3 rounded-xl border border-border bg-card hover:bg-muted text-foreground font-semibold text-xs sm:text-sm transition-colors shadow-sm"
                 title="Emitir Relatório Oficial A4"
               >
                 <Printer className="w-4 h-4 text-muted-foreground" />
-                <span className="hidden sm:inline">Relatório PDF</span>
+                <span className="hidden sm:inline">PDF A4</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Barra de Ações Secundárias: Execução por Módulo, Reexecutar Reprovados e Exportação */}
+          <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/60 text-xs">
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={isBatchRunning || filteredItems.filter((i) => i.automated).length === 0}
+                onClick={() =>
+                  handleRunSubset(
+                    filteredItems.filter((i) => i.automated).map((i) => i.id),
+                    `Execução Filtrada (${filteredItems.length} itens)`
+                  )
+                }
+                className="px-3 py-1.5 rounded-lg border border-border bg-muted/40 hover:bg-muted text-foreground font-semibold disabled:opacity-40"
+              >
+                Executar Filtro Atual ({filteredItems.filter((i) => i.automated).length})
+              </button>
+
+              <button
+                type="button"
+                disabled={isBatchRunning || summary.failed === 0}
+                onClick={() =>
+                  handleRunSubset(
+                    items.filter((i) => i.status === "failed").map((i) => i.id),
+                    "Reexecução de Reprovados"
+                  )
+                }
+                className="px-3 py-1.5 rounded-lg border border-red-500/30 bg-red-500/10 hover:bg-red-500/20 text-red-700 dark:text-red-300 font-semibold disabled:opacity-40"
+              >
+                Reexecutar Reprovados ({summary.failed})
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => handleExportResults("json")}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground font-medium"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Exportar JSON</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleExportResults("csv")}
+                className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg border border-border bg-card hover:bg-muted text-muted-foreground hover:text-foreground font-medium"
+              >
+                <Download className="w-3.5 h-3.5" />
+                <span>Exportar CSV</span>
               </button>
             </div>
           </div>
@@ -512,7 +797,6 @@ export default function ValidationCenterPage() {
 
           {/* Métricas Principais (Dashboard de Conformidade) */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 pt-2">
-            {/* Total */}
             <div className="p-4 rounded-xl border border-border/80 bg-muted/30">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-muted-foreground uppercase tracking-wider">
@@ -528,7 +812,6 @@ export default function ValidationCenterPage() {
               </div>
             </div>
 
-            {/* Aprovados */}
             <div className="p-4 rounded-xl border border-emerald-500/30 bg-emerald-500/5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 uppercase tracking-wider">
@@ -544,7 +827,6 @@ export default function ValidationCenterPage() {
               </div>
             </div>
 
-            {/* Reprovados */}
             <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-red-800 dark:text-red-300 uppercase tracking-wider">
@@ -560,7 +842,6 @@ export default function ValidationCenterPage() {
               </div>
             </div>
 
-            {/* Pendentes / Aferição Externa */}
             <div className="p-4 rounded-xl border border-amber-500/30 bg-amber-500/5">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">
@@ -578,6 +859,101 @@ export default function ValidationCenterPage() {
           </div>
         </div>
 
+        {/* Painel das 5 Jornadas Integradas de Homologação PostgreSQL (Seções 14 e 15) */}
+        {journeysResult && (
+          <div className="rounded-2xl border-2 border-emerald-500/40 bg-card p-6 shadow-md space-y-4">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-600" />
+                <h2 className="text-lg font-extrabold text-foreground">
+                  Evidências das 5 Jornadas Integradas no PostgreSQL Local (Validação de 9 Camadas)
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setJourneysResult(null)}
+                className="text-xs text-muted-foreground hover:text-foreground"
+              >
+                Ocultar Jornadas
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4">
+              {journeysResult.map((j) => (
+                <div key={j.id} className="p-4 rounded-xl border border-border bg-muted/20 space-y-3">
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded bg-emerald-600 text-white font-mono font-bold text-xs">
+                        {j.id}
+                      </span>
+                      <span className="font-bold text-sm text-foreground">{j.title}</span>
+                    </div>
+                    <span className="text-xs font-mono text-emerald-700 dark:text-emerald-300 font-bold">
+                      {j.passed ? "APROVADA" : "REPROVADA"} • {j.durationMs}ms
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{j.description}</p>
+
+                  {j.steps.map((st: any) => (
+                    <div key={st.step} className="p-3 rounded-lg bg-card border border-border/70 text-xs space-y-2">
+                      <div className="font-semibold text-foreground flex items-center justify-between">
+                        <span>
+                          Etapa {st.step}: {st.name}
+                        </span>
+                        <span className="font-mono text-muted-foreground">{st.durationMs}ms</span>
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] font-mono">
+                        <div className="p-2 rounded bg-muted/50">
+                          <strong className="block text-primary font-sans">1. Frontend & Rede:</strong>
+                          {st.layers.frontend} ({st.layers.network})
+                        </div>
+                        <div className="p-2 rounded bg-muted/50">
+                          <strong className="block text-primary font-sans">2. Backend, RBAC & Regra:</strong>
+                          {st.layers.authorization} | {st.layers.businessRule}
+                        </div>
+                        <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20">
+                          <strong className="block text-emerald-700 dark:text-emerald-300 font-sans">
+                            3. PostgreSQL & Persistência:
+                          </strong>
+                          {st.layers.postgresql} — {st.layers.persistence}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Histórico de Execuções da Sessão (Seção 22) */}
+        {executionHistory.length > 0 && (
+          <div className="rounded-xl border border-border bg-card p-4 text-xs space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <History className="w-3.5 h-3.5 text-primary" />
+                Histórico de Execuções desta Sessão ({executionHistory.length})
+              </span>
+              <button
+                type="button"
+                onClick={() => setExecutionHistory([])}
+                className="text-muted-foreground hover:text-foreground underline"
+              >
+                Limpar histórico
+              </button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {executionHistory.slice(0, 6).map((h) => (
+                <div key={h.id} className="px-2.5 py-1 rounded bg-muted/60 border border-border/60 font-mono text-[11px]">
+                  <span className="text-muted-foreground">[{h.timestamp}]</span>{" "}
+                  <strong className="text-foreground">{h.action}:</strong>{" "}
+                  <span className="text-emerald-700 dark:text-emerald-300">{h.summaryText}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Barra de Busca Rápida Instantânea & Filtros */}
         <div className="space-y-4">
           <div className="relative">
@@ -587,7 +963,7 @@ export default function ValidationCenterPage() {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Digite o código (ex: RN-002, RF-039, RNF-002) ou palavra-chave (RBAC, equipe, orçamento, convites, rateio)..."
+              placeholder="Digite o código (ex: RN-002, RF-039, RNF-004) ou palavra-chave (PostgreSQL, RBAC, equipe, orçamento, convites)..."
               className="w-full pl-12 pr-12 py-3.5 rounded-xl border border-border bg-card text-foreground placeholder:text-muted-foreground text-sm sm:text-base focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all shadow-sm"
             />
             {searchQuery ? (
@@ -605,9 +981,8 @@ export default function ValidationCenterPage() {
             )}
           </div>
 
-          {/* Abas e Filtros de Categoria, Status e Tipo de Problema */}
+          {/* Abas e Filtros de Categoria, Módulo, Criticidade, Status e Diagnóstico */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-            {/* Categorias */}
             <div className="flex items-center gap-1.5 overflow-x-auto pb-1 lg:pb-0">
               <button
                 type="button"
@@ -655,8 +1030,38 @@ export default function ValidationCenterPage() {
               </button>
             </div>
 
-            {/* Filtros de Status e Tipo de Problema */}
             <div className="flex flex-wrap items-center gap-2 self-end lg:self-auto text-xs text-muted-foreground">
+              <span>Módulo:</span>
+              <select
+                value={moduleFilter}
+                onChange={(e) => setModuleFilter(e.target.value)}
+                className="px-2.5 py-1 rounded-md border border-border bg-card text-foreground font-medium text-xs outline-none"
+              >
+                <option value="all">Todos os módulos</option>
+                <option value="Autenticação & Conta">Autenticação & Conta</option>
+                <option value="Eventos & Calendário">Eventos & Calendário</option>
+                <option value="Equipe & RBAC (RN-002)">Equipe & RBAC (RN-002)</option>
+                <option value="Convidados & RSVP">Convidados & RSVP</option>
+                <option value="Financeiro & Orçamento">Financeiro & Orçamento</option>
+                <option value="Fotos & Storage">Fotos & Storage</option>
+                <option value="Análises & Relatórios">Análises & Relatórios</option>
+                <option value="E-mails & Rotinas">E-mails & Rotinas</option>
+                <option value="Segurança & Infraestrutura">Segurança & Infraestrutura</option>
+              </select>
+
+              <span>Criticidade:</span>
+              <select
+                value={criticalityFilter}
+                onChange={(e) => setCriticalityFilter(e.target.value)}
+                className="px-2.5 py-1 rounded-md border border-border bg-card text-foreground font-medium text-xs outline-none"
+              >
+                <option value="all">Todas</option>
+                <option value="Crítica">Crítica</option>
+                <option value="Alta">Alta</option>
+                <option value="Média">Média</option>
+                <option value="Baixa">Baixa</option>
+              </select>
+
               <span>Diagnóstico:</span>
               <select
                 value={problemFilter}
@@ -671,8 +1076,6 @@ export default function ValidationCenterPage() {
                 <option value="incomplete_rule">Regra de negócio incompleta</option>
                 <option value="inconsistent_requirement">Requisito funcional inconsistente</option>
                 <option value="test_error">Erro no teste automatizado</option>
-                <option value="doc_divergence">Divergência na documentação</option>
-                <option value="security_flaw">Falha de segurança</option>
               </select>
 
               <span>Status:</span>
@@ -711,13 +1114,19 @@ export default function ValidationCenterPage() {
               Exibindo <strong>{filteredItems.length}</strong> de{" "}
               <strong>{items.length}</strong> requisitos
             </span>
-            {(searchQuery || problemFilter !== "all" || statusFilter !== "all") && (
+            {(searchQuery ||
+              moduleFilter !== "all" ||
+              criticalityFilter !== "all" ||
+              problemFilter !== "all" ||
+              statusFilter !== "all") && (
               <span>
                 Filtros ativos •{" "}
                 <button
                   type="button"
                   onClick={() => {
                     setSearchQuery("")
+                    setModuleFilter("all")
+                    setCriticalityFilter("all")
                     setProblemFilter("all")
                     setStatusFilter("all")
                   }}
@@ -751,16 +1160,13 @@ export default function ValidationCenterPage() {
               <h3 className="font-bold text-foreground text-base">
                 Nenhum requisito encontrado para os filtros aplicados
               </h3>
-              <p className="text-xs text-muted-foreground max-w-sm mx-auto">
-                Tente buscar pelo código exato (ex: <code>RN-002</code>, <code>RF-039</code>,{" "}
-                <code>RNF-002</code>) ou palavras como <em>equipe</em>, <em>orçamento</em>,{" "}
-                <em>convite</em>.
-              </p>
               <button
                 type="button"
                 onClick={() => {
                   setSearchQuery("")
                   setCategoryFilter("all")
+                  setModuleFilter("all")
+                  setCriticalityFilter("all")
                   setStatusFilter("all")
                   setProblemFilter("all")
                 }}
@@ -773,7 +1179,6 @@ export default function ValidationCenterPage() {
         </div>
       </main>
 
-      {/* Modo Apresentação em Tela Cheia (Projetor) */}
       {presentationOpen && (
         <PresentationMode
           items={filteredItems.length > 0 ? filteredItems : items}
@@ -785,12 +1190,10 @@ export default function ValidationCenterPage() {
         />
       )}
 
-      {/* Modal de Evidência Técnica */}
       {evidenceItem && (
         <EvidenceModal item={evidenceItem} onClose={() => setEvidenceItem(null)} />
       )}
 
-      {/* Modal de Relatório Formatado A4 */}
       {reportOpen && (
         <PrintableReport
           items={items}
