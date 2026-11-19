@@ -29,7 +29,7 @@ const MAX_SIZE_BYTES: Record<StorageBucket, number> = {
 }
 
 export function getStorageRootDir(): string {
-  return process.env.STORAGE_DIR || path.join(process.cwd(), "storage", "uploads")
+  return process.env.STORAGE_DIR || path.join(/*turbopackIgnore: true*/ process.cwd(), "storage", "uploads")
 }
 
 export function sanitizeFilename(rawName: string): string {

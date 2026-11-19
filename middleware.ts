@@ -1,4 +1,4 @@
-import { verifySessionJwt } from "@/lib/auth/password"
+import { verifySessionJwtEdge } from "@/lib/auth/edge-jwt"
 import { checkRateLimit } from "@/lib/rate-limit"
 import {
   evaluateRouteAccess,
@@ -46,9 +46,9 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // 3. Verificação de sessão própria (JWT HMAC-SHA256 emitido pelo backend PostgreSQL local)
+  // 3. Verificação de sessão própria compatível com Edge Runtime (Web Crypto HMAC-SHA256)
   const sessionToken = request.cookies.get(SESSION_COOKIE_NAME)?.value
-  const verifiedJwt = verifySessionJwt(sessionToken)
+  const verifiedJwt = await verifySessionJwtEdge(sessionToken)
   const hasDemoCookie = Boolean(request.cookies.get("planeja_demo_user")?.value)
   const strictAuthOnly = process.env.STRICT_AUTH_ONLY === "true"
 

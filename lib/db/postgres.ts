@@ -61,8 +61,8 @@ function checkTcpPortReachable(host: string, port: number, timeoutMs = 600): Pro
 async function applySqlMigrations(execSql: (sql: string) => Promise<void>, queryFn: (sql: string, params?: any[]) => Promise<QueryResult>) {
   if (migrationsApplied) return
 
-  const migrationsDir = path.resolve(process.cwd(), "database", "migrations")
-  const seedsDir = path.resolve(process.cwd(), "database", "seeds")
+  const migrationsDir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), "database", "migrations")
+  const seedsDir = path.resolve(/*turbopackIgnore: true*/ process.cwd(), "database", "seeds")
 
   const migrationFiles = ["001_init_planeja_plus.sql", "002_rbac_and_collaboration.sql"]
   for (const file of migrationFiles) {
@@ -143,7 +143,7 @@ export async function ensurePostgresInitialized(): Promise<void> {
     const useMemory = process.env.PGLITE_MEMORY === "true"
     const dataDir = useMemory
       ? undefined
-      : process.env.PGLITE_DATA_DIR || path.resolve(process.cwd(), "storage", "pgdata-local")
+      : process.env.PGLITE_DATA_DIR || path.resolve(/*turbopackIgnore: true*/ process.cwd(), "storage", "pgdata-local")
 
     if (dataDir) {
       fs.mkdirSync(path.dirname(dataDir), { recursive: true })
