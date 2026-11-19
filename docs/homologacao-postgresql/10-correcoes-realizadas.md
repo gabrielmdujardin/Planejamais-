@@ -1,0 +1,17 @@
+# 10 — Correções Realizadas Durante a Homologação Pós-Migração
+
+**Projeto:** Planeja+  
+**Data:** `18/11/2026`
+
+---
+
+## 1. Registro Detalhado das Correções Implementadas
+
+| # | Problema Identificado | Criticidade | Arquivos Envolvidos | Tabelas Relacionadas | Correção Implementada | Resultado Pós-Correção |
+|---:|---|---|---|---|---|---|
+| **1** | Endpoint `/api/analytics` exigia variáveis `NEXT_PUBLIC_SUPABASE_URL` e `NEXT_PUBLIC_SUPABASE_ANON_KEY`, bloqueando análises no PostgreSQL local | **Alta** | [app/api/analytics/route.ts](file:///c:/Users/gabri/Projetos/planejamais/app/api/analytics/route.ts) | `public.events`, `public.guests`, `public.guest_companions`, `public.items` | Substituída a checagem de variáveis do Supabase por `isDatabaseConfigured()` de `lib/security/route-guard.ts` | **Corrigido e Validado** |
+| **2** | Query Builder PostgreSQL rejeitava expressões JSONB (`metadata->>local_event_id`) usadas na rota de link público | **Alta** | [lib/db/pg-client.ts](file:///c:/Users/gabri/Projetos/planejamais/lib/db/pg-client.ts) | `public.events` | Implementada função `formatColumnExpression` suportando com segurança o operador JSONB `->>` com validação de identificador em ambos os lados | **Corrigido e Validado** |
+| **3** | Endpoint `POST /api/guests/[guestId]/reject` definia `status = 'declined'` para solicitações públicas rejeitadas em vez de `'cancelled'` (`RN-008`) | **Alta** | [app/api/guests/[guestId]/reject/route.ts](file:///c:/Users/gabri/Projetos/planejamais/app/api/guests/%5BguestId%5D/reject/route.ts) | `public.guests`, `public.guest_companions` | Ajustado para gravar `status = 'cancelled'` quando `guest.source !== 'manual'`, impedindo que solicitações rejeitadas entrem na lista efetiva | **Corrigido e Validado** |
+| **4** | Endpoints operacionais de eventos, itens financeiros, fotos, convidados e acompanhantes verificavam apenas `event.user_id === user.id` sem consultar `public.event_members` (`RN-002`) | **Alta** | [lib/auth/rbac-guard.ts](file:///c:/Users/gabri/Projetos/planejamais/lib/auth/rbac-guard.ts), [app/actions/events.ts](file:///c:/Users/gabri/Projetos/planejamais/app/actions/events.ts), [app/actions/items.ts](file:///c:/Users/gabri/Projetos/planejamais/app/actions/items.ts), [app/actions/photos.ts](file:///c:/Users/gabri/Projetos/planejamais/app/actions/photos.ts), `app/api/guests/**`, `app/api/companions/**` | `public.events`, `public.event_members` | Criado o guardião unificado `checkBackendEventPermission` e integrado a todas as Server Actions e rotas de escrita/moderação | **Corrigido e Validado** |
+| **5** | Métodos `PATCH` e `DELETE` em `/api/events/[eventId]/team` não persistiam alterações diretamente em `public.event_members` quando chamados sem `existingMembers` no body | **Média** | [app/api/events/[eventId]/team/route.ts](file:///c:/Users/gabri/Projetos/planejamais/app/api/events/%5BeventId%5D/team/route.ts) | `public.event_members`, `public.events`, `public.event_audit_logs` | Implementada busca direta em `public.event_members`, persistência de aceite de convite, alteração de papel/permissões, transferência de titularidade e revogação com log em `public.event_audit_logs` | **Corrigido e Validado** |
+| **6** | Uso residual de `crypto.randomUUID()` em geração de tokens de convite | **Baixa** | `app/api/events/[eventId]/guests/route.ts`, `app/api/guests/[guestId]/approve/route.ts` | `public.guests` | Padronizado `generateSecureToken(16)` (128 bits CSPRNG em hexadecimal) | **Corrigido e Validado** |
