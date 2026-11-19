@@ -39,3 +39,12 @@ next-env.d.ts
 public/evidence/**/*.png
 public/evidence/*.png
 !public/evidence/screenshots/.gitkeep
+
+# local PostgreSQL data, uploads and database dumps
+/storage/pgdata-local/
+/storage/uploads/*
+!/storage/uploads/.gitkeep
+/database/backups/*.sql
+/database/backups/*.dump
+/database/backups/*.zip
+!/database/backups/.gitkeep
