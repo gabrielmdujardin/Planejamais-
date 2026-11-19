@@ -1,5 +1,6 @@
 "use server"
 
+import { checkBackendEventPermission } from "@/lib/auth/rbac-guard"
 import { normalizeItemValue } from "@/lib/domain/business-rules"
 import { isSupabaseEnvConfigured } from "@/lib/security/route-guard"
 import { createClient } from "@/lib/supabase/server"
@@ -47,15 +48,16 @@ export async function createEventItemAction(rawInput: unknown) {
     return { data: null, error: "Usuário não autenticado" }
   }
 
-  const { data: event } = await supabase
-    .from("events")
-    .select("id")
-    .eq("id", input.eventId)
-    .eq("user_id", user.id)
-    .maybeSingle()
+  const perm = await checkBackendEventPermission({
+    db: supabase,
+    eventId: input.eventId,
+    userId: user.id,
+    module: "financial",
+    action: "create",
+  })
 
-  if (!event) {
-    return { data: null, error: "Evento não encontrado ou acesso negado" }
+  if (!perm.allowed) {
+    return { data: null, error: perm.reason || "Evento não encontrado ou acesso negado ao módulo financeiro" }
   }
 
   const metadata = {
@@ -143,15 +145,27 @@ export async function updateEventItemAction(eventId: string, itemId: string, raw
     return { data: null, error: "Usuário não autenticado" }
   }
 
+  const perm = await checkBackendEventPermission({
+    db: supabase,
+    eventId,
+    userId: user.id,
+    module: "financial",
+    action: "edit",
+  })
+
+  if (!perm.allowed) {
+    return { data: null, error: perm.reason || "Sem permissão para editar itens financeiros deste evento" }
+  }
+
   const { data: existing } = await supabase
     .from("items")
-    .select("*, events!inner(user_id)")
+    .select("*")
     .eq("id", itemId)
     .eq("event_id", eventId)
     .maybeSingle()
 
-  if (!existing || (existing as any).events?.user_id !== user.id) {
-    return { data: null, error: "Item não encontrado ou acesso negado" }
+  if (!existing) {
+    return { data: null, error: "Item não encontrado" }
   }
 
   const prevMeta =
@@ -244,15 +258,16 @@ export async function deleteEventItemAction(eventId: string, itemId: string) {
     return { success: false, error: "Usuário não autenticado" }
   }
 
-  const { data: event } = await supabase
-    .from("events")
-    .select("id")
-    .eq("id", eventId)
-    .eq("user_id", user.id)
-    .maybeSingle()
+  const perm = await checkBackendEventPermission({
+    db: supabase,
+    eventId,
+    userId: user.id,
+    module: "financial",
+    action: "delete",
+  })
 
-  if (!event) {
-    return { success: false, error: "Evento não encontrado ou acesso negado" }
+  if (!perm.allowed) {
+    return { success: false, error: perm.reason || "Evento não encontrado ou acesso negado" }
   }
 
   const { error } = await supabase.from("items").delete().eq("id", itemId).eq("event_id", eventId)

@@ -1,3 +1,5 @@
+import { checkBackendEventPermission } from "@/lib/auth/rbac-guard"
+import { generateSecureToken } from "@/lib/domain/business-rules"
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
@@ -37,12 +39,20 @@ export async function POST(
       return NextResponse.json({ error: "Convidado não encontrado" }, { status: 404 })
     }
 
-    if (guest.events?.user_id !== user.id) {
-      return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    const perm = await checkBackendEventPermission({
+      db: supabase,
+      eventId: guest.event_id,
+      userId: user.id,
+      module: "requests",
+      action: "approve",
+    })
+
+    if (!perm.allowed) {
+      return NextResponse.json({ error: perm.reason || "Acesso negado" }, { status: 403 })
     }
 
     const now = new Date().toISOString()
-    const token = guest.token || guest.confirmation_token || crypto.randomUUID()
+    const token = guest.token || guest.confirmation_token || generateSecureToken(16)
 
     const { error: updateError } = await supabase
       .from("guests")

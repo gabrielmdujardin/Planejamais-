@@ -1,3 +1,4 @@
+import { checkBackendEventPermission } from "@/lib/auth/rbac-guard"
 import { createClient } from "@/lib/supabase/server"
 import { rejectionDecisionSchema } from "@/lib/validation"
 import { NextRequest, NextResponse } from "next/server"
@@ -49,8 +50,19 @@ export async function POST(
       return NextResponse.json({ error: "Acompanhante não encontrado" }, { status: 404 })
     }
 
-    if ((companion as any).guests?.events?.user_id !== user.id) {
-      return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    const eventId = (companion as any).guests?.event_id || (companion as any).guests?.events?.id
+    const perm = eventId
+      ? await checkBackendEventPermission({
+          db: supabase,
+          eventId,
+          userId: user.id,
+          module: "guests",
+          action: "approve",
+        })
+      : { allowed: (companion as any).guests?.events?.user_id === user.id, reason: "Acesso negado" }
+
+    if (!perm.allowed) {
+      return NextResponse.json({ error: perm.reason || "Acesso negado" }, { status: 403 })
     }
 
     const { error: updateError } = await supabase

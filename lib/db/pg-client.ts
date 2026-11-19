@@ -44,6 +44,15 @@ function assertSafeIdentifier(ident: string): string {
   return cleaned
 }
 
+function formatColumnExpression(column: string): string {
+  const cleaned = String(column || "").trim()
+  const jsonArrowMatch = cleaned.match(/^([a-zA-Z_][a-zA-Z0-9_]*)->>([a-zA-Z_][a-zA-Z0-9_]*)$/)
+  if (jsonArrowMatch) {
+    return `"${jsonArrowMatch[1]}"->>'${jsonArrowMatch[2]}'`
+  }
+  return `"${assertSafeIdentifier(cleaned)}"`
+}
+
 function assertSafeTable(table: string): string {
   const cleaned = assertSafeIdentifier(table)
   if (!ALLOWED_TABLES.has(cleaned)) {
@@ -114,23 +123,23 @@ class PgQueryBuilder implements PromiseLike<{ data: any; error: any; count?: num
   }
 
   eq(column: string, value: any) {
-    const col = assertSafeIdentifier(column)
+    const colExpr = formatColumnExpression(column)
     this.filters.push({
       sql: (idx) =>
         value === null
-          ? { clause: `"${col}" IS NULL`, values: [] }
-          : { clause: `"${col}" = $${idx}`, values: [value] },
+          ? { clause: `${colExpr} IS NULL`, values: [] }
+          : { clause: `${colExpr} = $${idx}`, values: [value] },
     })
     return this
   }
 
   neq(column: string, value: any) {
-    const col = assertSafeIdentifier(column)
+    const colExpr = formatColumnExpression(column)
     this.filters.push({
       sql: (idx) =>
         value === null
-          ? { clause: `"${col}" IS NOT NULL`, values: [] }
-          : { clause: `"${col}" <> $${idx}`, values: [value] },
+          ? { clause: `${colExpr} IS NOT NULL`, values: [] }
+          : { clause: `${colExpr} <> $${idx}`, values: [value] },
     })
     return this
   }

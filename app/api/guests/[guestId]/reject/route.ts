@@ -1,3 +1,4 @@
+import { checkBackendEventPermission } from "@/lib/auth/rbac-guard"
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 import { EmailService } from "@/src/services/email.service"
@@ -42,15 +43,28 @@ export async function POST(
       return NextResponse.json({ error: "Convidado não encontrado" }, { status: 404 })
     }
 
-    if (guest.events?.user_id !== user.id) {
-      return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    const perm = await checkBackendEventPermission({
+      db: supabase,
+      eventId: guest.event_id,
+      userId: user.id,
+      module: "requests",
+      action: "approve",
+    })
+
+    if (!perm.allowed) {
+      return NextResponse.json({ error: perm.reason || "Acesso negado" }, { status: 403 })
     }
 
-    // Atualizar o convidado principal
+    // RN-008 & RF-017: Solicitações públicas rejeitadas recebem status 'cancelled' para não compor a lista efetiva
+    const nextStatus = guest.source && guest.source !== "manual" ? "cancelled" : "declined"
+    const nowIso = new Date().toISOString()
+
     const { error: updateError } = await supabase
       .from("guests")
       .update({
-        status: "declined",
+        status: nextStatus,
+        rejected_at: nowIso,
+        rejection_reason: reason || null,
       })
       .eq("id", guestId)
 

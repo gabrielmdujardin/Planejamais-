@@ -7,6 +7,7 @@ import {
   normalizeItemValue,
   validateNominalEventDeletion,
 } from "@/lib/domain/business-rules"
+import { checkBackendEventPermission } from "@/lib/auth/rbac-guard"
 import { isSupabaseEnvConfigured } from "@/lib/security/route-guard"
 import { createClient } from "@/lib/supabase/server"
 import { eventPayloadSchema } from "@/lib/validation"
@@ -234,6 +235,18 @@ export async function getEventById(eventId: string) {
     return { data: null, error: "Not authenticated" }
   }
 
+  const perm = await checkBackendEventPermission({
+    db: supabase,
+    eventId,
+    userId: user.id,
+    module: "event",
+    action: "view",
+  })
+
+  if (!perm.allowed) {
+    return { data: null, error: perm.reason || "Evento não encontrado ou acesso negado" }
+  }
+
   let { data: event, error } = await supabase
     .from("events")
     .select(
@@ -245,7 +258,6 @@ export async function getEventById(eventId: string) {
     `
     )
     .eq("id", eventId)
-    .eq("user_id", user.id)
     .maybeSingle()
 
   if (error) {
@@ -260,7 +272,6 @@ export async function getEventById(eventId: string) {
       `
       )
       .eq("id", eventId)
-      .eq("user_id", user.id)
       .maybeSingle()
     event = fallback.data as any
     error = fallback.error
@@ -296,16 +307,19 @@ export async function updateEventDetails(eventId: string, eventData: any) {
     return { data: null, error: "Not authenticated" }
   }
 
-  const { data: existingEvent } = await supabase
-    .from("events")
-    .select("*")
-    .eq("id", eventId)
-    .eq("user_id", user.id)
-    .maybeSingle()
+  const perm = await checkBackendEventPermission({
+    db: supabase,
+    eventId,
+    userId: user.id,
+    module: "event",
+    action: "edit",
+  })
 
-  if (!existingEvent) {
-    return { data: null, error: "Evento não encontrado ou acesso negado" }
+  if (!perm.allowed || !perm.event) {
+    return { data: null, error: perm.reason || "Evento não encontrado ou acesso negado" }
   }
+
+  const existingEvent = perm.event
 
   const existingMeta =
     typeof existingEvent.metadata === "object" && existingEvent.metadata !== null
@@ -419,7 +433,6 @@ export async function updateEventDetails(eventId: string, eventData: any) {
     .from("events")
     .update(dbUpdatePayload)
     .eq("id", eventId)
-    .eq("user_id", user.id)
     .select()
     .single()
 
@@ -564,16 +577,19 @@ export async function deleteEventAction(id: string, confirmTitle?: string) {
     return { success: false, error: "Usuário não autenticado." }
   }
 
-  const { data: existingEvent, error: fetchError } = await supabase
-    .from("events")
-    .select("id, title, user_id")
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .maybeSingle()
+  const perm = await checkBackendEventPermission({
+    db: supabase,
+    eventId: id,
+    userId: user.id,
+    module: "event",
+    action: "delete_event",
+  })
 
-  if (fetchError || !existingEvent) {
-    return { success: false, error: "Evento não encontrado ou sem permissão." }
+  if (!perm.allowed || !perm.event) {
+    return { success: false, error: perm.reason || "Apenas o proprietário titular pode excluir o evento." }
   }
+
+  const existingEvent = perm.event
 
   if (confirmTitle !== undefined && !validateNominalEventDeletion(existingEvent.title, confirmTitle)) {
     return {
@@ -582,7 +598,7 @@ export async function deleteEventAction(id: string, confirmTitle?: string) {
     }
   }
 
-  const { error } = await supabase.from("events").delete().eq("id", id).eq("user_id", user.id)
+  const { error } = await supabase.from("events").delete().eq("id", id)
 
   if (error) {
     return { success: false, error: error.message }

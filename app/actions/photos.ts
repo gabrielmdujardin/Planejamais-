@@ -1,6 +1,6 @@
 "use server"
 
-import { canOrganizerModifyPhoto } from "@/lib/domain/business-rules"
+import { checkBackendEventPermission } from "@/lib/auth/rbac-guard"
 import { isSupabaseEnvConfigured } from "@/lib/security/route-guard"
 import {
   deleteFileFromLocalStorage,
@@ -30,14 +30,16 @@ export async function uploadEventPhotoAction(rawInput: unknown) {
     return { data: null, error: "Usuário não autenticado" }
   }
 
-  const { data: event } = await db
-    .from("events")
-    .select("id, user_id")
-    .eq("id", input.eventId)
-    .maybeSingle()
+  const perm = await checkBackendEventPermission({
+    db,
+    eventId: input.eventId,
+    userId: user.id,
+    module: "photos",
+    action: "create",
+  })
 
-  if (!event || !canOrganizerModifyPhoto(event.user_id, user.id)) {
-    return { data: null, error: "Apenas o organizador pode adicionar fotos ao evento" }
+  if (!perm.allowed) {
+    return { data: null, error: perm.reason || "Sem permissão para adicionar fotos ao evento" }
   }
 
   // Salva a imagem em volume persistente local (/storage/uploads/event-photos) e registra metadados
@@ -130,14 +132,16 @@ export async function deleteEventPhotoAction(eventId: string, photoId: string) {
     return { success: false, error: "Usuário não autenticado" }
   }
 
-  const { data: event } = await db
-    .from("events")
-    .select("id, user_id")
-    .eq("id", eventId)
-    .maybeSingle()
+  const perm = await checkBackendEventPermission({
+    db,
+    eventId,
+    userId: user.id,
+    module: "photos",
+    action: "delete",
+  })
 
-  if (!event || !canOrganizerModifyPhoto(event.user_id, user.id)) {
-    return { success: false, error: "Somente o organizador do evento pode remover fotos" }
+  if (!perm.allowed) {
+    return { success: false, error: perm.reason || "Sem permissão para remover fotos do evento" }
   }
 
   const { data: existingPhoto } = await db

@@ -423,7 +423,216 @@ export async function PATCH(
     })
   }
 
-  return NextResponse.json({ error: "Operação requer contexto válido." }, { status: 400 })
+  // Modo autenticado conectado diretamente ao PostgreSQL local (planeja_plus)
+  const db = await createClient()
+  const {
+    data: { user },
+  } = await db.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: "Não autenticado." }, { status: 401 })
+  }
+
+  const { data: event } = await db
+    .from("events")
+    .select("id, user_id, title")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (!event) {
+    return NextResponse.json({ error: "Evento não encontrado." }, { status: 404 })
+  }
+
+  const { data: rawMembers } = await db
+    .from("event_members")
+    .select("*")
+    .eq("event_id", eventId)
+
+  const existingMembers: EventMemberRecord[] = (rawMembers || []).map(mapDbMember)
+
+  if (body.operation === "accept_invite") {
+    const result = acceptEventTeamInvite({
+      inviteToken: String(body.inviteToken || ""),
+      acceptingUserId: user.id,
+      acceptingEmail: user.email,
+      members: existingMembers,
+    })
+    if (!result.success || !result.member) {
+      return NextResponse.json({ error: result.error }, { status: 400 })
+    }
+
+    await db
+      .from("event_members")
+      .update({
+        user_id: user.id,
+        status: "active",
+        accepted_at: result.member.acceptedAt,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", result.member.id)
+
+    await db.from("event_audit_logs").insert({
+      event_id: eventId,
+      actor_user_id: user.id,
+      actor_name: user.user_metadata?.name || user.email,
+      actor_role: result.member.role,
+      action: result.auditLog?.action || "team.invite_accepted",
+      target_type: "event_member",
+      target_id: result.member.id,
+      allowed: true,
+      details: result.auditLog?.details || {},
+    })
+
+    return NextResponse.json(result, { status: 200 })
+  }
+
+  const actorMember =
+    existingMembers.find((m) => m.userId === user.id && m.status === "active") ||
+    (event.user_id === user.id
+      ? createOwnerMemberRecord({
+          eventId,
+          ownerUserId: user.id,
+          ownerEmail: user.email || "owner@planeja.app",
+          ownerName: user.user_metadata?.name || "Proprietário",
+        })
+      : null)
+
+  if (!actorMember) {
+    return NextResponse.json({ error: "Acesso negado ao evento." }, { status: 403 })
+  }
+
+  if (body.operation === "transfer_ownership") {
+    const parsedTransfer = teamTransferOwnershipSchema.safeParse({ ...body, eventId })
+    if (!parsedTransfer.success) {
+      return NextResponse.json(
+        { error: parsedTransfer.error.issues[0]?.message || "Dados inválidos." },
+        { status: 400 }
+      )
+    }
+
+    if (!validateNominalEventDeletion(event.title, parsedTransfer.data.confirmationTitle)) {
+      return NextResponse.json(
+        { error: "Confirmação nominal do título do evento não confere." },
+        { status: 400 }
+      )
+    }
+
+    const result = transferEventOwnership({
+      eventId,
+      actorMember,
+      newOwnerMemberId: parsedTransfer.data.newOwnerMemberId,
+      members: existingMembers,
+    })
+
+    const newOwnerMember = result.updatedMembers.find(
+      (m) => m.id === parsedTransfer.data.newOwnerMemberId
+    )
+    if (!result.success || !newOwnerMember) {
+      return NextResponse.json({ error: result.error }, { status: 403 })
+    }
+
+    await db
+      .from("event_members")
+      .update({ role: "admin", updated_at: new Date().toISOString() })
+      .eq("event_id", eventId)
+      .eq("role", "owner")
+
+    await db
+      .from("event_members")
+      .update({
+        role: "owner",
+        permissions: newOwnerMember.permissions,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", newOwnerMember.id)
+
+    if (newOwnerMember.userId) {
+      await db
+        .from("events")
+        .update({ user_id: newOwnerMember.userId, updated_at: new Date().toISOString() })
+        .eq("id", eventId)
+    }
+
+    await db.from("event_audit_logs").insert({
+      event_id: eventId,
+      actor_user_id: user.id,
+      actor_name: actorMember.name,
+      actor_role: "owner",
+      action: result.auditLog.action,
+      target_type: "event_member",
+      target_id: newOwnerMember.id,
+      allowed: true,
+      details: result.auditLog.details || {},
+    })
+
+    return NextResponse.json(result, { status: 200 })
+  }
+
+  const parsed = teamUpdateRoleSchema.safeParse({ ...body, eventId })
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message || "Dados inválidos." },
+      { status: 400 }
+    )
+  }
+
+  const targetMember = existingMembers.find((m) => m.id === parsed.data.memberId)
+  if (!targetMember) {
+    return NextResponse.json({ error: "Membro não encontrado." }, { status: 404 })
+  }
+
+  const check = canActorModifyMemberPermissions({
+    actorMember,
+    targetMember,
+    proposedRole: parsed.data.role,
+    proposedPermissions: parsed.data.permissions as ModulePermissionMap | undefined,
+  })
+
+  if (!check.allowed) {
+    return NextResponse.json({ success: false, error: check.reason }, { status: 403 })
+  }
+
+  const sanitizedPerms = sanitizePermissionsForRole(
+    parsed.data.role,
+    parsed.data.permissions as ModulePermissionMap | undefined
+  )
+
+  await db
+    .from("event_members")
+    .update({
+      role: parsed.data.role,
+      permissions: sanitizedPerms,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", targetMember.id)
+    .eq("event_id", eventId)
+
+  const auditEntry = createAuditEntry({
+    eventId,
+    actor: actorMember,
+    action: "team.permissions_updated",
+    targetType: "event_member",
+    targetId: targetMember.id,
+    allowed: true,
+    details: { role: parsed.data.role, email: targetMember.email },
+  })
+
+  await db.from("event_audit_logs").insert({
+    event_id: eventId,
+    actor_user_id: user.id,
+    actor_name: actorMember.name,
+    actor_role: actorMember.role,
+    action: auditEntry.action,
+    target_type: "event_member",
+    target_id: targetMember.id,
+    allowed: true,
+    details: auditEntry.details || {},
+  })
+
+  return NextResponse.json({
+    success: true,
+    auditLog: auditEntry,
+  })
 }
 
 export async function DELETE(
@@ -443,5 +652,84 @@ export async function DELETE(
     return NextResponse.json(result, { status: result.success ? 200 : 403 })
   }
 
-  return NextResponse.json({ error: "Parâmetros de revogação ausentes." }, { status: 400 })
+  const targetMemberId = body?.targetMemberId || request.nextUrl.searchParams.get("memberId")
+  if (!targetMemberId) {
+    return NextResponse.json({ error: "Parâmetros de revogação ausentes." }, { status: 400 })
+  }
+
+  const db = await createClient()
+  const {
+    data: { user },
+  } = await db.auth.getUser()
+
+  if (!user) {
+    return NextResponse.json({ error: "Não autenticado." }, { status: 401 })
+  }
+
+  const { data: event } = await db
+    .from("events")
+    .select("id, user_id, title")
+    .eq("id", eventId)
+    .maybeSingle()
+
+  if (!event) {
+    return NextResponse.json({ error: "Evento não encontrado." }, { status: 404 })
+  }
+
+  const { data: rawMembers } = await db
+    .from("event_members")
+    .select("*")
+    .eq("event_id", eventId)
+
+  const existingMembers: EventMemberRecord[] = (rawMembers || []).map(mapDbMember)
+  const actorMember =
+    existingMembers.find((m) => m.userId === user.id && m.status === "active") ||
+    (event.user_id === user.id
+      ? createOwnerMemberRecord({
+          eventId,
+          ownerUserId: user.id,
+          ownerEmail: user.email || "owner@planeja.app",
+          ownerName: user.user_metadata?.name || "Proprietário",
+        })
+      : null)
+
+  if (!actorMember) {
+    return NextResponse.json({ error: "Acesso negado ao evento." }, { status: 403 })
+  }
+
+  const result = revokeEventTeamMember({
+    eventId,
+    actorMember,
+    targetMemberId: String(targetMemberId),
+    members: existingMembers,
+  })
+
+  const revokedMember = result.updatedMembers.find((m) => m.id === String(targetMemberId))
+  if (!result.success || !revokedMember) {
+    return NextResponse.json({ error: result.error }, { status: 403 })
+  }
+
+  await db
+    .from("event_members")
+    .update({
+      status: "revoked",
+      revoked_at: revokedMember.revokedAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", revokedMember.id)
+    .eq("event_id", eventId)
+
+  await db.from("event_audit_logs").insert({
+    event_id: eventId,
+    actor_user_id: user.id,
+    actor_name: actorMember.name,
+    actor_role: actorMember.role,
+    action: result.auditLog.action,
+    target_type: "event_member",
+    target_id: revokedMember.id,
+    allowed: true,
+    details: result.auditLog.details || {},
+  })
+
+  return NextResponse.json(result, { status: 200 })
 }

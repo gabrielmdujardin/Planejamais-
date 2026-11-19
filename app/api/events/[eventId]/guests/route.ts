@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
+import { checkBackendEventPermission } from "@/lib/auth/rbac-guard"
+import { generateSecureToken } from "@/lib/domain/business-rules"
 import { createClient } from "@/lib/supabase/server"
 import { EmailService } from "@/src/services/email.service"
 
@@ -42,26 +44,29 @@ export async function POST(
       return NextResponse.json({ error: "Não autenticado" }, { status: 401 })
     }
 
-    const { data: event, error: eventError } = await supabase
-      .from("events")
-      .select("*")
-      .eq("id", eventId)
-      .eq("user_id", user.id)
-      .single()
+    const perm = await checkBackendEventPermission({
+      db: supabase,
+      eventId,
+      userId: user.id,
+      module: "guests",
+      action: "create",
+    })
 
-    if (eventError || !event) {
+    if (!perm.allowed || !perm.event) {
       return NextResponse.json(
-        { error: "Evento não encontrado no Supabase para este usuário" },
-        { status: 404 }
+        { error: perm.reason || "Sem permissão para adicionar convidados neste evento" },
+        { status: perm.event ? 403 : 404 }
       )
     }
+
+    const event = perm.event
 
     const deadline = event.rsvp_deadline
       ? new Date(event.rsvp_deadline)
       : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
 
     const rows = (guests as GuestInput[]).map((guest) => {
-      const token = crypto.randomUUID()
+      const token = generateSecureToken(16)
 
       return {
         event_id: eventId,

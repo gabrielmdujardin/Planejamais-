@@ -1,3 +1,4 @@
+import { checkBackendEventPermission } from "@/lib/auth/rbac-guard"
 import { createClient } from "@/lib/supabase/server"
 import { guestUpdateSchema } from "@/lib/validation"
 import { NextRequest, NextResponse } from "next/server"
@@ -40,8 +41,16 @@ export async function PATCH(
       return NextResponse.json({ error: "Convidado não encontrado" }, { status: 404 })
     }
 
-    if ((guest as any).events?.user_id !== user.id) {
-      return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    const perm = await checkBackendEventPermission({
+      db: supabase,
+      eventId: guest.event_id,
+      userId: user.id,
+      module: "guests",
+      action: "edit",
+    })
+
+    if (!perm.allowed) {
+      return NextResponse.json({ error: perm.reason || "Acesso negado" }, { status: 403 })
     }
 
     const updates = parsed.data
@@ -126,8 +135,16 @@ export async function DELETE(
       return NextResponse.json({ error: "Convidado não encontrado" }, { status: 404 })
     }
 
-    if ((guest as any).events?.user_id !== user.id) {
-      return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+    const perm = await checkBackendEventPermission({
+      db: supabase,
+      eventId: guest.event_id,
+      userId: user.id,
+      module: "guests",
+      action: "delete",
+    })
+
+    if (!perm.allowed) {
+      return NextResponse.json({ error: perm.reason || "Acesso negado" }, { status: 403 })
     }
 
     const { error: deleteError } = await supabase.from("guests").delete().eq("id", guestId)

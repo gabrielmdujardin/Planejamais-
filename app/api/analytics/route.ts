@@ -3,6 +3,7 @@ import {
   filterEffectiveGuests,
   normalizeItemValue,
 } from "@/lib/domain/business-rules"
+import { isDatabaseConfigured } from "@/lib/security/route-guard"
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
 
@@ -369,12 +370,12 @@ export async function GET(request: NextRequest) {
   const endDate = request.nextUrl.searchParams.get("endDate")
 
   try {
-    if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    if (!isDatabaseConfigured()) {
       return NextResponse.json(
         emptyAnalytics(
           selectedEventId,
-          "Supabase não configurado",
-          "Configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY para carregar análises reais."
+          "Banco de dados não configurado",
+          "Configure DATABASE_URL para carregar análises reais do PostgreSQL."
         )
       )
     }
@@ -388,8 +389,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         emptyAnalytics(
           selectedEventId,
-          "Sessão Supabase ausente",
-          "Faça login pelo Supabase para carregar dados reais de análises."
+          "Sessão autenticada ausente",
+          "Faça login para carregar dados reais de análises do PostgreSQL."
         )
       )
     }
